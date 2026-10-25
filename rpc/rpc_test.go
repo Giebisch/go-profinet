@@ -222,7 +222,11 @@ func TestConcurrentCalls(t *testing.T) {
 // raw sends hand-made packets to a server.
 func raw(t *testing.T, srv *Server, h Header, body []byte) []Header {
 	t.Helper()
-	c := listen(t)
+	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Error(err)
+		return nil
+	}
 	defer c.Close()
 	h.BodyLen = uint16(len(body))
 	if h.DRep == ([3]byte{}) {
@@ -230,7 +234,8 @@ func raw(t *testing.T, srv *Server, h Header, body []byte) []Header {
 	}
 	b := append(h.AppendTo(nil), body...)
 	if _, err := c.WriteTo(b, srv.LocalAddr()); err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return nil
 	}
 	var out []Header
 	buf := make([]byte, 2000)
@@ -242,7 +247,8 @@ func raw(t *testing.T, srv *Server, h Header, body []byte) []Header {
 		}
 		rh, _, err := DecodeHeader(buf[:n])
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return out
 		}
 		out = append(out, rh)
 	}
