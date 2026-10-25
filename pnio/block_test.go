@@ -195,14 +195,15 @@ func TestBlockError(t *testing.T) {
 		{BlockAlarmCRReq, Status{CodeConnect, DecodePNIO, Code1AlarmCR, 5}},
 		{BlockARRPCReq, Status{CodeConnect, DecodePNIO, Code1ARRPC, 5}},
 		{BlockPrmEndReq, Status{CodeControl, DecodePNIO, Code1PrmEnd, 5}},
-		{BlockPrmBeginReq, Status{CodeControl, DecodePNIO, Code1PrmEnd, 5}},
+		{BlockPrmBeginReq, Status{CodeControl, DecodePNIO, Code1PrmBegin, 5}},
 		{BlockAppReadyReq, Status{CodeControl, DecodePNIO, Code1AppReady, 5}},
 		{BlockReleaseReq, Status{CodeRelease, DecodePNIO, Code1Release, 5}},
 		{BlockReadReq, Status{CodeRead, DecodePNIO, Code1RWRecord, 5}},
 		{BlockWriteReq, Status{CodeWrite, DecodePNIO, Code1RWRecord, 5}},
 		// Blocks without their own ErrorCode1 report CMRPC unknown blocks.
 		{BlockARVendorReq, Status{CodeConnect, DecodePNIO, Code1CMRPC, CMRPCUnknownBlocks}},
-		{BlockPrmEndPlugReq, Status{CodeConnect, DecodePNIO, Code1CMRPC, CMRPCUnknownBlocks}},
+		{BlockPrmEndPlugReq, Status{CodeControl, DecodePNIO, Code1PrmEndPlg, 5}},
+		{BlockAppReadyPlugReq, Status{CodeControl, DecodePNIO, Code1AppRdyPlg, 5}},
 	} {
 		if got := blockError(c.t, 5); got != c.want {
 			t.Errorf("blockError(%s) = %s, want %s", c.t, got, c.want)

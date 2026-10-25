@@ -38,7 +38,10 @@ const (
 	Code1AlarmAck  uint8 = 0x3C
 	Code1RWRecord  uint8 = 0x08 // faulty Read/Write record header
 	Code1PrmEnd    uint8 = 0x14
+	Code1PrmEndPlg uint8 = 0x15
 	Code1AppReady  uint8 = 0x16
+	Code1AppRdyPlg uint8 = 0x17
+	Code1PrmBegin  uint8 = 0x18
 	Code1Release   uint8 = 0x28
 	Code1ARBlock   uint8 = 0x01
 	Code1IOCRBlock uint8 = 0x02
@@ -233,10 +236,16 @@ func blockError(t BlockType, field uint8) Status {
 		c1 = Code1AlarmCR
 	case BlockARRPCReq:
 		c1 = Code1ARRPC
-	case BlockPrmEndReq, BlockPrmBeginReq:
+	case BlockPrmEndReq:
 		c1, code = Code1PrmEnd, CodeControl
+	case BlockPrmEndPlugReq:
+		c1, code = Code1PrmEndPlg, CodeControl
+	case BlockPrmBeginReq:
+		c1, code = Code1PrmBegin, CodeControl
 	case BlockAppReadyReq:
 		c1, code = Code1AppReady, CodeControl
+	case BlockAppReadyPlugReq:
+		c1, code = Code1AppRdyPlg, CodeControl
 	case BlockReleaseReq:
 		c1, code = Code1Release, CodeRelease
 	case BlockReadReq, BlockWriteReq:
@@ -363,8 +372,14 @@ func code1Name(c uint8) string {
 		return "faulty record"
 	case Code1PrmEnd:
 		return "faulty IODControlReq"
+	case Code1PrmEndPlg:
+		return "faulty IODControlReq (plug)"
+	case Code1PrmBegin:
+		return "faulty IODControlReq (PrmBegin)"
 	case Code1AppReady:
 		return "faulty IOXControlReq"
+	case Code1AppRdyPlg:
+		return "faulty IOXControlReq (plug)"
 	case Code1Release:
 		return "faulty ReleaseBlock"
 	case Code1AlarmAck:
