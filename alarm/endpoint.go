@@ -39,6 +39,9 @@ type EndpointConfig struct {
 // EndpointStats are the counters of an [Endpoint].
 type EndpointStats struct {
 	Sent, Received, Retransmits, Duplicates, OutOfSequence, Acks, Nacks uint64
+	// Busy counts DATA PDUs left unacknowledged because the application
+	// had not taken the previous ones yet; the peer retransmits them.
+	Busy uint64
 }
 
 // Endpoint is the alarm sender and receiver of one priority of one AR:
@@ -63,7 +66,7 @@ type Endpoint struct {
 	once    sync.Once
 	wg      sync.WaitGroup
 
-	sent, received, retrans, dups, oos, acks, nacks atomic.Uint64
+	sent, received, retrans, dups, oos, acks, nacks, busy atomic.Uint64
 }
 
 func newEndpoint(m *Manager, cfg EndpointConfig) *Endpoint {
@@ -81,7 +84,7 @@ func newEndpoint(m *Manager, cfg EndpointConfig) *Endpoint {
 		lastRecv: InitialAckSeq,
 		expect:   nextSeq(InitialSendSeq),
 		waitSeq:  -1,
-		deliver:  make(chan []byte, 16),
+		deliver:  make(chan []byte, 32),
 		done:     make(chan struct{}),
 	}
 	if cfg.High {
@@ -99,7 +102,7 @@ func (e *Endpoint) LocalRef() uint16 { return e.cfg.LocalRef }
 func (e *Endpoint) Stats() EndpointStats {
 	return EndpointStats{
 		Sent: e.sent.Load(), Received: e.received.Load(), Retransmits: e.retrans.Load(),
-		Duplicates: e.dups.Load(), OutOfSequence: e.oos.Load(), Acks: e.acks.Load(), Nacks: e.nacks.Load(),
+		Duplicates: e.dups.Load(), OutOfSequence: e.oos.Load(), Acks: e.acks.Load(), Nacks: e.nacks.Load(), Busy: e.busy.Load(),
 	}
 }
 
@@ -231,14 +234,19 @@ func (e *Endpoint) handle(p *PDU) {
 		e.ackLocked(p.AckSeq) // a DATA PDU may acknowledge ours
 		var reply *PDU
 		var data []byte
-		switch p.SendSeq {
-		case e.expect:
+		switch {
+		case p.SendSeq == e.expect && len(e.deliver) == cap(e.deliver):
+			// The application is behind: leave the PDU unacknowledged
+			// so that the peer retransmits it, instead of blocking the
+			// manager (which would also hold up our own ACKs).
+			e.busy.Add(1)
+		case p.SendSeq == e.expect:
 			e.lastRecv = p.SendSeq
 			e.expect = nextSeq(p.SendSeq)
 			data = append([]byte(nil), p.VarPart...)
 			e.received.Add(1)
 			reply = &PDU{Type: PDUAck, AddFlags: WindowSize, SendSeq: e.sendSeq, AckSeq: p.SendSeq}
-		case e.lastRecv:
+		case p.SendSeq == e.lastRecv:
 			e.dups.Add(1)
 			reply = &PDU{Type: PDUAck, AddFlags: WindowSize, SendSeq: e.sendSeq, AckSeq: p.SendSeq}
 		default:
@@ -250,6 +258,8 @@ func (e *Endpoint) handle(p *PDU) {
 			_ = e.transmit(context.Background(), reply)
 		}
 		if data != nil {
+			// Only this goroutine sends on deliver and it checked the
+			// room above, so the send does not block.
 			select {
 			case e.deliver <- data:
 			case <-e.done:
@@ -307,11 +317,12 @@ func NewManager(mux *l2.Mux) (*Manager, error) {
 	return m, nil
 }
 
-// AllocRef returns an alarm reference no endpoint uses.
+// AllocRef returns an alarm reference no endpoint uses, or 0 (which Open
+// rejects) when all 65534 are in use.
 func (m *Manager) AllocRef() uint16 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for {
+	for i := 0; i < 0xFFFE; i++ {
 		r := m.nextRef
 		m.nextRef++
 		if m.nextRef == 0xFFFF {
@@ -321,10 +332,14 @@ func (m *Manager) AllocRef() uint16 {
 			return r
 		}
 	}
+	return 0
 }
 
 // Open creates and registers an endpoint.
 func (m *Manager) Open(cfg EndpointConfig) (*Endpoint, error) {
+	if cfg.LocalRef == 0 || cfg.LocalRef == 0xFFFF {
+		return nil, fmt.Errorf("alarm: %w: no free alarm reference", profinet.ErrResourceExhausted)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := epKey{cfg.LocalRef, cfg.High}

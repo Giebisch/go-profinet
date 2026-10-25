@@ -621,3 +621,57 @@ func BenchmarkDecode(b *testing.B) {
 		}
 	}
 }
+
+// TestSlowApplication: while OnData blocks, DATA PDUs beyond the delivery
+// queue are left unacknowledged (Busy) and retransmitted by the sender, so
+// the manager never blocks and nothing is lost.
+func TestSlowApplication(t *testing.T) {
+	n := vnet.New(11)
+	t.Cleanup(func() { n.Close() })
+	a, b := newSide(t, n, 0xA), newSide(t, n, 0xB)
+	release := make(chan struct{})
+	var got atomic.Int32
+	ea := a.open(t, EndpointConfig{LocalRef: 1, RemoteRef: 2, RemoteMAC: b.mac, Timeout: 20 * time.Millisecond, Retries: 15})
+	eb := b.open(t, EndpointConfig{LocalRef: 2, RemoteRef: 1, RemoteMAC: a.mac, OnData: func([]byte) {
+		<-release
+		got.Add(1)
+	}})
+	const total = 40
+	done := make(chan error, 1)
+	go func() {
+		for i := 0; i < total; i++ {
+			if err := ea.Send(context.Background(), []byte{byte(i)}); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	waitFor(t, "a full queue", func() bool { return eb.Stats().Busy > 0 })
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "all delivered", func() bool { return got.Load() == total })
+}
+
+func TestAllocRefExhausted(t *testing.T) {
+	n := vnet.New(12)
+	t.Cleanup(func() { n.Close() })
+	s := newSide(t, n, 0xA)
+	m := s.mgr
+	m.mu.Lock()
+	for r := uint16(1); r < 0xFFFF; r++ {
+		m.endpoints[epKey{r, false}] = &Endpoint{}
+	}
+	m.mu.Unlock()
+	if r := m.AllocRef(); r != 0 {
+		t.Fatalf("ref %d", r)
+	}
+	if _, err := m.Open(EndpointConfig{LocalRef: 0}); !errors.Is(err, profinet.ErrResourceExhausted) {
+		t.Fatalf("err %v", err)
+	}
+	m.mu.Lock()
+	m.endpoints = map[epKey]*Endpoint{}
+	m.mu.Unlock()
+}

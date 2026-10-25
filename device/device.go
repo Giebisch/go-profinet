@@ -231,6 +231,17 @@ func (d *Device) start() error {
 	if d.disp, err = rt.NewDispatcher(d.mux); err != nil {
 		return err
 	}
+	// LLDP first: the DCP responder reads its alias.
+	if !d.cfg.DisableLLDP {
+		d.lldpA, err = lldp.NewAgent(d.mux, lldp.AgentOptions{
+			Interval: d.cfg.LLDPInterval,
+			Local:    d.lldpInfo,
+			Logger:   d.log,
+		})
+		if err != nil {
+			return err
+		}
+	}
 	if d.dcpR, err = dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay}); err != nil {
 		return err
 	}
@@ -245,16 +256,6 @@ func (d *Device) start() error {
 		return fmt.Errorf("device: RPC client socket: %w", err)
 	}
 	d.rpcCli = rpc.NewClient(cconn, true, rpc.ClientOptions{Logger: d.log, Retransmit: 2 * time.Second, Activities: 2})
-	if !d.cfg.DisableLLDP {
-		d.lldpA, err = lldp.NewAgent(d.mux, lldp.AgentOptions{
-			Interval: d.cfg.LLDPInterval,
-			Local:    d.lldpInfo,
-			Logger:   d.log,
-		})
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
