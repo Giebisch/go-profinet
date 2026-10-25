@@ -126,9 +126,14 @@ type ConsumerConfig struct {
 	// Src is the provider's MAC address; frames from other addresses are
 	// counted and dropped. Zero accepts any source.
 	Src ethernet.MAC
-	// Watchdog is the data hold time: when no valid frame arrives for
-	// this long, the consumer expires.
+	// Watchdog is the data hold time: once the first frame arrived, the
+	// consumer expires when no valid frame arrives for this long.
 	Watchdog time.Duration
+	// StartupGrace bounds the wait for the first frame: providers start
+	// at different points of the AR establishment (p-net, for one, only
+	// after ApplicationReady). Zero waits without bound; the AR's own
+	// timeouts then apply.
+	StartupGrace time.Duration
 }
 
 // ConsumerStats are the counters of a [Consumer].
@@ -157,6 +162,7 @@ type Consumer struct {
 	status   DataStatus
 	counter  uint16
 	have     bool
+	armed    bool
 	lastRx   time.Time
 	expired  bool
 	onUpdate func(cSDU []byte, s DataStatus)
@@ -164,7 +170,8 @@ type Consumer struct {
 	received, stale, malformed, wrongSrc, expiries atomic.Uint64
 }
 
-// NewConsumer returns a consumer whose watchdog starts now.
+// NewConsumer returns a consumer. Its startup grace starts now; the data
+// hold watchdog with the first frame.
 func NewConsumer(cfg ConsumerConfig) *Consumer {
 	return &Consumer{cfg: cfg, data: make([]byte, cfg.DataLength), lastRx: time.Now()}
 }
@@ -224,12 +231,28 @@ func (c *Consumer) Handle(f *ethernet.Frame, now time.Time) {
 func (c *Consumer) Check(now time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.expired || c.cfg.Watchdog <= 0 || now.Sub(c.lastRx) <= c.cfg.Watchdog {
+	limit := c.cfg.Watchdog
+	if !c.have && !c.armed {
+		limit = c.cfg.StartupGrace
+	}
+	if c.expired || limit <= 0 || now.Sub(c.lastRx) <= limit {
 		return false
 	}
 	c.expired = true
 	c.expiries.Add(1)
 	return true
+}
+
+// Arm ends the startup grace: from now, the data hold time applies even
+// when no frame has arrived yet. The owner calls it once the AR is
+// established, when the provider must be sending.
+func (c *Consumer) Arm(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.have && !c.armed {
+		c.armed = true
+		c.lastRx = now
+	}
 }
 
 // Read calls fn with the newest C_SDU and DataStatus under the consumer's

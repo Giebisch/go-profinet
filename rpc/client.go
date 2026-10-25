@@ -223,7 +223,54 @@ func (c *Client) Do(ctx context.Context, addr net.Addr, call Call) (*Response, e
 		return nil, fmt.Errorf("rpc: %w", profinet.ErrClosed)
 	}
 	defer func() { c.acts <- act }()
+	return c.do(ctx, act, addr, call)
+}
 
+// Activity is a client activity of its own: every call on it carries the
+// same activity UUID with increasing sequence numbers, and its calls run
+// one at a time. PROFINET devices tie an application relationship to the
+// activity of its Connect (p-net does), so a controller makes every call
+// of an AR on one Activity.
+type Activity struct {
+	sem chan struct{}
+	act activity
+}
+
+// NewActivity returns a new activity of the client.
+func (c *Client) NewActivity() *Activity {
+	a := &Activity{sem: make(chan struct{}, 1)}
+	a.act.id = NewRandomUUID()
+	return a
+}
+
+// UUID returns the activity's UUID.
+func (a *Activity) UUID() UUID { return a.act.id }
+
+// DoActivity performs a call on the activity a, waiting for a call in
+// progress on it to complete.
+func (c *Client) DoActivity(ctx context.Context, a *Activity, addr net.Addr, call Call) (*Response, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.opts.Timeout)
+		defer cancel()
+	}
+	select {
+	case <-c.done:
+		return nil, fmt.Errorf("rpc: %w", profinet.ErrClosed)
+	default:
+	}
+	select {
+	case a.sem <- struct{}{}:
+	case <-ctx.Done():
+		return nil, c.ctxErr(ctx)
+	case <-c.done:
+		return nil, fmt.Errorf("rpc: %w", profinet.ErrClosed)
+	}
+	defer func() { <-a.sem }()
+	return c.do(ctx, &a.act, addr, call)
+}
+
+func (c *Client) do(ctx context.Context, act *activity, addr net.Addr, call Call) (*Response, error) {
 	if act.peer != addr.String() {
 		act.peer = addr.String()
 		act.boot = 0

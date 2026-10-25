@@ -1,0 +1,17 @@
+{
+  "identity": {"vendorId": 1171, "deviceId": 2, "vendorName": "rt-labs", "typeOfStation": "P-Net Sample Application", "orderId": "12345 Abcdefghijk"},
+  "capabilities": {"maxArs": 1, "minDeviceInterval": 32, "conformanceClass": "B", "lldp": true, "ports": 1},
+  "dap": {"name": "DAP", "identNumber": 1, "submodules": [
+    {"name": "DAP Identity 1", "identNumber": 1, "subslot": 1},
+    {"name": "DAP Interface 1", "identNumber": 32768, "subslot": 32768},
+    {"name": "DAP Port 1", "identNumber": 32769, "subslot": 32769}
+  ]},
+  "slots": [
+    {"slot": 1, "module": {"name": "DIO 8xLogicLevel", "identNumber": 50, "submodules": [
+      {"name": "Digital Input/Output", "identNumber": 306, "subslot": 1, "inputLength": 1, "outputLength": 1,
+       "records": [{"index": 123, "name": "Demo 1", "length": 4}, {"index": 124, "name": "Demo 2", "length": 4}]}]}},
+    {"slot": 2, "module": {"name": "Echo module", "identNumber": 64, "submodules": [
+      {"name": "Echo submodule", "identNumber": 320, "subslot": 1, "inputLength": 8, "outputLength": 8,
+       "records": [{"index": 125, "name": "Echo gain", "length": 4}]}]}}
+  ]
+}

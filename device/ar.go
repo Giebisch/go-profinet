@@ -523,10 +523,11 @@ func (d *Device) startCyclic(a *ar, in, out *pnio.IOCRBlockReq, outID uint16) {
 	a.provider.SetDataStatus(rt.StatePrimary | rt.DataValid | rt.StationOK)
 	outCycle := time.Duration(rt.CycleNanos(out.SendClockFactor, out.ReductionRatio))
 	a.consumer = rt.NewConsumer(rt.ConsumerConfig{
-		FrameID:    outID,
-		DataLength: out.DataLength,
-		Src:        a.ctrlMAC,
-		Watchdog:   time.Duration(out.DataHoldFactor) * outCycle,
+		FrameID:      outID,
+		DataLength:   out.DataLength,
+		Src:          a.ctrlMAC,
+		Watchdog:     time.Duration(out.DataHoldFactor) * outCycle,
+		StartupGrace: a.cmiTimeout,
 	})
 	a.consumer.OnUpdate(func(c []byte, s rt.DataStatus) { d.storeOutputs(a, c, s) })
 	d.disp.Add(a.consumer)
@@ -715,7 +716,9 @@ func (d *Device) prmEnd(a *ar) {
 		a.mu.Unlock()
 		if err := a.transition(ARStateData); err != nil {
 			d.log.Debugf("device: %v", err)
+			return
 		}
+		a.consumer.Arm(time.Now())
 	}()
 }
 
@@ -731,7 +734,7 @@ func (d *Device) applicationReady(ctx context.Context, a *ar) error {
 	body := pnio.AppendNDRRequest(nil, rpcOrder, pnio.DefaultArgsMaximum, blk.Append(nil))
 	cctx, cancel := context.WithTimeout(ctx, d.cfg.ApplicationReadyTimeout)
 	defer cancel()
-	resp, err := d.rpcCli.Do(cctx, dst, rpc.Call{Object: a.ctrlObject, Iface: pnio.ControllerInterface, IfaceVersion: pnio.InterfaceVersion, OpNum: uint16(pnio.OpControl), Body: body})
+	resp, err := d.rpcCli.Do(cctx, dst, rpc.Call{Object: a.ctrlObject, Iface: pnio.ControllerInterface, IfaceVersion: pnio.InterfaceVersion, OpNum: uint16(pnio.OpControl), Idempotent: true, Body: body})
 	if err != nil {
 		return err
 	}

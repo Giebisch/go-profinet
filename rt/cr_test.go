@@ -250,7 +250,7 @@ func TestConsumerHandle(t *testing.T) {
 
 func TestConsumerWatchdog(t *testing.T) {
 	start := time.Now()
-	c := NewConsumer(ConsumerConfig{FrameID: 0xC001, DataLength: 4, Watchdog: 100 * time.Millisecond})
+	c := NewConsumer(ConsumerConfig{FrameID: 0xC001, DataLength: 4, Watchdog: 100 * time.Millisecond, StartupGrace: 500 * time.Millisecond})
 	if c.Check(start) {
 		t.Fatal("expired at start")
 	}
@@ -415,4 +415,34 @@ func TestDispatcherMuxStops(t *testing.T) {
 		t.Fatal("Close hangs after the mux stopped")
 	}
 	n.Close()
+}
+
+func TestConsumerStartupGraceAndArm(t *testing.T) {
+	start := time.Now()
+	c := NewConsumer(ConsumerConfig{FrameID: 0xC001, DataLength: 4, Watchdog: 100 * time.Millisecond, StartupGrace: time.Second})
+	// Before the first frame the startup grace applies, not the watchdog.
+	if c.Check(start.Add(500 * time.Millisecond)) {
+		t.Fatal("expired within the startup grace")
+	}
+	// Armed, the data hold time counts from the arming.
+	c.Arm(start.Add(500 * time.Millisecond))
+	c.Arm(start.Add(900 * time.Millisecond)) // a second Arm changes nothing
+	if c.Check(start.Add(550 * time.Millisecond)) {
+		t.Fatal("expired before the data hold time")
+	}
+	if !c.Check(start.Add(601 * time.Millisecond)) {
+		t.Fatal("not expired after arming")
+	}
+	// Without an arm, the grace ends the wait.
+	c = NewConsumer(ConsumerConfig{FrameID: 0xC001, DataLength: 4, Watchdog: 100 * time.Millisecond, StartupGrace: time.Second})
+	if !c.Check(start.Add(2 * time.Second)) {
+		t.Fatal("startup grace did not expire")
+	}
+	// Arm after the first frame has no effect.
+	c = NewConsumer(ConsumerConfig{FrameID: 0xC001, DataLength: 4, Watchdog: 100 * time.Millisecond})
+	c.Handle(rxFrame(t, macA, 0xC001, hx("00000001"), 1, 0x35), start)
+	c.Arm(start.Add(time.Hour))
+	if !c.Check(start.Add(101 * time.Millisecond)) {
+		t.Fatal("Arm after a frame moved the watchdog")
+	}
 }

@@ -563,14 +563,13 @@ func TestTimeouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortCMITimeout)
-	// No output frames within the data hold time.
+	// No output frames within the data hold time once the AR is
+	// established (before that the startup grace applies).
 	req = p.ioCAR()
 	for i := range req.IOCRs {
 		req.IOCRs[i].ReductionRatio, req.IOCRs[i].DataHoldFactor = 4, 3
 	}
-	if _, err := p.connect(req); err != nil {
-		t.Fatal(err)
-	}
+	p.establish(req)
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortConsumerDHT)
 	// A released IOSAR stops its idle watch.
 	s := p.ioSAR()

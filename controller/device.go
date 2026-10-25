@@ -589,6 +589,7 @@ func (d *Device) session() (ran bool, err error) {
 		return false, nil
 	}
 	d.setState(StateRunning, nil)
+	a.consumer.Arm(time.Now())
 	d.c.log.Infof("controller: %s: AR %s running", d.cfg.StationName, a.uuid)
 	select {
 	case err := <-a.failed:
@@ -829,7 +830,8 @@ func (d *Device) startCyclic(a *arState, mac ethernet.MAC) {
 	})
 	a.consumer = rt.NewConsumer(rt.ConsumerConfig{
 		FrameID: a.inFrameID, DataLength: a.inLayout.DataLength, Src: mac,
-		Watchdog: time.Duration(cfg.DataHoldFactor) * cycle,
+		Watchdog:     time.Duration(cfg.DataHoldFactor) * cycle,
+		StartupGrace: cfg.ActivityTimeout,
 	})
 	a.consumer.OnUpdate(func(c []byte, s rt.DataStatus) { d.storeInputs(a, c, s) })
 	d.c.disp.Add(a.consumer)

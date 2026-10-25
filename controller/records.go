@@ -22,6 +22,7 @@ var order rpc.ByteOrder = binary.LittleEndian
 // Write, ReadImplicit, Control and Release. It is safe for concurrent use.
 type RecordClient struct {
 	rpc    *rpc.Client
+	act    *rpc.Activity
 	addr   net.Addr
 	object rpc.UUID
 	seq    atomic.Uint32
@@ -29,9 +30,10 @@ type RecordClient struct {
 
 // NewRecordClient returns a client for the device at addr (its RPC
 // endpoint, port 34964) with PNIO object UUID object (see
-// pnio.ObjectUUID).
+// pnio.ObjectUUID). Its calls share one RPC activity, as the calls of one
+// AR must; they run one at a time.
 func NewRecordClient(c *rpc.Client, addr net.Addr, object rpc.UUID) *RecordClient {
-	return &RecordClient{rpc: c, addr: addr, object: object}
+	return &RecordClient{rpc: c, act: c.NewActivity(), addr: addr, object: object}
 }
 
 // Addr returns the device's RPC address.
@@ -41,7 +43,10 @@ func (r *RecordClient) Addr() net.Addr { return r.addr }
 // response.
 func (r *RecordClient) call(ctx context.Context, op pnio.OpNum, blocks []byte) (pnio.Status, []byte, error) {
 	body := pnio.AppendNDRRequest(nil, order, pnio.DefaultArgsMaximum, blocks)
-	resp, err := r.rpc.Do(ctx, r.addr, rpc.Call{Object: r.object, Iface: pnio.DeviceInterface, IfaceVersion: pnio.InterfaceVersion, OpNum: uint16(op), Body: body})
+	// Calls are marked idempotent, as PROFINET controllers send them: the
+	// device's response cache answers a retransmission, and no CL ACK
+	// follows the response (p-net and pnio-rs do not process ACKs).
+	resp, err := r.rpc.DoActivity(ctx, r.act, r.addr, rpc.Call{Object: r.object, Iface: pnio.DeviceInterface, IfaceVersion: pnio.InterfaceVersion, OpNum: uint16(op), Idempotent: true, Body: body})
 	if err != nil {
 		return pnio.Status{}, nil, err
 	}
