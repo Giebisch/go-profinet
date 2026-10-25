@@ -139,6 +139,7 @@ func (f *Frame) AppendTo(dst []byte) ([]byte, error) {
 	if len(f.ChassisID) < 1 || len(f.ChassisID) > 255 || len(f.PortID) < 1 || len(f.PortID) > 255 {
 		return dst, fmt.Errorf("lldp: %w: chassis and port IDs must be 1..255 octets", profinet.ErrInvalidConfig)
 	}
+	start := len(dst)
 	dst = appendTLV(dst, TypeChassisID, append([]byte{f.ChassisSubtype}, f.ChassisID...))
 	dst = appendTLV(dst, TypePortID, append([]byte{f.PortSubtype}, f.PortID...))
 	dst = appendTLV(dst, TypeTTL, binary.BigEndian.AppendUint16(nil, f.TTL))
@@ -181,7 +182,11 @@ func (f *Frame) AppendTo(dst []byte) ([]byte, error) {
 	}
 	for _, t := range f.Other {
 		if len(t.Value) > 511 {
-			return dst, fmt.Errorf("lldp: %w: TLV of %d octets", profinet.ErrInvalidConfig, len(t.Value))
+			return dst[:start], fmt.Errorf("lldp: %w: TLV of %d octets", profinet.ErrInvalidConfig, len(t.Value))
+		}
+		// The type field has 7 bits, and an End TLV would cut the LLDPDU.
+		if t.Type == TypeEnd || t.Type > TypeOrgSpecific {
+			return dst[:start], fmt.Errorf("lldp: %w: TLV type %d", profinet.ErrInvalidConfig, t.Type)
 		}
 		dst = appendTLV(dst, t.Type, t.Value)
 	}

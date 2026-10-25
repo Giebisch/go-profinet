@@ -207,6 +207,13 @@ func (c *Client) Do(ctx context.Context, addr net.Addr, call Call) (*Response, e
 		ctx, cancel = context.WithTimeout(ctx, c.opts.Timeout)
 		defer cancel()
 	}
+	// Fail a call after Close deterministically: the select below picks
+	// at random when an activity is also free.
+	select {
+	case <-c.done:
+		return nil, fmt.Errorf("rpc: %w", profinet.ErrClosed)
+	default:
+	}
 	var act *activity
 	select {
 	case act = <-c.acts:
@@ -253,6 +260,13 @@ func (c *Client) Do(ctx context.Context, addr net.Addr, call Call) (*Response, e
 	send := func() error {
 		for _, p := range pkts {
 			if _, err := c.conn.WriteTo(p, addr); err != nil {
+				// A Close racing with a (re)transmission closes the socket
+				// under it: report the close, not the socket's error.
+				select {
+				case <-c.done:
+					return fmt.Errorf("rpc: %w", profinet.ErrClosed)
+				default:
+				}
 				return fmt.Errorf("rpc: send to %s: %w", addr, err)
 			}
 		}
