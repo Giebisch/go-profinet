@@ -197,13 +197,13 @@ func TestFromModelRoundTrip(t *testing.T) {
 func TestValidationIssues(t *testing.T) {
 	doc := load(t, "otf-fixture-latin1.xml")
 	dap := doc.ProfileBody.ApplicationProcess.DeviceAccessPointList.DeviceAccessPointItems[0]
-	dap.ModuleIdentNumber = "12"                   // not hexadecimal
-	dap.PhysicalSlots = "1..x"                     // not a value list
+	dap.ModuleIdentNumber = "12" // not hexadecimal
+	dap.PhysicalSlots = "1..x"   // not a value list
 	dap.UseableModules.ModuleItemRefs[0].ModuleItemTarget = "MISSING"
-	dap.CertificationInfo.ConformanceClass = "Z"   // not in the enumeration
-	dap.ModuleInfo.Name.TextID = "T_NONE"          // no such text
-	dap.IOConfigData = nil                         // required element
-	dap.DNSCompatibleName = ""                     // required attribute
+	dap.CertificationInfo.ConformanceClass = "Z"                               // not in the enumeration
+	dap.ModuleInfo.Name.TextID = "T_NONE"                                      // no such text
+	dap.IOConfigData = nil                                                     // required element
+	dap.DNSCompatibleName = ""                                                 // required attribute
 	doc.ProfileBody.ApplicationProcess.ModuleList.ModuleItems[1].ID = "MOD_DI" // duplicate ID
 	err := Validate(doc)
 	var ve *ValidationError
