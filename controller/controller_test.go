@@ -717,16 +717,21 @@ func TestStartupVariants(t *testing.T) {
 }
 
 func TestFrameIDAllocation(t *testing.T) {
-	c := &Controller{devices: map[string]*Device{}, nextIn: pnio.FrameIDRTC1Max}
-	if id := c.allocInputFrameID(pnio.RTClass1); id != pnio.FrameIDRTC1Max || c.nextIn != pnio.FrameIDRTC1Min {
-		t.Fatalf("0x%04X next 0x%04X", id, c.nextIn)
+	c := &Controller{devices: map[string]*Device{}, nextIn: map[pnio.RTClass]uint16{pnio.RTClass1: pnio.FrameIDRTC1Max}}
+	if id := c.allocInputFrameID(pnio.RTClass1); id != pnio.FrameIDRTC1Max {
+		t.Fatalf("0x%04X", id)
 	}
+	// The allocation wraps to the start of the range.
+	if id := c.allocInputFrameID(pnio.RTClass1); id != pnio.FrameIDRTC1Min {
+		t.Fatalf("wrap: 0x%04X", id)
+	}
+	c.nextIn[pnio.RTClass1] = pnio.FrameIDRTC1Min
 	c.devices["a"] = &Device{ar: &arState{inFrameID: pnio.FrameIDRTC1Min}}
 	if id := c.allocInputFrameID(pnio.RTClass1); id != pnio.FrameIDRTC1Min+1 {
 		t.Fatalf("0x%04X", id)
 	}
-	// Another class allocates in its own range.
-	if id := c.allocInputFrameID(pnio.RTClass2); id < pnio.FrameIDRTC2Min || id > pnio.FrameIDRTC2Max {
+	// Another class allocates in its own range, from its start.
+	if id := c.allocInputFrameID(pnio.RTClass2); id != pnio.FrameIDRTC2Min {
 		t.Fatalf("class 2: 0x%04X", id)
 	}
 	if id := c.allocInputFrameID(pnio.RTClass1); id < pnio.FrameIDRTC1Min || id > pnio.FrameIDRTC1Max {
@@ -825,16 +830,12 @@ func TestLayoutTooLong(t *testing.T) {
 			return model.Slot{Number: slot, Module: model.Module{IdentNumber: 0x50, Submodules: []model.Submodule{sm}}}
 		}
 		m.Slots = []model.Slot{big(1), big(2)}
-		if err := m.Validate(); err != nil {
+		// The model already rejects a direction that does not fit a C_SDU.
+		if err := m.Validate(); !errors.Is(err, profinet.ErrInvalidConfig) {
 			t.Fatalf("%s: %v", dir, err)
 		}
-		cd, err := c.AddDevice(DeviceConfig{StationName: "fake", Model: m, ReconnectMin: time.Hour})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := waitErr(t, cd); !errors.Is(err, profinet.ErrInvalidConfig) {
+		if _, err := c.AddDevice(DeviceConfig{StationName: "fake", Model: m, ReconnectMin: time.Hour}); !errors.Is(err, profinet.ErrInvalidConfig) {
 			t.Fatalf("%s: %v", dir, err)
 		}
-		cd.Close()
 	}
 }

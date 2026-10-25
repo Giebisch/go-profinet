@@ -87,7 +87,13 @@ func TestValidateErrors(t *testing.T) {
 				{Number: 2, Module: Module{IdentNumber: 1, Submodules: []Submodule{big(1000)}}},
 				{Number: 3, Module: Module{IdentNumber: 1, Submodules: []Submodule{big(1000)}}},
 			}
-		}, "does not fit two C_SDUs"},
+		}, "input CR of"},
+		{"too much output", func(d *Device) {
+			d.Slots = []Slot{
+				{Number: 1, Module: Module{IdentNumber: 1, Submodules: []Submodule{{IdentNumber: 1, Subslot: 1, OutputLen: 1000}}}},
+				{Number: 2, Module: Module{IdentNumber: 1, Submodules: []Submodule{{IdentNumber: 1, Subslot: 1, OutputLen: 1000}}}},
+			}
+		}, "output CR of"},
 		{"negative MaxARs", func(d *Device) { d.Capabilities.MaxARs = -1 }, "MaxARs -1"},
 	}
 	for _, c := range cases {

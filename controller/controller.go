@@ -73,7 +73,7 @@ type Controller struct {
 	mu      sync.Mutex
 	devices map[string]*Device
 	byAR    map[rpc.UUID]*Device
-	nextIn  uint16
+	nextIn  map[pnio.RTClass]uint16
 	closed  bool
 
 	ctx    context.Context
@@ -118,7 +118,7 @@ func New(cfg Config) (*Controller, error) {
 		mux:     cfg.Mux,
 		devices: map[string]*Device{},
 		byAR:    map[rpc.UUID]*Device{},
-		nextIn:  pnio.FrameIDRTC1Min,
+		nextIn:  map[pnio.RTClass]uint16{},
 		ctx:     ctx,
 		cancel:  cancel,
 	}
@@ -240,13 +240,14 @@ func (c *Controller) allocInputFrameID(cls pnio.RTClass) uint16 {
 			used[id] = true
 		}
 	}
+	next := c.nextIn[cls]
+	if next < lo || next > hi {
+		next = lo
+	}
 	for i := 0; i <= int(hi-lo); i++ {
-		id := lo + uint16((int(c.nextIn-lo)+i)%int(hi-lo+1))
+		id := lo + uint16((int(next-lo)+i)%int(hi-lo+1))
 		if !used[id] {
-			c.nextIn = id + 1
-			if c.nextIn > hi || c.nextIn < lo {
-				c.nextIn = lo
-			}
+			c.nextIn[cls] = id + 1
 			return id
 		}
 	}

@@ -223,8 +223,8 @@ func (d *Device) modules() []slotModule {
 	return out
 }
 
-// ModuleTypes returns the distinct module types: the DAP, the plugged
-// modules and the catalog, by ident number.
+// ModuleTypes returns the distinct module types of the slots: the plugged
+// modules and the catalog, by ident number. The DAP is not included.
 func (d *Device) ModuleTypes() []Module {
 	seen := map[uint32]bool{}
 	var out []Module
@@ -272,7 +272,6 @@ func (d *Device) Validate() error {
 		}
 		slots[s.Number] = true
 	}
-	total := 0
 	var err error
 	for _, m := range d.modules() {
 		subslots := map[uint16]bool{}
@@ -287,7 +286,6 @@ func (d *Device) Validate() error {
 			if int(s.InputLen) > 1439 || int(s.OutputLen) > 1439 {
 				err = bad("slot %d subslot %d: IO data longer than the C_SDU", m.slot, s.Subslot)
 			}
-			total += int(s.InputLen) + int(s.OutputLen) + 4
 			idx := map[pnio.Index]bool{}
 			for _, r := range s.Records {
 				if !r.Index.IsUserIndex() {
@@ -306,8 +304,29 @@ func (d *Device) Validate() error {
 			}
 		}
 	}
-	if total > 2*1440 {
-		return bad("IO data of %d octets does not fit two C_SDUs", total)
+	// Each direction must fit one C_SDU: the input CR carries the input
+	// (and NO_IO) data with their IOPS and the IOCS of the outputs, the
+	// output CR the output data with their IOPS and the IOCS of the
+	// inputs.
+	in, out := 0, 0
+	d.Each(func(p PluggedSubmodule) {
+		switch t := p.Submodule.Type(); {
+		case t == pnio.SubmoduleInputOutput:
+			in += int(p.Submodule.InputLen) + 2
+			out += int(p.Submodule.OutputLen) + 2
+		case t == pnio.SubmoduleOutput:
+			out += int(p.Submodule.OutputLen) + 1
+			in++
+		default:
+			in += int(p.Submodule.InputLen) + 1
+			out++
+		}
+	})
+	if in > 1440 {
+		return bad("input CR of %d octets exceeds the C_SDU maximum 1440", in)
+	}
+	if out > 1440 {
+		return bad("output CR of %d octets exceeds the C_SDU maximum 1440", out)
 	}
 	if d.Capabilities.MaxARs < 0 {
 		return bad("MaxARs %d", d.Capabilities.MaxARs)

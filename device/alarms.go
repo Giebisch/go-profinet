@@ -131,8 +131,9 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 		return fmt.Errorf("device: alarm to AR %s: %w", a.uuid, err)
 	}
 	// The application acknowledgement comes as a DATA PDU of the
-	// controller; it has the AR's alarm timeout to arrive.
-	t := time.NewTimer(5 * time.Second)
+	// controller; it has as long as the transport would retransmit, and at
+	// least AlarmAckTimeout, to arrive.
+	t := time.NewTimer(max(a.alarmAckTimeout, AlarmAckTimeout))
 	defer t.Stop()
 	select {
 	case ack, ok := <-ch:
@@ -149,9 +150,16 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 		a.mu.Unlock()
 		return fmt.Errorf("device: alarm to AR %s: %w: no AlarmAck", a.uuid, profinet.ErrTimeout)
 	case <-ctx.Done():
+		a.mu.Lock()
+		delete(a.ackWait, seq)
+		a.mu.Unlock()
 		return ctx.Err()
 	}
 }
+
+// AlarmAckTimeout is the shortest time the device waits for the
+// controller's AlarmAck after the transport acknowledged the alarm.
+const AlarmAckTimeout = 5 * time.Second
 
 // AddDiagnosis records a diagnosis of a submodule and reports it to the
 // controllers with a diagnosis alarm. The item's ChannelProperties

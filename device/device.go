@@ -114,15 +114,19 @@ type Device struct {
 	rpcCli *rpc.Client
 
 	// mu guards the station state and the ARs.
-	mu       sync.Mutex
-	name     string
-	ip       dcp.IPSuite
-	ars      map[rpc.UUID]*ar
-	frameIDs map[uint16]bool
-	records  map[recKey][]byte
-	im       IMData
-	diags    map[key][]pnio.DiagnosisItem
-	closed   bool
+	mu   sync.Mutex
+	name string
+	ip   dcp.IPSuite
+	ars  map[rpc.UUID]*ar
+	// reserved counts the Connects in progress; reservedIO is set while
+	// one of them is an IOCAR.
+	reserved   int
+	reservedIO bool
+	frameIDs   map[uint16]bool
+	records    map[recKey][]byte
+	im         IMData
+	diags      map[key][]pnio.DiagnosisItem
+	closed     bool
 
 	// imgMu guards the process data images; it is never held while
 	// another lock is taken.
@@ -231,7 +235,7 @@ func (d *Device) start() error {
 	if d.disp, err = rt.NewDispatcher(d.mux); err != nil {
 		return err
 	}
-	// LLDP first: the DCP responder reads its alias.
+	// LLDP before DCP: the DCP responder reads its alias.
 	if !d.cfg.DisableLLDP {
 		d.lldpA, err = lldp.NewAgent(d.mux, lldp.AgentOptions{
 			Interval: d.cfg.LLDPInterval,
@@ -242,20 +246,22 @@ func (d *Device) start() error {
 			return err
 		}
 	}
-	if d.dcpR, err = dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay}); err != nil {
-		return err
+	cconn, err := d.cfg.ListenPacket(d.ctx, "udp4", ":0")
+	if err != nil {
+		return fmt.Errorf("device: RPC client socket: %w", err)
 	}
+	d.rpcCli = rpc.NewClient(cconn, true, rpc.ClientOptions{Logger: d.log, Retransmit: 2 * time.Second, Activities: 2})
 	conn, err := d.cfg.ListenPacket(d.ctx, "udp4", ":"+strconv.Itoa(d.cfg.RPCPort))
 	if err != nil {
 		return fmt.Errorf("device: RPC socket: %w", err)
 	}
 	d.rpcSrv = rpc.NewServer(conn, true, rpc.ServerOptions{Logger: d.log})
 	d.rpcSrv.Register(pnio.DeviceInterface, pnio.InterfaceVersion, rpc.HandlerFunc(d.serveRPC))
-	cconn, err := d.cfg.ListenPacket(d.ctx, "udp4", ":0")
-	if err != nil {
-		return fmt.Errorf("device: RPC client socket: %w", err)
+	// DCP last: once the device can be found, everything a controller
+	// talks to is in place.
+	if d.dcpR, err = dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay}); err != nil {
+		return err
 	}
-	d.rpcCli = rpc.NewClient(cconn, true, rpc.ClientOptions{Logger: d.log, Retransmit: 2 * time.Second, Activities: 2})
 	return nil
 }
 

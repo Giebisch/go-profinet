@@ -86,7 +86,7 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 		pnio.IndexDiagChannelAPI, pnio.IndexDiagAllAPI, pnio.IndexDiagDMQSAPI, pnio.IndexDiagDMQSDevice:
 		return d.diagnosis(q), nil
 	case pnio.IndexRecordInputData:
-		return d.recordInput(q)
+		return d.recordInput(a, q)
 	case pnio.IndexLogBook:
 		// LogBookData with the local time and no entries.
 		b := []byte{0x00, 0x19, 0, 0, 1, 0}
@@ -305,7 +305,7 @@ func (d *Device) diagnosis(q pnio.ReadReq) []byte {
 // recordInput answers RecordInputDataObjectElement (0x8028): the input
 // data of a submodule with its provider status and the controller's
 // consumer status.
-func (d *Device) recordInput(q pnio.ReadReq) ([]byte, error) {
+func (d *Device) recordInput(a *ar, q pnio.ReadReq) ([]byte, error) {
 	d.imgMu.RLock()
 	in, ok := d.inputs[key{q.Slot, q.Subslot}]
 	var data []byte
@@ -318,7 +318,16 @@ func (d *Device) recordInput(q pnio.ReadReq) ([]byte, error) {
 	if !ok {
 		return nil, rwErr(pnio.RWInvalidSlot)
 	}
-	iocs := pnio.IOxSGood
+	// The controller's consumer status of these inputs, from the AR's
+	// output frames; bad without an AR or before the first frame.
+	iocs := pnio.IOxSBad
+	if a != nil {
+		a.mu.Lock()
+		if v, ok := a.iocs[key{q.Slot, q.Subslot}]; ok {
+			iocs = v
+		}
+		a.mu.Unlock()
+	}
 	b := []byte{0x00, 0x15, 0, 0, 1, 0}
 	b = append(b, 1, iocs, 1, iops)
 	b = binary.BigEndian.AppendUint16(b, uint16(len(data)))

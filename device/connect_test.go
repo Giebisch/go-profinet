@@ -5,7 +5,10 @@ package device
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -655,5 +658,40 @@ func TestConnectModuleDiff(t *testing.T) {
 	d.mu.Unlock()
 	if a.proper[key{2, 1}] || !a.proper[key{1, 1}] {
 		t.Fatalf("proper %v", a.proper)
+	}
+}
+
+// TestConcurrentConnects: of several IOCAR Connects that arrive at the
+// same time, exactly one is accepted; the reservation keeps the others
+// from slipping between the check and the insertion.
+func TestConcurrentConnects(t *testing.T) {
+	n := newNet(t)
+	d, _ := n.device(nil)
+	const peers = 6
+	ps := make([]*peer, peers)
+	for i := range ps {
+		ps[i] = n.peer(d, fmt.Sprintf("192.168.0.%d", 100+i), false)
+	}
+	var wg sync.WaitGroup
+	var accepted atomic.Int32
+	start := make(chan struct{})
+	for i := range ps {
+		wg.Add(1)
+		go func(p *peer) {
+			defer wg.Done()
+			req := p.ioCAR()
+			<-start
+			if _, err := p.connect(req); err == nil {
+				accepted.Add(1)
+			}
+		}(ps[i])
+	}
+	close(start)
+	wg.Wait()
+	if accepted.Load() != 1 {
+		t.Fatalf("%d IOCARs accepted", accepted.Load())
+	}
+	if ars := d.ARs(); len(ars) != 1 {
+		t.Fatalf("ARs %+v", ars)
 	}
 }

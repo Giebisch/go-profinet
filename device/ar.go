@@ -47,6 +47,7 @@ type ar struct {
 	alarmHigh, alarmLow *alarm.Endpoint
 	alarmRef            uint16
 	maxAlarmData        uint16
+	alarmAckTimeout     time.Duration
 
 	mu           sync.Mutex
 	state        ARState
@@ -336,7 +337,13 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	if old := d.ars[arb.ARUUID]; old != nil {
 		rerun = old
 	}
-	count := 0
+	// Connects in progress hold a reservation, so that concurrent ones
+	// cannot exceed the limits between this check and the insertion.
+	count := d.reserved
+	if !iosar && d.reservedIO {
+		d.mu.Unlock()
+		return fail(pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
+	}
 	for _, a := range d.ars {
 		if a == rerun {
 			continue
@@ -352,7 +359,19 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		d.mu.Unlock()
 		return fail(pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
 	}
+	d.reserved++
+	if !iosar {
+		d.reservedIO = true
+	}
 	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		d.reserved--
+		if !iosar {
+			d.reservedIO = false
+		}
+		d.mu.Unlock()
+	}()
 	if rerun != nil {
 		d.abort(rerun, pnio.AbortRerun, true)
 	}
@@ -460,6 +479,7 @@ func (d *Device) releaseFrameID(id uint16) {
 func (d *Device) openAlarms(a *ar, req *pnio.AlarmCRBlockReq) error {
 	a.alarmRef = d.alarms.AllocRef()
 	a.maxAlarmData = min(req.MaxAlarmDataLength, 1432)
+	a.alarmAckTimeout = time.Duration(req.RTATimeoutFactor) * 100 * time.Millisecond * time.Duration(req.RTARetries+1)
 	base := alarm.EndpointConfig{
 		LocalRef:  a.alarmRef,
 		RemoteRef: req.LocalAlarmReference,
