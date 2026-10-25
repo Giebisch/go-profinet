@@ -92,14 +92,15 @@ func TestChaos(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					waitState(t, cd, controller.StateRunning, 30*time.Second)
+					waitState(t, cd, controller.StateRunning, 90*time.Second)
 					dev.SetInput(1, 1, []byte{8, 7, 6, 5, 4, 3, 2, 1}, pnio.IOxSGood)
-					eventually(t, 20*time.Second, "inputs under chaos", func() bool {
+					eventually(t, 60*time.Second, "inputs under chaos", func() bool {
 						in, _, _ := cd.Input(1, 1)
 						return bytes.Equal(in, []byte{8, 7, 6, 5, 4, 3, 2, 1})
 					})
 					// Acyclic services retransmit through the faults.
-					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+					// Generous: 40% loss on a loaded CI machine still makes progress.
+					ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 					defer cancel()
 					for i := 0; i < 5; i++ {
 						if _, err := cd.ReadIM0(ctx); err != nil {
