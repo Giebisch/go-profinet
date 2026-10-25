@@ -239,8 +239,14 @@ func (r RawBlock) Append(b []byte) []byte {
 // checkVersion checks the version of a block against the high version it
 // must have, returning the low version.
 func checkVersion(blk RawBlock, high uint8, maxLow uint8) error {
-	if blk.Header.VersionHigh != high || blk.Header.VersionLow > maxLow {
-		return &StatusError{Op: "decode " + blk.Header.Type.String(), Status: blockError(blk.Header.Type, 2)}
+	var field uint8
+	switch {
+	case blk.Header.VersionHigh != high:
+		field = 2
+	case blk.Header.VersionLow > maxLow:
+		field = 3
+	default:
+		return nil
 	}
-	return nil
+	return &StatusError{Op: "decode " + blk.Header.Type.String(), Status: blockError(blk.Header.Type, field)}
 }
