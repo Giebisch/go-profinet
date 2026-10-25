@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Written for go-profinet (MIT): exercises the constructs the reader resolves. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:test" targetNamespace="urn:test" elementFormDefault="qualified">
+  <xs:attributeGroup name="IdentGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="Note" type="xs:string"/>
+  </xs:attributeGroup>
+  <xs:group name="InfoGroup">
+    <xs:sequence>
+      <xs:element name="Info" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:complexType name="BaseT">
+    <xs:sequence>
+      <xs:element name="Name" type="xs:string"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="t:IdentGroup"/>
+  </xs:complexType>
+  <xs:complexType name="ItemT">
+    <xs:complexContent>
+      <xs:extension base="t:BaseT">
+        <xs:sequence>
+          <xs:group ref="t:InfoGroup"/>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element ref="t:Leaf"/>
+            <xs:element name="Nested">
+              <xs:complexType>
+                <xs:attribute name="Depth" type="xs:unsignedInt" use="required"/>
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="Kind" type="xs:token"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="Leaf">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:string">
+          <xs:attribute name="Lang" type="xs:language"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Item" type="t:ItemT" maxOccurs="unbounded"/>
+        <xs:element name="Self" type="t:ItemT" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
