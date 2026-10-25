@@ -242,8 +242,8 @@ func TestModuleDiff(t *testing.T) {
 	dev, _ := e.device("dut", "192.168.0.10", testModel(), nil)
 	ctrl, _ := e.controller("192.168.0.1")
 	exp := testModel()
-	exp.Slots[0].Module.IdentNumber = 0x99                                                         // wrong module in slot 1
-	exp.Slots[1].Module.Submodules[0].IdentNumber = 0x98                                           // wrong submodule in slot 2
+	exp.Slots[0].Module.IdentNumber = 0x99                                                                                                                                                // wrong module in slot 1
+	exp.Slots[1].Module.Submodules[0].IdentNumber = 0x98                                                                                                                                  // wrong submodule in slot 2
 	exp.Slots = append(exp.Slots, model.Slot{Number: 7, Module: model.Module{Name: "X", IdentNumber: 0x70, Submodules: []model.Submodule{{IdentNumber: 0x71, Subslot: 1, InputLen: 1}}}}) // missing
 	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "dut", Model: exp})
 	if err != nil {

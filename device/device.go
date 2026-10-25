@@ -398,7 +398,7 @@ func (s station) Identity() dcp.Identity {
 
 func (d *Device) hasIOAR() bool {
 	for _, a := range d.ars {
-		if a.typ != pnio.ARTypeIOSAR && a.state != ARStateClosed {
+		if a.typ != pnio.ARTypeIOSAR && a.currentState() != ARStateClosed {
 			return true
 		}
 	}

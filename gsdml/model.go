@@ -4,6 +4,7 @@ package gsdml
 
 import (
 	"encoding/binary"
+	"encoding/xml"
 	"fmt"
 	"math"
 	"sort"
@@ -492,6 +493,12 @@ func FromModel(m *model.Device, opts GenerateOptions) (*Document, error) {
 		family = id.TypeOfStation
 	}
 	doc := &Document{
+		// The schema location engineering tools expect; the schema itself
+		// is PI's and not part of this module.
+		Attrs: []xml.Attr{
+			{Name: xml.Name{Local: "xmlns:xsi"}, Value: "http://www.w3.org/2001/XMLSchema-instance"},
+			{Name: xml.Name{Local: "xsi:schemaLocation"}, Value: Namespace + " ..\\xsd\\GSDML-DeviceProfile-" + opts.PNIOVersion + ".xsd"},
+		},
 		ProfileHeader: &ProfileHeader{
 			ProfileIdentification: &ProfileIdentification{Value: "PROFINET Device Profile"},
 			ProfileRevision:       &ProfileRevision{Value: "1.00"},

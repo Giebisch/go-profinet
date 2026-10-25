@@ -1,0 +1,20 @@
+# Codecov configuration for go-profinet.
+# CI uploads coverage for the library packages; examples/, the generator
+# under internal/cmd and the raw-socket backends (measured by the L2 jobs)
+# are not part of it.
+coverage:
+  status:
+    project:
+      default:
+        target: 90%
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "examples/**"
+  - "internal/cmd/**"
+  - "l2/afpacket/**"
+  - "l2/bpf/**"
+  - "l2/npcap/**"

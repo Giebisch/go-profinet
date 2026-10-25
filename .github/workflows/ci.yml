@@ -1,0 +1,169 @@
+name: CI
+run-name: "CI (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ github.actor }}"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    uses: otfabric/.github/.github/workflows/go-ci.yml@v2
+    with:
+      codecov-name: go-profinet
+      # Coverage across the library packages, as make coverage measures it:
+      # the e2e suite and the controller and device tests exercise each
+      # other's packages. The raw-socket backends need privileges and are
+      # measured by the L2 jobs below. make coverpkg-check keeps it equal
+      # to COVER_PKGS.
+      coverpkg: >-
+        github.com/otfabric/go-profinet,github.com/otfabric/go-profinet/alarm,github.com/otfabric/go-profinet/controller,github.com/otfabric/go-profinet/dcp,github.com/otfabric/go-profinet/device,github.com/otfabric/go-profinet/ethernet,github.com/otfabric/go-profinet/gsdml,github.com/otfabric/go-profinet/internal/xsd,github.com/otfabric/go-profinet/l2,github.com/otfabric/go-profinet/l2/osport,github.com/otfabric/go-profinet/lldp,github.com/otfabric/go-profinet/model,github.com/otfabric/go-profinet/netstack,github.com/otfabric/go-profinet/pcap,github.com/otfabric/go-profinet/pnio,github.com/otfabric/go-profinet/rpc,github.com/otfabric/go-profinet/rt,github.com/otfabric/go-profinet/vnet
+      go-versions: '["1.23", "1.24", "1.25", "1.26"]'
+      timeout-minutes: 25
+    secrets: inherit
+
+  # The coverage gate of the library: at least 90% of the statements.
+  coverage:
+    name: Coverage ≥ 90%
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make coverage-check
+      - name: Coverage by package
+        run: scripts/coverage-by-package.sh coverage.out >> "$GITHUB_STEP_SUMMARY"
+
+  # The generated GSDML types and SCHEMA.md follow gsdml/schema/catalog.json.
+  generate:
+    name: Generated code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make generate-check coverpkg-check
+
+  # Native runners for every supported platform: unit and e2e tests run on
+  # each, not only a cross-compilation.
+  platforms:
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-latest, windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: go vet ./...
+        env:
+          GOWORK: "off"
+      - run: go test -count=1 ./...
+        env:
+          GOWORK: "off"
+          PROFINET_CHAOS_RUNS: "1"
+
+  # Every package builds for every platform the backends support.
+  cross:
+    name: Cross builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make cross
+
+  # The real Layer 2 tests on Linux: AF_PACKET on a veth pair, as root.
+  l2-linux:
+    name: Real Layer 2 (Linux AF_PACKET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - name: veth pair
+        run: |
+          sudo ip link add pnA type veth peer name pnB
+          sudo ip link set pnA up
+          sudo ip link set pnB up
+          sudo sysctl -qw net.ipv6.conf.pnA.disable_ipv6=1 net.ipv6.conf.pnB.disable_ipv6=1
+      - name: Tests as root
+        run: |
+          go test -c -race -cover -coverpkg=./l2/... -o afpacket.test ./l2/afpacket
+          go test -c -race -o e2e.test ./e2e
+          sudo PROFINET_L2_IFACE_A=pnA PROFINET_L2_IFACE_B=pnB ./afpacket.test -test.v -test.count=1 -test.coverprofile=l2.out
+          sudo PROFINET_L2_IFACE_A=pnA PROFINET_L2_IFACE_B=pnB ./e2e.test -test.v -test.count=1 -test.run TestRealL2
+          go tool cover -func=l2.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GOWORK: "off"
+
+  # The real Layer 2 tests on macOS: BPF on a feth pair, as root.
+  l2-macos:
+    name: Real Layer 2 (macOS BPF)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - name: feth pair
+        run: |
+          sudo ifconfig feth0 create
+          sudo ifconfig feth1 create
+          sudo ifconfig feth0 peer feth1
+          sudo ifconfig feth0 up
+          sudo ifconfig feth1 up
+      - name: Tests as root
+        run: |
+          go test -c -race -o e2e.test ./e2e
+          go test -c -race -cover -coverpkg=./l2/... -o bpf.test ./l2/bpf
+          sudo PROFINET_L2_IFACE_A=feth0 PROFINET_L2_IFACE_B=feth1 ./bpf.test -test.v -test.count=1 -test.coverprofile=l2.out
+          sudo PROFINET_L2_IFACE_A=feth0 PROFINET_L2_IFACE_B=feth1 ./e2e.test -test.v -test.count=1 -test.run TestRealL2
+        env:
+          GOWORK: "off"
+
+  # The self-contained examples must keep running as they are.
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make build examples
+
+  # Every fuzz target, briefly, on every push.
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make fuzz FUZZTIME=10s
+      - name: Upload the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: "**/testdata/fuzz/"
+          if-no-files-found: warn
