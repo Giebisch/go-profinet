@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -232,6 +233,53 @@ func TestConnectRejectSupervisor(t *testing.T) {
 	p := n.peer(d, "192.168.0.2", false)
 	_, err := p.connect(p.ioSAR())
 	wantStatus(t, err, pnio.Code1ARBlock, 4)
+}
+
+// slowDataHandler holds back its report of the first transition to Data
+// until release is closed.
+type slowDataHandler struct {
+	*recHandler
+	once    sync.Once
+	inData  chan struct{}
+	release chan struct{}
+}
+
+func (h *slowDataHandler) StateChanged(ar ARInfo, from, to ARState) {
+	if to == ARStateData {
+		h.once.Do(func() {
+			close(h.inData)
+			<-h.release
+		})
+	}
+	h.recHandler.StateChanged(ar, from, to)
+}
+
+// TestStateChangedInOrder: a transition caused while the handler is still
+// busy with the previous one is reported after it. Here PrmBegin arrives
+// while the handler is reporting Data; the handler must see Data before
+// Parameterizing, not after.
+func TestStateChangedInOrder(t *testing.T) {
+	n := newNet(t)
+	h := &slowDataHandler{recHandler: newRecHandler(), inData: make(chan struct{}), release: make(chan struct{})}
+	d, _ := n.device(h)
+	p := n.peer(d, "192.168.0.2", true)
+	req := p.ioCAR()
+	_ = p.establish(req)
+	select {
+	case <-h.inData:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no transition to Data")
+	}
+	if err := p.control(req, pnio.BlockPrmBeginReq, pnio.CmdPrmBegin); err != nil {
+		close(h.release)
+		t.Fatal(err)
+	}
+	close(h.release)
+	want := []ARState{ARStateNone, ARStateParameterizing, ARStateAppReadyPending, ARStateData, ARStateParameterizing}
+	eventually(t, 2*time.Second, "state sequence", func() bool { return len(h.states(req.AR.ARUUID)) == len(want) })
+	if got := h.states(req.AR.ARUUID); !slices.Equal(got, want) {
+		t.Fatalf("states %v, want %v", got, want)
+	}
 }
 
 func TestConnectStateSequence(t *testing.T) {

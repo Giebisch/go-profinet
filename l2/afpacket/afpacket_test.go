@@ -116,10 +116,16 @@ func TestOwnFramesAndClose(t *testing.T) {
 			t.Fatal("read our own frame")
 		}
 	}
+	// A read blocked in Close ends with ErrClosed. Frames that arrive on
+	// the link before (the kernel sends one now and then) are read past.
 	done := make(chan error)
 	go func() {
-		_, err := a.ReadFrame(context.Background(), buf)
-		done <- err
+		for {
+			if _, err := a.ReadFrame(context.Background(), buf); err != nil {
+				done <- err
+				return
+			}
+		}
 	}()
 	time.Sleep(50 * time.Millisecond)
 	_ = a.Close()

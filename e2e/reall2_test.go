@@ -57,10 +57,14 @@ func TestRealL2(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = ctrl.Close() }()
-	// A 1 ms cycle; the data hold time of 30 cycles tolerates the
-	// scheduling latency of a container in a VM under the race detector.
-	// Timing is measured, not asserted: see docs/CYCLIC.md.
-	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "real-l2-dut", Model: testModel(), ReductionRatio: 1, DataHoldFactor: 30, WatchdogFactor: 30})
+	// A 1 ms cycle with a data hold time of 200 cycles. The test proves
+	// cyclic data over the operating system's raw Ethernet backend and
+	// measures its timing; it does not assert hard real time, which a
+	// general-purpose OS does not give: a CI runner under the race
+	// detector stalls for tens of milliseconds now and then (36 ms seen on
+	// a macOS runner, which a 30 ms hold did not survive). See
+	// docs/CYCLIC.md.
+	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "real-l2-dut", Model: testModel(), ReductionRatio: 1, DataHoldFactor: 200, WatchdogFactor: 200})
 	if err != nil {
 		t.Fatal(err)
 	}

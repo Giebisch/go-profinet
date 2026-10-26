@@ -159,6 +159,13 @@ func (p *Port) ReadFrame(ctx context.Context, b []byte) (int, error) {
 	p.readMu.Lock()
 	defer p.readMu.Unlock()
 	for {
+		// A closed port reads nothing, not even the frames left over from
+		// the last read of the device.
+		select {
+		case <-p.closed:
+			return 0, fmt.Errorf("bpf: %w", profinet.ErrClosed)
+		default:
+		}
 		if rec, rest, ok := nextRecord(p.pending); ok {
 			p.pending = rest
 			if rec == nil {
@@ -167,11 +174,6 @@ func (p *Port) ReadFrame(ctx context.Context, b []byte) (int, error) {
 			return copy(b, rec), nil
 		}
 		p.pending = nil
-		select {
-		case <-p.closed:
-			return 0, fmt.Errorf("bpf: %w", profinet.ErrClosed)
-		default:
-		}
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}

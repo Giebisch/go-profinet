@@ -117,8 +117,10 @@ type env struct {
 	prefix     string
 	share      string
 	containers []string
-	mu         sync.Mutex
-	result     *result
+	// outputs are what the otfnode runs printed, logged when the test fails.
+	outputs []string
+	mu      sync.Mutex
+	result  *result
 }
 
 var subnetSeq struct {
@@ -146,6 +148,15 @@ func newEnv(t *testing.T) *env {
 	}
 	e.result = newResult(t)
 	t.Cleanup(func() {
+		if t.Failed() {
+			// otfnode's events and report (state changes with their
+			// causes, cyclic statistics), and the captures, which the CI
+			// uploads with the results.
+			for _, o := range e.outputs {
+				t.Logf("otfnode %s", o)
+			}
+			e.keepCaptures()
+		}
 		for _, c := range e.containers {
 			if t.Failed() {
 				if out, err := docker(ctx, "logs", "--tail", "60", c); err == nil {
@@ -216,7 +227,11 @@ func (e *env) run(name, img string, host int, timeout time.Duration, args ...str
 
 // otf runs otfnode with args in the runner image.
 func (e *env) otf(name string, host int, timeout time.Duration, args ...string) []byte {
-	return e.run(name, runnerImage, host, timeout, append([]string{"/otfnode"}, args...)...)
+	out := e.run(name, runnerImage, host, timeout, append([]string{"/otfnode"}, args...)...)
+	e.mu.Lock()
+	e.outputs = append(e.outputs, fmt.Sprintf("%s:\n%s", name, out))
+	e.mu.Unlock()
+	return out
 }
 
 // startOTF starts otfnode detached.
@@ -476,6 +491,25 @@ func (r *result) na(feature, why string) {
 	r.mu.Lock()
 	r.Checks = append(r.Checks, check{Feature: feature, Outcome: "n/a", Detail: why})
 	r.mu.Unlock()
+}
+
+// keepCaptures copies the test's captures to PROFINET_INTEROP_RESULTS,
+// when set.
+func (e *env) keepCaptures() {
+	dir := os.Getenv("PROFINET_INTEROP_RESULTS")
+	if dir == "" {
+		return
+	}
+	files, _ := filepath.Glob(filepath.Join(e.share, "*.pcap"))
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		name := strings.NewReplacer("/", "_").Replace(e.t.Name()) + "-" + filepath.Base(f)
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, name), b, 0o644)
+	}
 }
 
 // write stores the result in PROFINET_INTEROP_RESULTS, when set.

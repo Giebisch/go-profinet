@@ -64,6 +64,9 @@ type Mux struct {
 	subs []*Subscription
 
 	received, malformed, unclaimed, overflow, sent atomic.Uint64
+	// handled counts the frames fully processed (counted, dispatched or
+	// dropped): received is counted before that, so tests wait on this.
+	handled atomic.Uint64
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -166,9 +169,11 @@ func (m *Mux) run(ctx context.Context) {
 		f, err := ethernet.Decode(buf[:n])
 		if err != nil {
 			m.malformed.Add(1)
+			m.handled.Add(1)
 			continue
 		}
 		m.dispatch(&f, buf[:n])
+		m.handled.Add(1)
 	}
 }
 

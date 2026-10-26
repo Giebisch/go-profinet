@@ -49,8 +49,12 @@ type ar struct {
 	maxAlarmData        uint16
 	alarmAckTimeout     time.Duration
 
-	mu           sync.Mutex
-	state        ARState
+	mu    sync.Mutex
+	state ARState
+	// events are the transitions not yet reported to the handler;
+	// notifying is set while a goroutine reports them (see transition).
+	events       []stateEvent
+	notifying    bool
 	lastActivity time.Time
 	reason       pnio.AbortReason
 	alarmSeq     uint16
@@ -89,11 +93,34 @@ func (a *ar) transition(to ARState) error {
 		return fmt.Errorf("device: AR %s: %w: %s → %s", a.uuid, profinet.ErrInvalidState, from, to)
 	}
 	a.state = to
-	info := a.infoLocked()
-	a.mu.Unlock()
+	a.events = append(a.events, stateEvent{info: a.infoLocked(), from: from, to: to})
 	a.d.log.Debugf("device: AR %s: %s → %s", a.uuid, from, to)
-	a.d.handler.StateChanged(info, from, to)
+	if a.notifying {
+		// Another goroutine is reporting transitions: it reports this one
+		// after those before it.
+		a.mu.Unlock()
+		return nil
+	}
+	// Report the transitions one at a time and in their order, without
+	// holding the lock: a handler may call into the device, even cause
+	// the next transition, which is then queued and reported after this.
+	a.notifying = true
+	for len(a.events) > 0 {
+		ev := a.events[0]
+		a.events = a.events[1:]
+		a.mu.Unlock()
+		a.d.handler.StateChanged(ev.info, ev.from, ev.to)
+		a.mu.Lock()
+	}
+	a.notifying = false
+	a.mu.Unlock()
 	return nil
+}
+
+// stateEvent is a transition to report to the handler.
+type stateEvent struct {
+	info     ARInfo
+	from, to ARState
 }
 
 func (a *ar) currentState() ARState {
