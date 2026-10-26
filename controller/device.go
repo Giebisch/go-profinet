@@ -77,7 +77,7 @@ type DeviceConfig struct {
 	// OnAlarm receives every alarm, on the alarm goroutine of the AR; it
 	// must not block.
 	OnAlarm func(AlarmEvent)
-	// OnState receives every state change.
+	// OnState receives every state change, before WaitState returns for it.
 	OnState func(from, to State, err error)
 }
 
@@ -380,12 +380,14 @@ func (d *Device) setState(to State, err error) {
 	ws := d.waiters
 	d.waiters = nil
 	d.mu.Unlock()
-	for _, w := range ws {
-		close(w)
-	}
 	d.c.log.Debugf("controller: %s: %s → %s", d.cfg.StationName, from, to)
+	// OnState runs before WaitState returns, so that a caller of WaitState
+	// sees every callback of the transitions it waited for.
 	if d.cfg.OnState != nil {
 		d.cfg.OnState(from, to, err)
+	}
+	for _, w := range ws {
+		close(w)
 	}
 }
 

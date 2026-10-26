@@ -193,8 +193,20 @@ func (p *Port) ReadFrame(ctx context.Context, b []byte) (int, error) {
 	} else {
 		_ = p.file.SetReadDeadline(time.Time{})
 	}
-	stop := context.AfterFunc(ctx, func() { _ = p.file.SetReadDeadline(time.Now()) })
-	defer stop()
+	// When ctx ends, the read is interrupted with a deadline. A callback
+	// that has started must finish before this call returns: run late, it
+	// would set the deadline of the next call, whose read then fails
+	// although its context has no deadline.
+	fired := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(fired)
+		_ = p.file.SetReadDeadline(time.Now())
+	})
+	defer func() {
+		if !stop() {
+			<-fired
+		}
+	}()
 	buf := make([]byte, len(b)+4)
 	oob := make([]byte, syscall.CmsgSpace(int(unsafe.Sizeof(tpacketAuxdata{}))))
 	for {
