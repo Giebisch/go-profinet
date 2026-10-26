@@ -1,6 +1,6 @@
 # PROFINET interop targets: stack research for otfabric/go-profinet
 
-Research date: 2026-10-25. Everything below comes from reading source; nothing was built or run on the host. The clones are in `scratchpad/stacks/<name>`. File paths are relative to each clone.
+Research date: 2026-10-25. Everything below comes from reading source; nothing was built or run on the host. The clones were kept outside the repository. File paths are relative to each clone.
 
 ## 0. Executive summary
 

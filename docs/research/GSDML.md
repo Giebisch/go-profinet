@@ -1,9 +1,9 @@
 # PROFINET machine-readable device description sources — research report
 
 Prepared for otfabric/go-profinet (MIT). Retrieved 2026-10-25. I did not log in anywhere and did not accept any click-through licence.
-Local artefacts:
-- `/private/tmp/claude-501/-Users-bartvanbos-Git-otfabric/c31fe2d1-4c84-460b-b10c-4ecd3712f9ec/scratchpad/gsdml-xsd/` (README + unofficial v2.35 mirror, analysis only)
-- `/private/tmp/claude-501/-Users-bartvanbos-Git-otfabric/c31fe2d1-4c84-460b-b10c-4ecd3712f9ec/scratchpad/gsdml-corpus/` (PROVENANCE.md, `commit-ok/`, `reference-only/`)
+The working copies used for this research (an unofficial v2.35 XSD mirror,
+analysis only, and a GSDML corpus split into `commit-ok/` and
+`reference-only/`) were kept outside the repository and are not part of it.
 
 ---
 
