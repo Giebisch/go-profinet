@@ -5,6 +5,8 @@ run-name: "Interop (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ 
 # otfabric/profinet-interop (p-net, pnio-rs, profinet-py, pnio-dcp; scapy and
 # tshark decode every capture) on Docker bridge networks. The images are
 # built here from profinet-interop's source: the GPL ones are not published.
+# INTEROP_REF pins the profinet-interop release (keep it equal to the
+# Makefile's); run the workflow by hand with interop_ref=main to try its head.
 
 on:
   push:
@@ -23,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  INTEROP_REF: ${{ inputs.interop_ref || 'main' }}
+  INTEROP_REF: ${{ inputs.interop_ref || 'v0.1.0' }}
   GOWORK: "off"
 
 jobs:

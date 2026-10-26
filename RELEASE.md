@@ -4,7 +4,17 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## Unreleased
+## v0.1.1 (2026-10-26)
+
+No code change.
+
+- The interop suite (`make interop-images`, the Interop workflow) builds the
+  reference images from profinet-interop v0.1.0 instead of its `main`
+  branch; the Interop workflow's `interop_ref` input still overrides it.
+- Documentation names the released versions (SECURITY.md, this file) and
+  links profinet-interop's matrix at v0.1.0.
+
+## v0.1.0 (2026-10-26)
 
 First version.
 
@@ -27,6 +37,9 @@ First version.
 ## Release checklist
 
 1. `make check` and `make test-e2e` pass; the Interop workflow is green.
-2. This file lists the changes; API changes are called out.
-3. Run the Release workflow with the version bump.
-4. Update profinetctl: require the tag, drop its `replace`.
+2. `INTEROP_REF` (Makefile and `.github/workflows/interop.yml`) names the
+   profinet-interop release the matrix in INTEROPERABILITY.md came from.
+3. This file lists the changes under the new version; API changes are
+   called out.
+4. Run the Release workflow with the version bump.
+5. Update profinetctl: `go get github.com/otfabric/go-profinet@<tag>`.

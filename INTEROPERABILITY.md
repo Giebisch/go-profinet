@@ -116,9 +116,9 @@ is an attributed deviation of the peer.
 | tshark | 4.0.17 | (decoder of every capture) | 4 | 0 | 0 | 0 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/main/docs/MATRIX.md);
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.0/docs/MATRIX.md);
 the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/main/docs/INTEROPERABILITY.md).
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.0/docs/INTEROPERABILITY.md).
 The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set); the
 two deviations are profinet-py's I&M1 write with BlockLength 58.
 

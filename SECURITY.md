@@ -14,7 +14,9 @@ issues within 7 days.
 
 ## Supported Versions
 
-go-profinet has not been released yet; the `main` branch is supported.
+| Version | Supported |
+|---------|-----------|
+| 0.1.x | Yes |
 
 ## Security considerations
 
