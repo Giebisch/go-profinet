@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI Status](https://github.com/otfabric/go-profinet/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/go-profinet/actions/workflows/ci.yml)
 [![Interop](https://github.com/otfabric/go-profinet/actions/workflows/interop.yml/badge.svg)](https://github.com/otfabric/go-profinet/actions/workflows/interop.yml)
+[![Code Coverage](https://codecov.io/gh/otfabric/go-profinet/graph/badge.svg)](https://codecov.io/gh/otfabric/go-profinet)
+[![Latest Release](https://img.shields.io/github/v/release/otfabric/go-profinet?label=release)](https://github.com/otfabric/go-profinet/releases)
 
 A pure Go implementation of PROFINET IO (IEC 61158-5-10/6-10, IEC 61784-2),
 the industrial Ethernet of PLCs, remote IO, drives and field devices. No
