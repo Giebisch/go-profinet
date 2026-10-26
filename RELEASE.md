@@ -4,13 +4,28 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## v0.1.2 (2026-10-26)
+## v0.1.2 (2026-10-27)
 
-No code change.
+Fixes found by soaking every CI job and the interop suite 25 times in
+parallel. No API change.
 
-- CI tests Intel macOS on `macos-15-intel` (GitHub retired `macos-13`).
-- The interop suite stays pinned to profinet-interop v0.1.0, its latest
-  release.
+- `device`: `Handler.StateChanged` reports the transitions of an AR in
+  order. A transition caused while the previous one was being reported
+  (PrmBegin right after Data) could be reported first.
+- `rpc`: the client no longer drops response fragments when they arrive
+  faster than the call takes them; a large fragmented response could time
+  out on a loaded host because every retransmission lost the same
+  fragments.
+- `l2/bpf`: a closed port returns `ErrClosed` instead of frames left over
+  from its last read.
+- Tests: mux tests wait until a frame is fully handled; the real Layer 2
+  test tolerates scheduler stalls of a CI runner; the AF_PACKET close test
+  reads past frames the kernel sends.
+- Interop: pinned to profinet-interop v0.1.1 (tshark decodes PNIO RPC on
+  any ephemeral port); otfnode asks for a 32-cycle data hold; a failing
+  test logs otfnode's report and keeps its captures.
+- CI: the Soak workflow (every job N times in parallel, own chaos seeds);
+  Intel macOS on `macos-15-intel` (GitHub retired `macos-13`).
 
 ## v0.1.1 (2026-10-26)
 
@@ -44,7 +59,8 @@ First version.
 
 ## Release checklist
 
-1. `make check` and `make test-e2e` pass; the Interop workflow is green.
+1. `make check` and `make test-e2e` pass; the Interop workflow is green; a
+   Soak run of the release commit (25 runs) is entirely green.
 2. `INTEROP_REF` (Makefile and `.github/workflows/interop.yml`) names the
    profinet-interop release the matrix in INTEROPERABILITY.md came from.
 3. This file lists the changes under the new version; API changes are

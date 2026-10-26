@@ -13,6 +13,7 @@ on real Layer 2 networks.
 | Leaks | three full sessions (an AR with cyclic data, records, an alarm, a device access AR, DCP, LLDP), then everything closed: the goroutine count returns to its baseline (`TestNoLeaks`; it fails with 11 goroutines left when the controller is not closed) | part of `make test-e2e` |
 | Real Layer 2 | the AF_PACKET (Linux) and BPF (macOS) backends on a veth or feth pair, and an AR over them | `make l2-test` (Docker), CI jobs `l2-linux`, `l2-macos` |
 | Interop | p-net, pnio-rs, profinet-py and pnio-dcp in containers, captures decoded by scapy and tshark | `make interop-images && make interop` ([INTEROPERABILITY.md](../INTEROPERABILITY.md)) |
+| Soak | every CI job (unit with and without the race detector on the oldest and newest Go, coverage, e2e and chaos, every native platform, real Layer 2 on Linux and macOS) and the interop suite, each run N times in parallel (default 25), run N with chaos seed 1000+N; required to be all green before a release | the Soak workflow: Actions tab, or a push to a `soak/…` branch |
 | Benchmarks | codecs, cyclic path, mux, vnet | `make bench` ([BENCHMARKS.md](BENCHMARKS.md)) |
 | Hardware | commercial PLCs and devices | not done: no hardware available |
 
