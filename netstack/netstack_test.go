@@ -39,9 +39,9 @@ func newStack(t *testing.T, n *vnet.Network, last byte, addr string) *Stack {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		s.Close()
-		mux.Close()
-		ep.Close()
+		_ = s.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 	})
 	return s
 }
@@ -63,7 +63,7 @@ func TestUDPExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 100)
-	cb.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = cb.SetReadDeadline(time.Now().Add(2 * time.Second))
 	nr, from, err := cb.ReadFrom(buf)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestUDPExchange(t *testing.T) {
 	if _, err := cb.WriteTo([]byte("world"), from); err != nil {
 		t.Fatal(err)
 	}
-	ca.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = ca.SetReadDeadline(time.Now().Add(2 * time.Second))
 	nr, _, err = ca.ReadFrom(buf)
 	if err != nil || string(buf[:nr]) != "world" {
 		t.Fatalf("got %q, %v", buf[:nr], err)
@@ -91,18 +91,18 @@ func TestReadDeadlineAndClose(t *testing.T) {
 	n := vnet.New(1)
 	a := newStack(t, n, 1, "10.0.0.1")
 	c, _ := a.ListenUDP(1000)
-	c.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
+	_ = c.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
 	if _, _, err := c.ReadFrom(make([]byte, 10)); !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err %v", err)
 	}
-	c.SetReadDeadline(time.Time{})
+	_ = c.SetReadDeadline(time.Time{})
 	done := make(chan error)
 	go func() {
 		_, _, err := c.ReadFrom(make([]byte, 10))
 		done <- err
 	}()
 	time.Sleep(10 * time.Millisecond)
-	c.SetReadDeadline(time.Now())
+	_ = c.SetReadDeadline(time.Now())
 	if err := <-done; !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err %v", err)
 	}
@@ -110,8 +110,8 @@ func TestReadDeadlineAndClose(t *testing.T) {
 		_, _, err := c.ReadFrom(make([]byte, 10))
 		done <- err
 	}()
-	c.SetReadDeadline(time.Time{})
-	c.Close()
+	_ = c.SetReadDeadline(time.Time{})
+	_ = c.Close()
 	if err := <-done; !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("err %v", err)
 	}
@@ -151,7 +151,7 @@ func TestARPTimeoutAndNoAddress(t *testing.T) {
 	if _, err := c2.WriteTo([]byte{7}, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: int(cu.port)}); err != nil {
 		t.Fatal(err)
 	}
-	cu.SetReadDeadline(time.Now().Add(time.Second))
+	_ = cu.SetReadDeadline(time.Now().Add(time.Second))
 	buf := make([]byte, 4)
 	if nr, _, err := cu.ReadFrom(buf); err != nil || nr != 1 || buf[0] != 7 {
 		t.Fatalf("%d %v", nr, err)
@@ -177,7 +177,7 @@ func rawEP(t *testing.T, n *vnet.Network, last byte) *vnet.Endpoint {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ep.Close() })
+	t.Cleanup(func() { _ = ep.Close() })
 	return ep
 }
 
@@ -194,9 +194,9 @@ func newStackCfg(t *testing.T, n *vnet.Network, last byte, cfg Config) (*Stack, 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		s.Close()
-		mux.Close()
-		ep.Close()
+		_ = s.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 	})
 	return s, mux, ep
 }
@@ -295,7 +295,7 @@ func udpFrame(dst, src ethernet.MAC, sip, dip netip.Addr, sport, dport uint16, d
 
 func readWithin(t *testing.T, c net.PacketConn) ([]byte, net.Addr) {
 	t.Helper()
-	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	buf := make([]byte, 2000)
 	nr, from, err := c.ReadFrom(buf)
 	if err != nil {
@@ -308,7 +308,7 @@ func TestNewConfigErrors(t *testing.T) {
 	n := vnet.New(1)
 	ep := rawEP(t, n, 1)
 	mux := l2.NewMux(ep)
-	defer mux.Close()
+	defer func() { _ = mux.Close() }()
 	for _, cfg := range []Config{
 		{Addr: ip4("fe80::1"), Mask: mask24},
 		{Addr: ip4("10.0.0.1")},
@@ -319,7 +319,7 @@ func TestNewConfigErrors(t *testing.T) {
 			t.Errorf("%+v: err %v", cfg, err)
 		}
 	}
-	mux.Close()
+	_ = mux.Close()
 	if _, err := New(mux, Config{}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("closed mux: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestARPLearning(t *testing.T) {
 	if err := s.SetAddr(ip4("10.0.0.1"), mask24, netip.Addr{}); err != nil {
 		t.Fatal(err)
 	}
-	go c.WriteTo([]byte("x"), &net.UDPAddr{IP: net.ParseIP("10.0.0.9"), Port: 9})
+	go func() { _, _ = c.WriteTo([]byte("x"), &net.UDPAddr{IP: net.ParseIP("10.0.0.9"), Port: 9}) }()
 	if f := readRaw(t, raw); f.EtherType != ethernet.EtherTypeARP || f.Dst != ethernet.Broadcast {
 		t.Fatalf("got %v to %v", f.EtherType, f.Dst)
 	}
@@ -587,7 +587,7 @@ func TestReceiveFiltering(t *testing.T) {
 	send(own, 5000, ipOpts{})
 	waitFor(t, func() bool { return s.Stats().Overflow == 1 })
 	readWithin(t, c)
-	c.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
+	_ = c.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
 	if _, _, err := c.ReadFrom(make([]byte, 10)); !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err %v", err)
 	}
@@ -624,7 +624,7 @@ func TestBroadcastUDP(t *testing.T) {
 		t.Fatalf("b got %q", d)
 	}
 	checkUDP(t, readRaw(t, raw), ethernet.Broadcast, ip4("10.0.0.1"), ip4("10.0.0.255"), cs.port, 6000, "net")
-	cn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	_ = cn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 	if _, _, err := cn.ReadFrom(make([]byte, 10)); !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("unaddressed stack: %v", err)
 	}
@@ -751,13 +751,13 @@ func TestEphemeralPorts(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 	// Releasing one makes it available again, after the wrap-around.
-	c.Close()
+	_ = c.Close()
 	c2, err := s.ListenUDP(0)
 	if err != nil || c2.port != ephemeralLo+1 {
 		t.Fatalf("port %v err %v", c2, err)
 	}
 	// Closing a socket twice, or one whose port was reused, keeps the new one.
-	c.Close()
+	_ = c.Close()
 	s.mu.RLock()
 	kept := s.socks[ephemeralLo+1] == c2
 	s.mu.RUnlock()
@@ -821,7 +821,7 @@ func TestWriteDeadline(t *testing.T) {
 		t.Fatalf("read err %v", err)
 	}
 	// Clearing it lets broadcasts through.
-	c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{})
 	if _, err := c.WriteTo([]byte{1}, &net.UDPAddr{IP: net.IPv4bcast, Port: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -884,7 +884,7 @@ func TestMuxCloseStopsStack(t *testing.T) {
 	n := vnet.New(1)
 	s, mux, _ := newStackCfg(t, n, 1, Config{Addr: ip4("10.0.0.1"), Mask: mask24})
 	c, _ := s.ListenUDP(1)
-	mux.Close()
+	_ = mux.Close()
 	select {
 	case <-s.done:
 	case <-time.After(10 * time.Second):
@@ -933,7 +933,7 @@ func TestReadDeadlineChangeWhileBlocked(t *testing.T) {
 	n := vnet.New(1)
 	s := newStack(t, n, 1, "10.0.0.1")
 	c, _ := s.ListenUDP(1)
-	c.SetReadDeadline(time.Now().Add(time.Hour))
+	_ = c.SetReadDeadline(time.Now().Add(time.Hour))
 	errc := make(chan error, 1)
 	go func() {
 		_, _, err := c.ReadFrom(make([]byte, 10))
@@ -942,14 +942,14 @@ func TestReadDeadlineChangeWhileBlocked(t *testing.T) {
 	// Extending the deadline while blocked keeps the read waiting.
 	for i := 0; i < 3; i++ {
 		time.Sleep(5 * time.Millisecond)
-		c.SetReadDeadline(time.Now().Add(time.Hour))
+		_ = c.SetReadDeadline(time.Now().Add(time.Hour))
 	}
 	select {
 	case err := <-errc:
 		t.Fatalf("read returned early: %v", err)
 	default:
 	}
-	c.Close()
+	_ = c.Close()
 	if err := <-errc; !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("err %v", err)
 	}

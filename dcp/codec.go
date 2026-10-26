@@ -354,7 +354,7 @@ func Decode(b []byte) (Frame, error) {
 		body := data[:l]
 		// Control/Response blocks have no BlockInfo; an AllSelector
 		// filter has no data at all.
-		if withInfo && blk.ID != CtrlResponse && !(f.Type == TypeRequest && blk.ID == AllSelector) {
+		if withInfo && blk.ID != CtrlResponse && (f.Type != TypeRequest || blk.ID != AllSelector) {
 			if l < 2 {
 				return f, fmt.Errorf("dcp: %w: block %s too short for its BlockInfo", profinet.ErrMalformed, blk.ID)
 			}

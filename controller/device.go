@@ -53,7 +53,10 @@ type DeviceConfig struct {
 	// SendClockFactor (units of 31.25 µs) and ReductionRatio define the
 	// cycle; zero means 32 (1 ms) and 4: a cycle of 4 ms.
 	SendClockFactor, ReductionRatio uint16
-	// DataHoldFactor and WatchdogFactor are in cycles; zero means 3.
+	// DataHoldFactor and WatchdogFactor are in cycles; zero means 10.
+	// PLCs commonly use 3, which a general-purpose operating system does
+	// not hold: its scheduling stalls of 10 to 20 ms expire a hold of 3
+	// cycles of 4 ms (see docs/CYCLIC.md).
 	DataHoldFactor, WatchdogFactor uint16
 	// Advanced selects the advanced startup mode with RTClass 2;
 	// otherwise the legacy startup with RTClass 1 is used.
@@ -214,6 +217,9 @@ func (a *arState) fail(err error) {
 	})
 }
 
+// defaultHoldFactor is the default watchdog and data hold factor.
+const defaultHoldFactor = 10
+
 // AddDevice adds a device and starts its lifecycle.
 func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if err := dcp.ValidateStationName(cfg.StationName); err != nil {
@@ -232,10 +238,10 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 		cfg.ReductionRatio = 4
 	}
 	if cfg.DataHoldFactor == 0 {
-		cfg.DataHoldFactor = 3
+		cfg.DataHoldFactor = defaultHoldFactor
 	}
 	if cfg.WatchdogFactor == 0 {
-		cfg.WatchdogFactor = 3
+		cfg.WatchdogFactor = defaultHoldFactor
 	}
 	if cfg.ActivityTimeout <= 0 {
 		cfg.ActivityTimeout = 10 * time.Second

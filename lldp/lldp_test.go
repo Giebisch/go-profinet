@@ -290,7 +290,7 @@ func newNode(t *testing.T, n *vnet.Network, last byte) node {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	t.Cleanup(func() { m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	return node{ep: ep, mux: m}
 }
 
@@ -323,7 +323,7 @@ func (nd node) sendRaw(t *testing.T, payload []byte) {
 
 func TestAgentsExchange(t *testing.T) {
 	n := vnet.New(3)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	na, nb := newNode(t, n, 0xA), newNode(t, n, 0xB)
 	a := newAgent(t, na, AgentOptions{Interval: 50 * time.Millisecond, Local: func() LocalInfo {
 		return LocalInfo{StationName: "dev-a", PortName: "port-001", IP: netip.MustParseAddr("10.0.0.1")}
@@ -363,7 +363,7 @@ func TestAgentsExchange(t *testing.T) {
 
 func TestAgentTable(t *testing.T) {
 	n := vnet.New(4)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	nd, peer := newNode(t, n, 1), newNode(t, n, 2)
 	a := newAgent(t, nd, AgentOptions{MaxNeighbors: 2})
 	if a.Alias() != "" {
@@ -400,7 +400,7 @@ func TestAgentTable(t *testing.T) {
 
 func TestAgentExpiry(t *testing.T) {
 	n := vnet.New(5)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a := newAgent(t, newNode(t, n, 1), AgentOptions{})
 	now := time.Now()
 	f := Frame{ChassisID: []byte("c"), PortID: []byte("p"), TTL: 1}
@@ -425,7 +425,7 @@ func TestAgentExpiry(t *testing.T) {
 
 func TestAgentSendErrors(t *testing.T) {
 	n := vnet.New(6)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	nd := newNode(t, n, 1)
 	log := &recLogger{}
 	long := strings.Repeat("x", 300)
@@ -457,7 +457,7 @@ func (failPort) JoinMulticast(ethernet.MAC) error { return profinet.ErrUnsupport
 
 func TestNewAgentErrors(t *testing.T) {
 	n := vnet.New(7)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: ethernet.MAC{2, 0, 0, 0, 0, 1}})
 	if err != nil {
 		t.Fatal(err)
@@ -466,9 +466,9 @@ func TestNewAgentErrors(t *testing.T) {
 	if _, err := NewAgent(m, AgentOptions{}); !errors.Is(err, profinet.ErrUnsupported) {
 		t.Fatalf("join: %v", err)
 	}
-	m.Close()
+	_ = m.Close()
 	m2 := l2.NewMux(ep)
-	m2.Close()
+	_ = m2.Close()
 	if _, err := NewAgent(m2, AgentOptions{}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("closed mux: %v", err)
 	}

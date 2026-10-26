@@ -22,7 +22,7 @@ import (
 
 func main() {
 	network := vnet.New(1)
-	defer network.Close()
+	defer func() { _ = network.Close() }()
 
 	// The IO-Device "io-1" at 192.168.0.10.
 	dn, err := vnetenv.NewNode(network, 10, "192.168.0.10")
@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 
 	// The IO-Controller at 192.168.0.1.
 	cn, err := vnetenv.NewNode(network, 1, "192.168.0.1")
@@ -49,7 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	io1, err := ctrl.AddDevice(controller.DeviceConfig{
 		StationName: "io-1", Model: vnetenv.Model(),
 		Parameters: []controller.Parameter{{Slot: 2, Subslot: 1, Index: 0x0010, Data: []byte{0, 2}}},
@@ -65,8 +65,8 @@ func main() {
 	fmt.Println("AR established:", io1.ARUUID())
 
 	// Inputs travel from the device to the controller, outputs back.
-	dev.SetInput(1, 1, []byte("PROFINET"), pnio.IOxSGood)
-	io1.SetOutput(2, 1, []byte{1, 2, 3, 4}, pnio.IOxSGood)
+	_ = dev.SetInput(1, 1, []byte("PROFINET"), pnio.IOxSGood)
+	_ = io1.SetOutput(2, 1, []byte{1, 2, 3, 4}, pnio.IOxSGood)
 	for {
 		in, _, _ := io1.Input(1, 1)
 		out, _, _ := dev.Output(2, 1)

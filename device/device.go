@@ -220,7 +220,7 @@ func New(cfg Config) (*Device, error) {
 		}
 	})
 	if err := d.start(); err != nil {
-		d.Close()
+		_ = d.Close()
 		return nil, err
 	}
 	return d, nil
@@ -283,16 +283,16 @@ func (d *Device) Close() error {
 	}
 	d.cancel()
 	if d.rpcSrv != nil {
-		d.rpcSrv.Close()
+		_ = d.rpcSrv.Close()
 	}
 	if d.rpcCli != nil {
-		d.rpcCli.Close()
+		_ = d.rpcCli.Close()
 	}
 	if d.lldpA != nil {
 		d.lldpA.Close()
 	}
 	if d.dcpR != nil {
-		d.dcpR.Close()
+		_ = d.dcpR.Close()
 	}
 	if d.disp != nil {
 		d.disp.Close()

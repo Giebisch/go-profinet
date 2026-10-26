@@ -86,7 +86,7 @@ func LoadDir(dir string) (*Schema, error) {
 			return nil, err
 		}
 		n, err := parse(f)
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			return nil, fmt.Errorf("xsd: %s: %w", p, err)
 		}

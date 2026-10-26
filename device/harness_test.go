@@ -69,7 +69,7 @@ type tnet struct {
 func newNet(t *testing.T) *tnet {
 	t.Helper()
 	n := &tnet{t: t, net: vnet.New(1)}
-	t.Cleanup(func() { n.net.Close() })
+	t.Cleanup(func() { _ = n.net.Close() })
 	return n
 }
 
@@ -90,9 +90,9 @@ func (n *tnet) node(ip string) *node {
 		n.t.Fatal(err)
 	}
 	n.t.Cleanup(func() {
-		st.Close()
-		mux.Close()
-		ep.Close()
+		_ = st.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 	})
 	return &node{ep: ep, mux: mux, stack: st}
 }
@@ -123,7 +123,7 @@ func (n *tnet) device(h Handler, opts ...func(*Config)) (*Device, *node) {
 	if err != nil {
 		n.t.Fatal(err)
 	}
-	n.t.Cleanup(func() { d.Close() })
+	n.t.Cleanup(func() { _ = d.Close() })
 	return d, nd
 }
 
@@ -151,7 +151,7 @@ func (n *tnet) peer(d *Device, ip string, server bool) *peer {
 	}
 	p := &peer{node: nd, t: n.t, d: d}
 	p.cli = rpc.NewClient(conn, true, rpc.ClientOptions{Retransmit: 300 * time.Millisecond})
-	n.t.Cleanup(func() { p.cli.Close() })
+	n.t.Cleanup(func() { _ = p.cli.Close() })
 	p.rc = controller.NewRecordClient(p.cli, &net.UDPAddr{IP: net.ParseIP(devIP).To4(), Port: rpc.Port}, d.ObjectUUID())
 	if p.alarms, err = alarm.NewManager(nd.mux); err != nil {
 		n.t.Fatal(err)
@@ -164,7 +164,7 @@ func (n *tnet) peer(d *Device, ip string, server bool) *peer {
 		}
 		srv := rpc.NewServer(sc, true, rpc.ServerOptions{})
 		srv.Register(pnio.ControllerInterface, pnio.InterfaceVersion, rpc.HandlerFunc(p.serve))
-		n.t.Cleanup(func() { srv.Close() })
+		n.t.Cleanup(func() { _ = srv.Close() })
 	}
 	return p
 }

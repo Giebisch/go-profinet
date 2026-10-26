@@ -155,7 +155,7 @@ func (s *Scheduler) run() {
 	defer timer.Stop()
 	for {
 		s.mu.Lock()
-		var wait time.Duration = time.Hour
+		wait := time.Hour
 		if len(s.tasks) > 0 {
 			wait = time.Until(s.tasks[0].next)
 		}

@@ -191,7 +191,7 @@ func TestReadImplicitAndSupervisorAR(t *testing.T) {
 	cn := e.node("192.168.0.2")
 	conn, _ := cn.stack.ListenUDP(0)
 	cli := rpc.NewClient(conn, true, rpc.ClientOptions{})
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 	rc := controller.NewRecordClient(cli, &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10), Port: rpc.Port}, dev.ObjectUUID())
 	ctx := context.Background()
 	im0, err := rc.ReadIM0(ctx, rpc.NilUUID, 0, 1)
@@ -263,8 +263,8 @@ func TestModuleDiff(t *testing.T) {
 	}
 	// The matching submodule in slot 3 still exchanges data; slot 1 does
 	// not.
-	dev.SetInput(3, 1, []byte{5, 5}, pnio.IOxSGood)
-	dev.SetInput(1, 1, []byte{1, 1, 1, 1, 1, 1, 1, 1}, pnio.IOxSGood)
+	_ = dev.SetInput(3, 1, []byte{5, 5}, pnio.IOxSGood)
+	_ = dev.SetInput(1, 1, []byte{1, 1, 1, 1, 1, 1, 1, 1}, pnio.IOxSGood)
 	eventually(t, 2*time.Second, "slot 3 input", func() bool {
 		in, iops, _ := cd.Input(3, 1)
 		return bytes.Equal(in, []byte{5, 5}) && iops == pnio.IOxSGood
@@ -335,8 +335,8 @@ func TestManyDevices(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			v := []byte{byte(i), 1, 2, 3, 4, 5, 6, byte(i)}
-			devs[i].SetInput(1, 1, v, pnio.IOxSGood)
-			cds[i].SetOutput(2, 1, []byte{byte(i), 9, 9, byte(i)}, pnio.IOxSGood)
+			_ = devs[i].SetInput(1, 1, v, pnio.IOxSGood)
+			_ = cds[i].SetOutput(2, 1, []byte{byte(i), 9, 9, byte(i)}, pnio.IOxSGood)
 			eventually(t, 5*time.Second, "data", func() bool {
 				in, _, _ := cds[i].Input(1, 1)
 				out, _, _ := devs[i].Output(2, 1)
@@ -386,21 +386,21 @@ func TestRecovery(t *testing.T) {
 	dn.ep.SetLinkUp(true)
 	waitState(t, cd, controller.StateRunning, 10*time.Second)
 	// Device restart: a new device instance on the same port.
-	dev.Close()
+	_ = dev.Close()
 	waitState(t, cd, controller.StateOffline, 5*time.Second)
 	dev2, err := device.New(device.Config{Model: testModel(), Mux: dn.mux, StationName: "dut", IP: suite("192.168.0.10"),
 		ListenPacket: dn.stack.ListenPacket, NoResponseDelay: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer dev2.Close()
+	defer func() { _ = dev2.Close() }()
 	waitState(t, cd, controller.StateRunning, 10*time.Second)
 	if states.Load() < 3 || cd.Stats().Connects < 3 || cd.Stats().Aborts < 2 {
 		t.Fatalf("running %d times, stats %+v", states.Load(), cd.Stats())
 	}
 	// Controller restart: the device aborts the old AR and accepts a new
 	// one from the new controller.
-	ctrl.Close()
+	_ = ctrl.Close()
 	eventually(t, 5*time.Second, "release on controller close", func() bool { return len(dev2.ARs()) == 0 })
 	ctrl2, _ := e.controller("192.168.0.2")
 	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel()})
@@ -476,7 +476,7 @@ func TestTopology(t *testing.T) {
 	cn := e.node("192.168.0.2")
 	conn, _ := cn.stack.ListenUDP(0)
 	cli := rpc.NewClient(conn, true, rpc.ClientOptions{})
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 	rc := controller.NewRecordClient(cli, &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10), Port: rpc.Port}, devA.ObjectUUID())
 	ctx := context.Background()
 	var ports []pnio.PDPortDataReal

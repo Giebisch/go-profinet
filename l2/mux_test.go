@@ -68,8 +68,8 @@ func newSetup(t testing.TB) *setup {
 	}
 	m := NewMux(rx)
 	t.Cleanup(func() {
-		m.Close()
-		n.Close()
+		_ = m.Close()
+		_ = n.Close()
 	})
 	return &setup{net: n, tx: tx, rx: rx, mux: m}
 }
@@ -395,7 +395,7 @@ func TestMuxClose(t *testing.T) {
 func TestPortErrors(t *testing.T) {
 	p := newFakePort()
 	m := NewMux(p)
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	sub, _ := m.Subscribe(MatchEtherType(etTest), 1)
 	p.in <- []byte{1, 2, 3} // too short: malformed
 	waitFor(t, "malformed frame", func() bool { return m.Stats().Malformed == 1 })
@@ -421,7 +421,7 @@ func TestPortErrors(t *testing.T) {
 
 	// Closing the port stops the reader with an error matching ErrClosed.
 	s := newSetup(t)
-	s.rx.Close()
+	_ = s.rx.Close()
 	select {
 	case <-s.mux.Done():
 	case <-time.After(10 * time.Second):
@@ -483,11 +483,11 @@ func TestConcurrentSubscribe(t *testing.T) {
 
 func BenchmarkMuxDispatch(b *testing.B) {
 	n := vnet.New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	tx, _ := n.NewEndpoint(vnet.EndpointConfig{MAC: mac(1)})
 	rx, _ := n.NewEndpoint(vnet.EndpointConfig{MAC: mac(2), QueueLen: 4096})
 	m := NewMux(rx)
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	// Decoy subscriptions that the dispatcher evaluates first.
 	for i := uint16(0); i < 4; i++ {
 		s, _ := m.Subscribe(MatchFrameIDs(0x100*i, 0x100*i+0xFF), 4)

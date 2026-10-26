@@ -157,9 +157,9 @@ func newEnv(t *testing.T) *env {
 					t.Logf("raw log of %s:\n%s", c, out)
 				}
 			}
-			docker(ctx, "rm", "-f", c)
+			_, _ = docker(ctx, "rm", "-f", c)
 		}
-		docker(ctx, "network", "rm", e.network)
+		_, _ = docker(ctx, "network", "rm", e.network)
 		e.result.write()
 	})
 	return e
@@ -172,7 +172,7 @@ func (e *env) ip(host int) string { return fmt.Sprintf("%s%d", e.prefix, host) }
 // PC does (p-net ignores a second requester for 3 s after a Get or Set).
 func (e *env) mac(host int) string {
 	var a, b int
-	fmt.Sscanf(e.prefix, "10.%d.%d.", &a, &b)
+	_, _ = fmt.Sscanf(e.prefix, "10.%d.%d.", &a, &b)
 	return fmt.Sprintf("02:42:0a:%02x:%02x:%02x", a, b, host)
 }
 
@@ -347,7 +347,7 @@ func (e *env) capture(container, file string) func() string {
 	e.mu.Unlock()
 	time.Sleep(time.Second)
 	return func() string {
-		docker(context.Background(), "stop", "-t", "2", full)
+		_, _ = docker(context.Background(), "stop", "-t", "2", full)
 		return file
 	}
 }
@@ -484,10 +484,10 @@ func (r *result) write() {
 	if dir == "" || len(r.Checks) == 0 {
 		return
 	}
-	os.MkdirAll(dir, 0o755)
+	_ = os.MkdirAll(dir, 0o755)
 	b, _ := json.MarshalIndent(r, "", "  ")
 	name := strings.NewReplacer("/", "_", " ", "_").Replace(r.Test) + ".json"
-	os.WriteFile(filepath.Join(dir, name), b, 0o644)
+	_ = os.WriteFile(filepath.Join(dir, name), b, 0o644)
 }
 
 // expect records a check and reports a failure.

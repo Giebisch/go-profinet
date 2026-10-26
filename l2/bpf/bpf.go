@@ -92,7 +92,7 @@ func Open(name string, opts Options) (*Port, error) {
 	ok := false
 	defer func() {
 		if !ok {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 		}
 	}()
 	// The buffer length must be set before the interface.

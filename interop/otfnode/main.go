@@ -47,7 +47,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fail(errors.New("usage: otfnode controller|device|dcp|lldp ..."))
+		fail(errors.New("usage: otfnode controller|device|dcp|lldp [flags]"))
 	}
 	var err error
 	switch os.Args[1] {
@@ -78,7 +78,7 @@ func emit(v any) {
 	outMu.Lock()
 	defer outMu.Unlock()
 	b, _ := json.Marshal(v)
-	os.Stdout.Write(append(b, '\n'))
+	_, _ = os.Stdout.Write(append(b, '\n'))
 }
 
 // tappedPort records every frame sent and received into a pcap file.
@@ -112,22 +112,22 @@ func openPort(iface, pcapFile string) (*l2.Mux, func(), error) {
 	var f *os.File
 	if pcapFile != "" {
 		if f, err = os.Create(pcapFile); err != nil {
-			p.Close()
+			_ = p.Close()
 			return nil, nil, err
 		}
 		w, err := pcap.NewWriter(f)
 		if err != nil {
-			p.Close()
+			_ = p.Close()
 			return nil, nil, err
 		}
 		port = &tappedPort{Port: p, w: w}
 	}
 	mux := l2.NewMux(port)
 	return mux, func() {
-		mux.Close()
-		p.Close()
+		_ = mux.Close()
+		_ = p.Close()
 		if f != nil {
-			f.Close()
+			_ = f.Close()
 		}
 	}, nil
 }
@@ -223,7 +223,7 @@ func runController(args []string) error {
 	fs.Var(&reads, "read", "slot:subslot:index record to read while running (repeatable)")
 	fs.Var(&writes, "write", "slot:subslot:index:hex record to write while running (repeatable)")
 	fs.Var(&params, "param", "slot:subslot:index:hex parameter written before PrmEnd (repeatable)")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 	m, err := loadModel(*modelFile, *dap)
 	if err != nil {
 		return fmt.Errorf("model: %w", err)
@@ -237,7 +237,7 @@ func runController(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	var alarmMu sync.Mutex
 	var gotAlarms []map[string]any
 	alarmCh := make(chan struct{}, 64)
@@ -467,7 +467,7 @@ func runDevice(args []string) error {
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	alarmAfter := fs.Duration("alarm-after", 0, "raise a diagnosis on slot 1 this long after the AR reaches Data")
 	acceptIP := fs.Bool("apply-ip", true, "apply DCP Set IP to the interface (needs CAP_NET_ADMIN)")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 	m := defaultModel()
 	if *modelFile != "" {
 		var err error
@@ -501,7 +501,7 @@ func runDevice(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 	emit(map[string]any{"event": "start", "station": *station, "mac": mux.HardwareAddr().String(), "ip": cfg.IP.Addr.String()})
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -526,7 +526,7 @@ func runDevice(args []string) error {
 				for i := range v {
 					v[i] = n + byte(i)
 				}
-				dev.SetInput(p.Slot, s.Subslot, v, pnio.IOxSGood)
+				_ = dev.SetInput(p.Slot, s.Subslot, v, pnio.IOxSGood)
 			}
 			if s.OutputLen > 0 {
 				if v, iops, ok := dev.Output(p.Slot, s.Subslot); ok && iops == pnio.IOxSGood {
@@ -568,7 +568,7 @@ func runDCP(args []string) error {
 	mac := fs.String("mac", "", "target MAC")
 	station := fs.String("station", "", "target station (resolved with Identify)")
 	permanent := fs.Bool("permanent", false, "permanent instead of temporary")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 	if fs.NArg() < 1 {
 		return errors.New("dcp: operation required")
 	}
@@ -581,7 +581,7 @@ func runDCP(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	ctx := context.Background()
 	target := func() (ethernet.MAC, error) {
 		if *mac != "" {
@@ -661,7 +661,7 @@ func runLLDP(args []string) error {
 	fs := flag.NewFlagSet("lldp", flag.ExitOnError)
 	iface := fs.String("i", "eth0", "interface")
 	wait := fs.Duration("wait", 12*time.Second, "how long to listen")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 	mux, closePort, err := openPort(*iface, "")
 	if err != nil {
 		return err

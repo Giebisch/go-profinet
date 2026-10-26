@@ -42,9 +42,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer port.Close()
+	defer func() { _ = port.Close() }()
 	mux := l2.NewMux(port)
-	defer mux.Close()
+	defer func() { _ = mux.Close() }()
 	dev, err := device.New(device.Config{
 		Model: vnetenv.Model(), Mux: mux, StationName: *name, IP: ifaceSuite(*iface),
 		Logger: profinet.NewStdLogger(nil),
@@ -59,7 +59,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	t := time.NewTicker(time.Second)
@@ -72,7 +72,7 @@ func main() {
 		case <-t.C:
 		}
 		n++
-		dev.SetInput(1, 1, []byte{n, n, n, n, n, n, n, n}, pnio.IOxSGood)
+		_ = dev.SetInput(1, 1, []byte{n, n, n, n, n, n, n, n}, pnio.IOxSGood)
 		if out, iops, ok := dev.Output(2, 1); ok && iops == pnio.IOxSGood {
 			fmt.Printf("outputs % x\n", out)
 		}

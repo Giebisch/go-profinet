@@ -93,7 +93,7 @@ func TestChaos(t *testing.T) {
 						t.Fatal(err)
 					}
 					waitState(t, cd, controller.StateRunning, 90*time.Second)
-					dev.SetInput(1, 1, []byte{8, 7, 6, 5, 4, 3, 2, 1}, pnio.IOxSGood)
+					_ = dev.SetInput(1, 1, []byte{8, 7, 6, 5, 4, 3, 2, 1}, pnio.IOxSGood)
 					eventually(t, 60*time.Second, "inputs under chaos", func() bool {
 						in, _, _ := cd.Input(1, 1)
 						return bytes.Equal(in, []byte{8, 7, 6, 5, 4, 3, 2, 1})
@@ -120,9 +120,9 @@ func TestChaos(t *testing.T) {
 						t.Fatalf("no faults injected: %+v %+v", st, ct)
 					}
 					t.Logf("device %+v controller %+v; AR aborts %d", st, ct, cd.Stats().Aborts)
-					e.net.Close()
-					ctrl.Close()
-					dev.Close()
+					_ = e.net.Close()
+					_ = ctrl.Close()
+					_ = dev.Close()
 				}()
 				checkLeaks(t, base)
 			})
@@ -154,7 +154,7 @@ func TestMalformedInput(t *testing.T) {
 			for j := range payload {
 				payload[j] = byte(rng.Uint32())
 			}
-			var et ethernet.EtherType = ethernet.EtherTypeProfinet
+			et := ethernet.EtherTypeProfinet
 			if rng.IntN(5) == 0 {
 				et = ethernet.EtherTypeLLDP
 			} else if n >= 2 {
@@ -194,9 +194,9 @@ func TestMalformedInput(t *testing.T) {
 		if len(dev.ARs()) != 1 {
 			t.Fatal("device lost its AR")
 		}
-		e.net.Close()
-		ctrl.Close()
-		dev.Close()
+		_ = e.net.Close()
+		_ = ctrl.Close()
+		_ = dev.Close()
 	}()
 	checkLeaks(t, base)
 }
@@ -225,7 +225,7 @@ func TestReconnectStorm(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer cancel()
 					err = cd.WaitState(ctx, controller.StateRunning)
-					cd.Close()
+					_ = cd.Close()
 					done <- err
 				}(i)
 			}
@@ -238,11 +238,11 @@ func TestReconnectStorm(t *testing.T) {
 		for _, d := range devs {
 			eventually(t, 5*time.Second, "releases", func() bool { return len(d.ARs()) == 0 })
 		}
-		ctrl.Close()
+		_ = ctrl.Close()
 		for _, d := range devs {
-			d.Close()
+			_ = d.Close()
 		}
-		e.net.Close()
+		_ = e.net.Close()
 	}()
 	checkLeaks(t, base)
 }

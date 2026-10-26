@@ -66,7 +66,7 @@ type tnet struct {
 func newNet(t *testing.T) *tnet {
 	t.Helper()
 	n := &tnet{t: t, net: vnet.New(1)}
-	t.Cleanup(func() { n.net.Close() })
+	t.Cleanup(func() { _ = n.net.Close() })
 	return n
 }
 
@@ -87,9 +87,9 @@ func (n *tnet) node(ip string) *node {
 		n.t.Fatal(err)
 	}
 	n.t.Cleanup(func() {
-		st.Close()
-		mux.Close()
-		ep.Close()
+		_ = st.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 	})
 	return &node{ep: ep, mux: mux, stack: st}
 }
@@ -109,7 +109,7 @@ func (n *tnet) controller(opts ...func(*Config)) (*Controller, *node) {
 	if err != nil {
 		n.t.Fatal(err)
 	}
-	n.t.Cleanup(func() { c.Close() })
+	n.t.Cleanup(func() { _ = c.Close() })
 	return c, nd
 }
 
@@ -132,7 +132,7 @@ func (n *tnet) device(ip string, opts ...func(*device.Config)) (*device.Device, 
 	if err != nil {
 		n.t.Fatal(err)
 	}
-	n.t.Cleanup(func() { d.Close() })
+	n.t.Cleanup(func() { _ = d.Close() })
 	return d, nd
 }
 
@@ -166,20 +166,20 @@ func (n *tnet) fake(name string) *fakeDev {
 	if err != nil {
 		n.t.Fatal(err)
 	}
-	n.t.Cleanup(func() { r.Close() })
+	n.t.Cleanup(func() { _ = r.Close() })
 	sc, err := nd.stack.ListenPacket(context.Background(), "udp4", ":34964")
 	if err != nil {
 		n.t.Fatal(err)
 	}
 	srv := rpc.NewServer(sc, true, rpc.ServerOptions{})
 	srv.Register(pnio.DeviceInterface, pnio.InterfaceVersion, rpc.HandlerFunc(f.serve))
-	n.t.Cleanup(func() { srv.Close() })
+	n.t.Cleanup(func() { _ = srv.Close() })
 	cc, err := nd.stack.ListenUDP(0)
 	if err != nil {
 		n.t.Fatal(err)
 	}
 	f.cli = rpc.NewClient(cc, true, rpc.ClientOptions{})
-	n.t.Cleanup(func() { f.cli.Close() })
+	n.t.Cleanup(func() { _ = f.cli.Close() })
 	if f.am, err = alarm.NewManager(nd.mux); err != nil {
 		n.t.Fatal(err)
 	}
@@ -276,6 +276,7 @@ func (f *fakeDev) serve(_ context.Context, req *rpc.Request) ([]byte, error) {
 		}
 		res := cb.Response()
 		return pnio.AppendNDRResponse(nil, o, pnio.Status{}, argsMax, res.Append(nil)), nil
+	default:
 	}
 	return nil, &rpc.Fault{Reject: true, Status: rpc.StatusOpRangeError}
 }

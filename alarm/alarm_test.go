@@ -164,7 +164,7 @@ func newSide(t *testing.T, n *vnet.Network, last byte) *side {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	t.Cleanup(func() { m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	mgr, err := NewManager(m)
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func (s *side) open(t *testing.T, cfg EndpointConfig) *Endpoint {
 func pair(t *testing.T, timeout time.Duration, retries int) (*side, *side, *Endpoint, *Endpoint) {
 	t.Helper()
 	n := vnet.New(9)
-	t.Cleanup(func() { n.Close() })
+	t.Cleanup(func() { _ = n.Close() })
 	a, b := newSide(t, n, 0xA), newSide(t, n, 0xB)
 	ea := a.open(t, EndpointConfig{High: true, LocalRef: 1, RemoteRef: 2, RemoteMAC: b.mac, Timeout: timeout, Retries: retries})
 	eb := b.open(t, EndpointConfig{High: true, LocalRef: 2, RemoteRef: 1, RemoteMAC: a.mac, Timeout: timeout, Retries: retries})
@@ -349,7 +349,7 @@ func TestPiggyBackedAck(t *testing.T) {
 
 func TestSendTimeoutCancelClose(t *testing.T) {
 	n := vnet.New(10)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a := newSide(t, n, 1)
 	// The peer is absent.
 	e := a.open(t, EndpointConfig{LocalRef: 1, RemoteRef: 2, RemoteMAC: ethernet.MAC{2, 0, 0, 0, 0, 0x99}, Timeout: 10 * time.Millisecond, Retries: 2})
@@ -397,7 +397,7 @@ func TestSendTimeoutCancelClose(t *testing.T) {
 
 func TestDefaults(t *testing.T) {
 	n := vnet.New(11)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a := newSide(t, n, 1)
 	e := a.open(t, EndpointConfig{LocalRef: 7})
 	if e.cfg.Timeout != 100*time.Millisecond || e.cfg.Retries != 3 || e.frameID != pnio.FrameIDAlarmLow {
@@ -435,7 +435,7 @@ func TestSendErr(t *testing.T) {
 
 func TestNoCallbacks(t *testing.T) {
 	n := vnet.New(12)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a, b := newSide(t, n, 1), newSide(t, n, 2)
 	ea, err := a.mgr.Open(EndpointConfig{LocalRef: 1, RemoteRef: 2, RemoteMAC: b.mac})
 	if err != nil {
@@ -519,7 +519,7 @@ func TestSequenceWrap(t *testing.T) {
 
 func TestManagerRefsAndRouting(t *testing.T) {
 	n := vnet.New(13)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a, b := newSide(t, n, 1), newSide(t, n, 2)
 	m := a.mgr
 	if r := m.AllocRef(); r != 1 {
@@ -602,13 +602,13 @@ func TestManagerRefsAndRouting(t *testing.T) {
 
 func TestNewManagerClosedMux(t *testing.T) {
 	n := vnet.New(14)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: ethernet.MAC{2, 0, 0, 0, 0, 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	m.Close()
+	_ = m.Close()
 	if _, err := NewManager(m); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("err %v", err)
 	}
@@ -664,7 +664,7 @@ func BenchmarkDecode(b *testing.B) {
 // the manager never blocks and nothing is lost.
 func TestSlowApplication(t *testing.T) {
 	n := vnet.New(11)
-	t.Cleanup(func() { n.Close() })
+	t.Cleanup(func() { _ = n.Close() })
 	a, b := newSide(t, n, 0xA), newSide(t, n, 0xB)
 	release := make(chan struct{})
 	var got atomic.Int32
@@ -694,7 +694,7 @@ func TestSlowApplication(t *testing.T) {
 
 func TestAllocRefExhausted(t *testing.T) {
 	n := vnet.New(12)
-	t.Cleanup(func() { n.Close() })
+	t.Cleanup(func() { _ = n.Close() })
 	s := newSide(t, n, 0xA)
 	m := s.mgr
 	m.mu.Lock()

@@ -201,7 +201,7 @@ func ValidateStationName(name string) error {
 		}
 		for i := 0; i < len(l); i++ {
 			c := l[i]
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 				return fmt.Errorf("%w: character %q in label %q", ErrInvalidName, c, l)
 			}
 		}

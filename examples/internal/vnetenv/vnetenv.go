@@ -26,9 +26,9 @@ type Node struct {
 
 // Close releases the node.
 func (n *Node) Close() {
-	n.Stack.Close()
-	n.Mux.Close()
-	n.Endpoint.Close()
+	_ = n.Stack.Close()
+	_ = n.Mux.Close()
+	_ = n.Endpoint.Close()
 }
 
 // NewNode attaches a node with the given last MAC octet and IPv4 address
@@ -45,8 +45,8 @@ func NewNode(net *vnet.Network, last byte, ip string) (*Node, error) {
 	}
 	st, err := netstack.New(mux, cfg)
 	if err != nil {
-		mux.Close()
-		ep.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 		return nil, err
 	}
 	return &Node{Endpoint: ep, Mux: mux, Stack: st}, nil

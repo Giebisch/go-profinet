@@ -65,7 +65,7 @@ func echoServer(t *testing.T, conn net.PacketConn, opts ServerOptions, calls *at
 			return nil, &Fault{Reject: true, Status: StatusOpRangeError}
 		}
 	}))
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -73,7 +73,7 @@ func TestCallAndFaults(t *testing.T) {
 	var calls atomic.Int32
 	srv := echoServer(t, listen(t), ServerOptions{}, &calls)
 	c := NewClient(listen(t), true, ClientOptions{Timeout: 2 * time.Second, Retransmit: 100 * time.Millisecond})
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	ctx := context.Background()
 	obj := NewRandomUUID()
 	r, err := c.Do(ctx, srv.LocalAddr(), Call{Object: obj, Iface: testIface, IfaceVersion: 1, OpNum: 0, Body: []byte("hi")})
@@ -118,7 +118,7 @@ func TestFragmentation(t *testing.T) {
 			var calls atomic.Int32
 			srv := echoServer(t, listen(t), ServerOptions{MaxFragmentBody: 100}, &calls)
 			c := NewClient(listen(t), true, ClientOptions{MaxFragmentBody: 64, BigEndian: big})
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			body := make([]byte, 5000)
 			for i := range body {
 				body[i] = byte(i)
@@ -144,7 +144,7 @@ func TestAtMostOnce(t *testing.T) {
 	sc.drop.Store(2) // the first two responses are lost
 	srv := echoServer(t, sc, ServerOptions{}, &calls)
 	c := NewClient(listen(t), true, ClientOptions{Retransmit: 30 * time.Millisecond})
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	r, err := c.Do(context.Background(), srv.LocalAddr(), Call{Iface: testIface, IfaceVersion: 1, Body: []byte("x")})
 	if err != nil || string(r.Body) != "echo:x" {
 		t.Fatalf("%v", err)
@@ -165,7 +165,7 @@ func TestAtMostOnce(t *testing.T) {
 
 func TestTimeoutAndCancel(t *testing.T) {
 	sink := listen(t)
-	defer sink.Close()
+	defer func() { _ = sink.Close() }()
 	c := NewClient(listen(t), true, ClientOptions{Timeout: 100 * time.Millisecond, Retransmit: 20 * time.Millisecond, Activities: 1})
 	_, err := c.Do(context.Background(), sink.LocalAddr(), Call{Iface: testIface})
 	if !errors.Is(err, profinet.ErrTimeout) {
@@ -182,7 +182,7 @@ func TestTimeoutAndCancel(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		c.Close()
+		_ = c.Close()
 	}()
 	_, err = c.Do(context.Background(), sink.LocalAddr(), Call{Iface: testIface})
 	if !errors.Is(err, profinet.ErrClosed) {
@@ -194,7 +194,7 @@ func TestConcurrentCalls(t *testing.T) {
 	var calls atomic.Int32
 	srv := echoServer(t, listen(t), ServerOptions{Workers: 4}, &calls)
 	c := NewClient(listen(t), true, ClientOptions{Activities: 8})
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	var wg sync.WaitGroup
 	errs := make(chan error, 64)
 	for i := 0; i < 64; i++ {
@@ -227,7 +227,7 @@ func raw(t *testing.T, srv *Server, h Header, body []byte) []Header {
 		t.Error(err)
 		return nil
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	h.BodyLen = uint16(len(body))
 	if h.DRep == ([3]byte{}) {
 		h.DRep = [3]byte{DRepLittleEndian}
@@ -239,7 +239,7 @@ func raw(t *testing.T, srv *Server, h Header, body []byte) []Header {
 	}
 	var out []Header
 	buf := make([]byte, 2000)
-	c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	_ = c.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	for {
 		n, _, err := c.ReadFrom(buf)
 		if err != nil {
@@ -283,8 +283,8 @@ func TestServerControlPackets(t *testing.T) {
 	raw(t, srv, Header{Type: TypeAck, Activity: act2, SeqNum: 1}, nil)
 	// Garbage is counted.
 	c := listen(t)
-	c.WriteTo([]byte{1, 2, 3}, srv.LocalAddr())
-	c.Close()
+	_, _ = c.WriteTo([]byte{1, 2, 3}, srv.LocalAddr())
+	_ = c.Close()
 	time.Sleep(20 * time.Millisecond)
 	if srv.Stats().Malformed != 1 {
 		t.Fatalf("stats %+v", srv.Stats())
@@ -365,7 +365,7 @@ func TestReassembly(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = newReassembly(0)
-	r.add(&Header{Flags1: FlagFrag | FlagLastFrag, FragNum: 1}, nil)
+	_, _, _ = r.add(&Header{Flags1: FlagFrag | FlagLastFrag, FragNum: 1}, nil)
 	if _, _, err := r.add(&Header{Flags1: FlagFrag, FragNum: 2}, nil); !errors.Is(err, profinet.ErrMalformed) {
 		t.Fatal(err)
 	}

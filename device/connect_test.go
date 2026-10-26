@@ -341,7 +341,7 @@ func TestConnectResources(t *testing.T) {
 		t.Fatalf("output FrameID 0x%04X", resp.IOCRs[1].FrameID)
 	}
 	// A closed device refuses connections.
-	d.Close()
+	_ = d.Close()
 	_, err = d.connect(context.Background(), &net.UDPAddr{}, p.ioCAR())
 	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCStateConflict)
 	if d.Close() != nil {

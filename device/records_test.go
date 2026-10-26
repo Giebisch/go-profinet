@@ -38,6 +38,7 @@ func recordHandler() *recHandler {
 			return nil, errors.New("boom")
 		case 0x7005:
 			return nil, fmt.Errorf("x: %w", profinet.ErrNotFound)
+		default:
 		}
 		return NopHandler{}.ReadRecord(context.Background(), r)
 	}

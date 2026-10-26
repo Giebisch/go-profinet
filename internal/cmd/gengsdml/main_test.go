@@ -46,7 +46,7 @@ func TestCatalogChecks(t *testing.T) {
 	dir := t.TempDir()
 	for i, b := range bad {
 		p := filepath.Join(dir, "c.json")
-		os.WriteFile(p, []byte(b), 0o644)
+		_ = os.WriteFile(p, []byte(b), 0o644)
 		if _, _, err := load(p); err == nil {
 			t.Errorf("%d: accepted %s", i, b)
 		}

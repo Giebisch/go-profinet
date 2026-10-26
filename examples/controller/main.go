@@ -38,14 +38,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer port.Close()
+	defer func() { _ = port.Close() }()
 	mux := l2.NewMux(port)
-	defer mux.Close()
+	defer func() { _ = mux.Close() }()
 	ctrl, err := controller.New(controller.Config{Mux: mux, Logger: profinet.NewStdLogger(nil)})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	d, err := ctrl.AddDevice(controller.DeviceConfig{StationName: *name, Model: vnetenv.Model(), ReductionRatio: uint16(*cycle),
 		OnState: func(from, to controller.State, err error) { log.Printf("%s: %s → %s %v", *name, from, to, err) }})
 	if err != nil {
@@ -63,7 +63,7 @@ func main() {
 		case <-t.C:
 		}
 		n++
-		d.SetOutput(2, 1, []byte{n, 0, 0, n}, pnio.IOxSGood)
+		_ = d.SetOutput(2, 1, []byte{n, 0, 0, n}, pnio.IOxSGood)
 		if in, iops, _ := d.Input(1, 1); iops == pnio.IOxSGood {
 			fmt.Printf("inputs % x\n", in)
 		}

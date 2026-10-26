@@ -30,7 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if *dir == "" {
-		os.Stdout.Write(b)
+		_, _ = os.Stdout.Write(b)
 		return
 	}
 	name := filepath.Join(*dir, gsdml.FileName(m, "", time.Now()))

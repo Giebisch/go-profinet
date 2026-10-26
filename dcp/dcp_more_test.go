@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,7 +63,7 @@ func newRaw(t *testing.T, n *vnet.Network, mac ethernet.MAC) *rawDev {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	t.Cleanup(func() { m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	sub, err := m.Subscribe(l2.MatchEtherType(ethernet.EtherTypeProfinet), 64)
 	if err != nil {
 		t.Fatal(err)
@@ -126,13 +127,13 @@ var (
 func newClientEnv(t *testing.T, opts ClientOptions) (*vnet.Network, *Client, *rawDev) {
 	t.Helper()
 	n := vnet.New(11)
-	t.Cleanup(func() { n.Close() })
+	t.Cleanup(func() { _ = n.Close() })
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: clientMAC})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	t.Cleanup(func() { m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	if opts.Timeout == 0 {
 		opts.Timeout = 200 * time.Millisecond
 	}
@@ -140,7 +141,7 @@ func newClientEnv(t *testing.T, opts ClientOptions) (*vnet.Network, *Client, *ra
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	return n, c, newRaw(t, n, rawMAC)
 }
 
@@ -487,7 +488,7 @@ func TestHellos(t *testing.T) {
 	for range ch {
 	}
 	// Closing the client closes the remaining channel.
-	c.Close()
+	_ = c.Close()
 	for range ch2 {
 	}
 }
@@ -547,13 +548,13 @@ func TestClientQueueFull(t *testing.T) {
 
 func TestNewClientClosedMux(t *testing.T) {
 	n := vnet.New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: clientMAC})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	m.Close()
+	_ = m.Close()
 	if _, err := NewClient(m, ClientOptions{}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("client: %v", err)
 	}
@@ -578,7 +579,7 @@ func TestClientRetriesDefaults(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	// A closed client fails at once.
-	c2.Close()
+	_ = c2.Close()
 	if _, err := c2.IdentifyName(context.Background(), "x", time.Minute); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("identify name: %v", err)
 	}
@@ -642,7 +643,7 @@ func TestIdentifyContext(t *testing.T) {
 	// Close during Identify.
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		e.client.Close()
+		_ = e.client.Close()
 	}()
 	if _, err := e.client.Identify(context.Background(), FilterName("nobody"), IdentifyOptions{Wait: time.Minute}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("err %v", err)
@@ -763,7 +764,7 @@ func TestClientAgainstFakeDevice(t *testing.T) {
 	mode.Store(3)
 	go func() {
 		time.Sleep(30 * time.Millisecond)
-		c.Close()
+		_ = c.Close()
 	}()
 	c.opts.Timeout = time.Minute
 	if _, err := c.Get(ctx, rawMAC, DeviceName); !errors.Is(err, profinet.ErrClosed) {
@@ -775,18 +776,18 @@ func TestClientAgainstFakeDevice(t *testing.T) {
 func responderEnv(t *testing.T, st *fakeStation, opts ResponderOptions, mac ethernet.MAC, mtu int) (*Responder, *rawDev, *vnet.Endpoint) {
 	t.Helper()
 	n := vnet.New(5)
-	t.Cleanup(func() { n.Close() })
+	t.Cleanup(func() { _ = n.Close() })
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: mac, MTU: mtu})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := l2.NewMux(ep)
-	t.Cleanup(func() { m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	r, err := NewResponder(m, st, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { r.Close() })
+	t.Cleanup(func() { _ = r.Close() })
 	return r, newRaw(t, n, rawMAC), ep
 }
 
@@ -826,7 +827,7 @@ func TestResponderFilters(t *testing.T) {
 func delayedMAC(t *testing.T, min time.Duration) ethernet.MAC {
 	t.Helper()
 	n := vnet.New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	for i := 0; i < 255; i++ {
 		mac := ethernet.MAC{2, 0, 0, 0, 1, byte(i)}
 		ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: mac})
@@ -839,8 +840,8 @@ func delayedMAC(t *testing.T, min time.Duration) ethernet.MAC {
 			t.Fatal(err)
 		}
 		d := r.delay
-		r.Close()
-		m.Close()
+		_ = r.Close()
+		_ = m.Close()
 		if d >= min {
 			return mac
 		}
@@ -874,7 +875,7 @@ func TestResponderDelay(t *testing.T) {
 	// Closing with a delayed response pending drops it.
 	raw.send(t, ethernet.DCPIdentifyMulticast, req)
 	waitFor(t, "pending", func() bool { return r.pendingIdentify.Load() == 1 })
-	r.Close()
+	_ = r.Close()
 	if r.pendingIdentify.Load() != 0 {
 		t.Fatal("pending response after Close")
 	}
@@ -910,7 +911,7 @@ func TestResponderGetSet(t *testing.T) {
 	if !ok || len(resp.Blocks) < 4 {
 		t.Fatalf("get %+v", resp)
 	}
-	if got := fmt.Sprint(codes(Frame{Blocks: resp.Blocks[:3]})); got != fmt.Sprint([]BlockError{BlockErrorSuboptionUnsupport, BlockErrorSuboptionUnsupport, BlockErrorOptionUnsupported}) {
+	if got := codes(Frame{Blocks: resp.Blocks[:3]}); !slices.Equal(got, []BlockError{BlockErrorSuboptionUnsupport, BlockErrorSuboptionUnsupport, BlockErrorOptionUnsupported}) {
 		t.Fatalf("get codes %s", got)
 	}
 	if resp.Blocks[3].ID != IPMAC || !bytes.Equal(resp.Blocks[3].Data, devMAC[:]) {
@@ -932,7 +933,7 @@ func TestResponderGetSet(t *testing.T) {
 		t.Fatal("no set response")
 	}
 	want := []BlockError{BlockErrorSuboptionUnsupport, BlockErrorOptionUnsupported, BlockErrorSetNotPossible, BlockErrorSetNotPossible, BlockErrorSetNotPossible, BlockErrorNone, BlockErrorNone, BlockErrorNone, BlockErrorSuboptionUnsupport}
-	if got := codes(resp); fmt.Sprint(got) != fmt.Sprint(want) {
+	if got := codes(resp); !slices.Equal(got, want) {
 		t.Fatalf("set codes %v, want %v", got, want)
 	}
 	st.mu.Lock()

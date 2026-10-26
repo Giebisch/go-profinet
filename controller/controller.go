@@ -123,7 +123,7 @@ func New(cfg Config) (*Controller, error) {
 		cancel:  cancel,
 	}
 	if err := c.start(); err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	return c, nil
@@ -202,17 +202,17 @@ func (c *Controller) Close() error {
 		wg.Add(1)
 		go func(d *Device) {
 			defer wg.Done()
-			d.Close()
+			_ = d.Close()
 		}(d)
 	}
 	wg.Wait()
 	c.cancel()
 	c.wg.Wait()
 	if c.rpcSrv != nil {
-		c.rpcSrv.Close()
+		_ = c.rpcSrv.Close()
 	}
 	if c.rpcCli != nil {
-		c.rpcCli.Close()
+		_ = c.rpcCli.Close()
 	}
 	if c.disp != nil {
 		c.disp.Close()
@@ -221,7 +221,7 @@ func (c *Controller) Close() error {
 		c.alarms.Close()
 	}
 	if c.dcp != nil {
-		c.dcp.Close()
+		_ = c.dcp.Close()
 	}
 	if c.sched != nil {
 		c.sched.Close()

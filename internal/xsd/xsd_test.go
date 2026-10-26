@@ -47,7 +47,7 @@ func TestErrors(t *testing.T) {
 		t.Fatal("truncated")
 	}
 	dir := t.TempDir()
-	os.WriteFile(dir+"/bad.xsd", []byte("<x/>"), 0o644)
+	_ = os.WriteFile(dir+"/bad.xsd", []byte("<x/>"), 0o644)
 	if _, err := LoadDir(dir); err == nil {
 		t.Fatal("bad file")
 	}

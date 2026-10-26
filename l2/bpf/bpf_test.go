@@ -34,12 +34,12 @@ func pair(t *testing.T) (*Port, *Port) {
 	}
 	pb, err := Open(b, Options{})
 	if err != nil {
-		pa.Close()
+		_ = pa.Close()
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		pa.Close()
-		pb.Close()
+		_ = pa.Close()
+		_ = pb.Close()
 	})
 	return pa, pb
 }
@@ -66,7 +66,7 @@ func TestExchange(t *testing.T) {
 	if !a.LinkUp() || a.MTU() < 1500 || a.Name() == "" {
 		t.Fatal("link")
 	}
-	a.Close()
+	_ = a.Close()
 	if _, err := a.ReadFrame(context.Background(), buf); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("err %v", err)
 	}

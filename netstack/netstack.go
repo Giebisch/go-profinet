@@ -361,7 +361,7 @@ func (s *Stack) handleIP(f *ethernet.Frame) {
 	}
 	s.mu.Unlock()
 
-	if !(own.IsValid() && dst == own) && !isBroadcast(dst, own, mask) {
+	if (!own.IsValid() || dst != own) && !isBroadcast(dst, own, mask) {
 		return
 	}
 	if p[9] != protoUDP {

@@ -303,7 +303,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 
 func TestDispatcher(t *testing.T) {
 	n := vnet.New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	epA, err := n.NewEndpoint(vnet.EndpointConfig{Name: "a", MAC: macA})
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +313,7 @@ func TestDispatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := l2.NewMux(epB)
-	defer mux.Close()
+	defer func() { _ = mux.Close() }()
 	d, err := NewDispatcher(mux)
 	if err != nil {
 		t.Fatal(err)
@@ -382,13 +382,13 @@ func TestDispatcher(t *testing.T) {
 
 func TestDispatcherClosedMux(t *testing.T) {
 	n := vnet.New(2)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	ep, err := n.NewEndpoint(vnet.EndpointConfig{MAC: macA})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := l2.NewMux(ep)
-	mux.Close()
+	_ = mux.Close()
 	if d, err := NewDispatcher(mux); err == nil || d != nil {
 		t.Fatalf("NewDispatcher on a closed mux: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestDispatcherMuxStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Closing the mux ends the dispatcher's goroutine; Close returns.
-	mux.Close()
+	_ = mux.Close()
 	done := make(chan struct{})
 	go func() { d.Close(); close(done) }()
 	select {
@@ -414,7 +414,7 @@ func TestDispatcherMuxStops(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close hangs after the mux stopped")
 	}
-	n.Close()
+	_ = n.Close()
 }
 
 func TestConsumerStartupGraceAndArm(t *testing.T) {

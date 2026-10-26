@@ -82,14 +82,14 @@ type env struct {
 func newEnv(t *testing.T, devices int) *env {
 	t.Helper()
 	e := &env{net: vnet.New(7)}
-	t.Cleanup(func() { e.net.Close() })
+	t.Cleanup(func() { _ = e.net.Close() })
 	mk := func(i byte) *l2.Mux {
 		ep, err := e.net.NewEndpoint(vnet.EndpointConfig{MAC: ethernet.MAC{2, 0, 0, 0, 0, i}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		m := l2.NewMux(ep)
-		t.Cleanup(func() { m.Close() })
+		t.Cleanup(func() { _ = m.Close() })
 		return m
 	}
 	cm := mk(0x10)
@@ -97,7 +97,7 @@ func newEnv(t *testing.T, devices int) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	e.client = c
 	for i := 0; i < devices; i++ {
 		m := mk(byte(0x20 + i))
@@ -114,7 +114,7 @@ func newEnv(t *testing.T, devices int) *env {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { r.Close() })
+		t.Cleanup(func() { _ = r.Close() })
 		e.stations = append(e.stations, st)
 		e.macs = append(e.macs, m.HardwareAddr())
 	}

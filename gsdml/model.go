@@ -44,6 +44,7 @@ func DataItemSize(dataType, length string) (int, error) {
 			return 0, fmt.Errorf("gsdml: %w: %s without a valid Length", profinet.ErrMalformed, dataType)
 		}
 		return int(n), nil
+	default:
 	}
 	n, ok := dataTypeSizes[t]
 	if !ok {

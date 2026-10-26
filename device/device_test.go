@@ -105,7 +105,7 @@ func TestNewErrors(t *testing.T) {
 	}
 	// A closed port fails at the first subscription.
 	closed := n.node("192.168.0.51")
-	closed.mux.Close()
+	_ = closed.mux.Close()
 	if _, err := New(Config{Model: testModel(), Mux: closed.mux, ListenPacket: closed.stack.ListenPacket}); err == nil {
 		t.Fatal("closed mux accepted")
 	}
@@ -123,12 +123,12 @@ func TestNewDefaults(t *testing.T) {
 		t.Skipf("no UDP: %v", err)
 	}
 	port := l.LocalAddr().(*net.UDPAddr).Port
-	l.Close()
+	_ = l.Close()
 	d, err := New(Config{Model: m, Mux: nd.mux, RPCPort: port, DisableLLDP: true})
 	if err != nil {
 		t.Skipf("OS UDP stack: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if m.Capabilities.MaxARs != 2 {
 		t.Fatalf("MaxARs %d", m.Capabilities.MaxARs)
 	}
@@ -192,7 +192,7 @@ func TestCyclicWithController(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReductionRatio: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +245,7 @@ func TestCyclicWithController(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Closing the controller releases the AR.
-	ctrl.Close()
+	_ = ctrl.Close()
 	waitAR(t, d, ars[0].UUID, ARStateClosed)
 	if _, iops, _ := d.Output(2, 1); iops != pnio.IOxSBad {
 		t.Fatalf("output IOPS after release %02X", iops)
@@ -464,10 +464,10 @@ func TestAlarms(t *testing.T) {
 		switch mode.Load() {
 		case 0:
 			ack := pnio.AckFor(&an, pnio.Status{})
-			go ep.Send(context.Background(), ack.Append(nil))
+			go func() { _ = ep.Send(context.Background(), ack.Append(nil)) }()
 		case 1:
 			ack := pnio.AckFor(&an, pnio.ServiceStatus(pnio.CodePNIO, pnio.Code1AlarmAck, 1))
-			go ep.Send(context.Background(), ack.Append(nil))
+			go func() { _ = ep.Send(context.Background(), ack.Append(nil)) }()
 		}
 	})
 	al := Alarm{High: true, Type: pnio.AlarmProcess, Slot: 3, Subslot: 1, HasItem: true, USI: 0x0042, Data: []byte("hot"), Specifier: pnio.AlarmSpecManufDiag}

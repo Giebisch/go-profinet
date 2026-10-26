@@ -73,11 +73,11 @@ func newEnv(t *testing.T, seed uint64) *env {
 			if err == nil {
 				e.net.AddTap(func(_ *vnet.Endpoint, frame []byte) { _ = w.WriteFrame(time.Now(), frame) })
 			}
-			t.Cleanup(func() { f.Close() })
+			t.Cleanup(func() { _ = f.Close() })
 		}
 	}
 	t.Cleanup(func() {
-		e.net.Close()
+		_ = e.net.Close()
 		if t.Failed() {
 			t.Logf("vnet seed %d", seed)
 		}
@@ -88,7 +88,7 @@ func newEnv(t *testing.T, seed uint64) *env {
 func sanitize(s string) string {
 	b := []byte(s)
 	for i, c := range b {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
 			b[i] = '_'
 		}
 	}
@@ -115,9 +115,9 @@ func (e *env) node(ip string) *node {
 		e.t.Fatal(err)
 	}
 	e.t.Cleanup(func() {
-		st.Close()
-		mux.Close()
-		ep.Close()
+		_ = st.Close()
+		_ = mux.Close()
+		_ = ep.Close()
 	})
 	return &node{ep: ep, mux: mux, stack: st}
 }
@@ -143,7 +143,7 @@ func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*devic
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	e.t.Cleanup(func() { d.Close() })
+	e.t.Cleanup(func() { _ = d.Close() })
 	return d, n
 }
 
@@ -154,7 +154,7 @@ func (e *env) controller(ip string) (*controller.Controller, *node) {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	e.t.Cleanup(func() { c.Close() })
+	e.t.Cleanup(func() { _ = c.Close() })
 	return c, n
 }
 

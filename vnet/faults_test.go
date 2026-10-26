@@ -398,7 +398,7 @@ func TestCloseWithPendingFaults(t *testing.T) {
 	_, a, b := pair(t, 7)
 	a.SetFaults(Faults{Reorder: 1, ReorderHold: time.Hour})
 	write(t, a, frame(mac(2), mac(1), 1))
-	a.Close()
+	_ = a.Close()
 	a.flushHeld() // a late timer finds nothing
 	if len(drain(b)) != 0 {
 		t.Fatal("held frame delivered after Close")
@@ -409,7 +409,7 @@ func TestCloseWithPendingFaults(t *testing.T) {
 	c.SetFaults(Faults{Delay: time.Hour})
 	write(t, c, frame(mac(2), mac(1), 1))
 	closed := make(chan struct{})
-	go func() { c.Close(); close(closed) }()
+	go func() { _ = c.Close(); close(closed) }()
 	select {
 	case <-closed:
 	case <-time.After(10 * time.Second):
@@ -435,7 +435,7 @@ func TestCloseUnblocksFullDelayLine(t *testing.T) {
 	// One frame waits in the line goroutine, 4096 in the channel, and the
 	// next blocks in send.
 	waitFor(t, "a full delay line", func() bool { return a.Stats().Sent >= 4098 })
-	a.Close()
+	_ = a.Close()
 	select {
 	case err := <-errc:
 		if !errors.Is(err, profinet.ErrClosed) {
@@ -451,7 +451,7 @@ func TestCloseUnblocksFullDelayLine(t *testing.T) {
 // which were corrupted.
 func decisions(t *testing.T, seed uint64, noise bool) (delivered []uint32, corrupt []uint32) {
 	n := New(seed)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	a := newEP(t, n, EndpointConfig{MAC: mac(1)})
 	b := newEP(t, n, EndpointConfig{MAC: mac(2), QueueLen: 1024})
 	var other *Endpoint
@@ -541,7 +541,7 @@ func TestConcurrentSenders(t *testing.T) {
 
 func BenchmarkDelivery(b *testing.B) {
 	n := New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	tx, _ := n.NewEndpoint(EndpointConfig{MAC: mac(1)})
 	rx, _ := n.NewEndpoint(EndpointConfig{MAC: mac(2)})
 	f := frame(mac(2), mac(1), 1)
@@ -561,7 +561,7 @@ func BenchmarkDelivery(b *testing.B) {
 
 func BenchmarkBroadcast(b *testing.B) {
 	n := New(1)
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	tx, _ := n.NewEndpoint(EndpointConfig{MAC: mac(1)})
 	var rxs []*Endpoint
 	for i := byte(2); i < 10; i++ {

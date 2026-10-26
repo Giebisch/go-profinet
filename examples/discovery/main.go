@@ -20,7 +20,7 @@ import (
 
 func main() {
 	network := vnet.New(2)
-	defer network.Close()
+	defer func() { _ = network.Close() }()
 	for i, name := range []string{"io-1", "io-2", ""} {
 		ip := ""
 		if name != "" {
@@ -40,7 +40,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer d.Close()
+		defer func() { _ = d.Close() }()
 	}
 	tool, err := vnetenv.NewNode(network, 1, "")
 	if err != nil {
@@ -51,7 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	ctx := context.Background()
 	ids, err := client.Identify(ctx, dcp.FilterAll(), dcp.IdentifyOptions{ResponseDelay: 10, Wait: 500 * time.Millisecond})
 	if err != nil {

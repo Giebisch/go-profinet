@@ -21,7 +21,7 @@ import (
 
 func main() {
 	network := vnet.New(3)
-	defer network.Close()
+	defer func() { _ = network.Close() }()
 	dn, err := vnetenv.NewNode(network, 10, "192.168.0.10")
 	if err != nil {
 		log.Fatal(err)
@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 	cn, err := vnetenv.NewNode(network, 1, "192.168.0.1")
 	if err != nil {
 		log.Fatal(err)
@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	alarms := make(chan controller.AlarmEvent, 4)
 	io1, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "io-1", Model: vnetenv.Model(), OnAlarm: func(a controller.AlarmEvent) { alarms <- a }})
 	if err != nil {

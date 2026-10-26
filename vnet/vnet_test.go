@@ -27,7 +27,7 @@ func newEP(t testing.TB, n *Network, cfg EndpointConfig) *Endpoint {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { e.Close() })
+	t.Cleanup(func() { _ = e.Close() })
 	return e
 }
 

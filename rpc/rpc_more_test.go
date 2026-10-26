@@ -173,13 +173,13 @@ func TestPacketsDefaults(t *testing.T) {
 	}
 	// A last fragment below fragments already received is an error.
 	r := newReassembly(0)
-	r.add(&Header{Flags1: FlagFrag, FragNum: 3}, []byte{1})
+	_, _, _ = r.add(&Header{Flags1: FlagFrag, FragNum: 3}, []byte{1})
 	if _, _, err := r.add(&Header{Flags1: FlagFrag | FlagLastFrag, FragNum: 1}, nil); !errors.Is(err, profinet.ErrMalformed) {
 		t.Fatalf("err %v", err)
 	}
 	// An empty last fragment completes a message.
 	r = newReassembly(0)
-	r.add(&Header{Flags1: FlagFrag}, []byte{1})
+	_, _, _ = r.add(&Header{Flags1: FlagFrag}, []byte{1})
 	out, ok, err := r.add(&Header{Flags1: FlagFrag | FlagLastFrag, FragNum: 1}, nil)
 	if !ok || err != nil || !bytes.Equal(out, []byte{1}) {
 		t.Fatalf("%v %v %v", out, ok, err)
@@ -193,9 +193,9 @@ func clientEnv(t *testing.T, opts ClientOptions) (*Client, *memConn, *memConn) {
 	n := newMemNet()
 	cc := n.listen("client")
 	peer := n.listen("peer")
-	t.Cleanup(func() { peer.Close() })
+	t.Cleanup(func() { _ = peer.Close() })
 	c := NewClient(cc, true, opts)
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	return c, cc, peer
 }
 
@@ -410,7 +410,7 @@ func TestClientCloseDuringRetransmit(t *testing.T) {
 	var writes atomic.Int32
 	cc.setWriteErr(func([]byte) error {
 		if writes.Add(1) == 2 {
-			c.Close()
+			_ = c.Close()
 			return net.ErrClosed
 		}
 		return nil
@@ -453,7 +453,7 @@ func TestClientActivities(t *testing.T) {
 	}
 	// Another server: the activity forgets the boot time.
 	n2 := peer.net.listen("peer2")
-	defer n2.Close()
+	defer func() { _ = n2.Close() }()
 	ch = doAsync(c, context.Background(), n2.LocalAddr(), Call{})
 	req3, _, _ := expect(t, n2, TypeRequest)
 	if req3.ServerBoot != 0 {
@@ -462,7 +462,7 @@ func TestClientActivities(t *testing.T) {
 	// A call waiting for an activity fails when the client is closed.
 	waiting = doAsync(c, context.Background(), n2.LocalAddr(), Call{})
 	time.Sleep(20 * time.Millisecond)
-	c.Close()
+	_ = c.Close()
 	for _, w := range []chan result{ch, waiting} {
 		if r := wait(t, w); !errors.Is(r.err, profinet.ErrClosed) {
 			t.Fatalf("err %v", r.err)
@@ -492,11 +492,11 @@ func TestClientConnOwnership(t *testing.T) {
 	if _, err := cc.WriteTo([]byte{1}, memAddr("x")); err != nil {
 		t.Fatalf("socket closed: %v", err)
 	}
-	cc.Close()
+	_ = cc.Close()
 	// An owned socket is closed, and its error reported.
 	cc = n.listen("d")
 	c = NewClient(cc, true, ClientOptions{})
-	cc.Close()
+	_ = cc.Close()
 	if err := c.Close(); err == nil {
 		t.Fatal("double close not reported")
 	}
@@ -511,7 +511,7 @@ func TestClientReadErrors(t *testing.T) {
 	cc.readErrs <- errors.New("transient")
 	waitFor(t, "warning", func() bool { return log.has("WARN rpc: client read: transient") })
 	// Closing the socket under the client stops its reader.
-	cc.Close()
+	_ = cc.Close()
 	done := make(chan struct{})
 	go func() { c.wg.Wait(); close(done) }()
 	select {
@@ -519,7 +519,7 @@ func TestClientReadErrors(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("reader did not stop")
 	}
-	c.Close()
+	_ = c.Close()
 }
 
 // memServer is a server with the echo handler on a memNet.
@@ -528,7 +528,7 @@ func memServer(t *testing.T, opts ServerOptions, h HandlerFunc) (*Server, *memCo
 	n := newMemNet()
 	sc := n.listen("server")
 	peer := n.listen("peer")
-	t.Cleanup(func() { peer.Close() })
+	t.Cleanup(func() { _ = peer.Close() })
 	s := NewServer(sc, true, opts)
 	if h == nil {
 		h = func(ctx context.Context, r *Request) ([]byte, error) {
@@ -539,7 +539,7 @@ func memServer(t *testing.T, opts ServerOptions, h HandlerFunc) (*Server, *memCo
 		}
 	}
 	s.Register(testIface, 1, h)
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s, sc, peer
 }
 
@@ -721,7 +721,7 @@ func TestServerConnAndErrors(t *testing.T) {
 	n := newMemNet()
 	sc := n.listen("s")
 	peer := n.listen("p")
-	defer peer.Close()
+	defer func() { _ = peer.Close() }()
 	s := NewServer(sc, false, ServerOptions{Logger: log})
 	s.Register(testIface, 1, HandlerFunc(func(context.Context, *Request) ([]byte, error) { return []byte("ok"), nil }))
 	sc.readErrs <- timeoutError{}
@@ -748,8 +748,8 @@ func TestServerConnAndErrors(t *testing.T) {
 	// A server whose socket is closed under it stops reading.
 	sc2 := n.listen("s2")
 	s2 := NewServer(sc2, false, ServerOptions{})
-	sc2.Close()
-	s2.Close()
+	_ = sc2.Close()
+	_ = s2.Close()
 }
 
 // FuzzServer feeds arbitrary datagrams to a server and checks that it
@@ -782,8 +782,8 @@ func FuzzServer(f *testing.F) {
 		return r.Body, nil
 	}))
 	f.Cleanup(func() {
-		s.Close()
-		peer.Close()
+		_ = s.Close()
+		_ = peer.Close()
 	})
 	f.Fuzz(func(t *testing.T, b []byte) {
 		_, _ = peer.WriteTo(b, s.LocalAddr())
@@ -832,14 +832,14 @@ func BenchmarkLoopbackCall(b *testing.B) {
 		b.Fatal(err)
 	}
 	s := NewServer(sc, true, ServerOptions{})
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	s.Register(testIface, 1, HandlerFunc(func(_ context.Context, r *Request) ([]byte, error) { return r.Body, nil }))
 	cc, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		b.Fatal(err)
 	}
 	c := NewClient(cc, true, ClientOptions{})
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	call := Call{Iface: testIface, IfaceVersion: 1, Body: make([]byte, 64)}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -906,7 +906,7 @@ func TestClientActivity(t *testing.T) {
 	}
 	noPacket(t, peer)
 
-	c.Close()
+	_ = c.Close()
 	if _, err := c.DoActivity(context.Background(), a, peer.LocalAddr(), Call{}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("after close: %v", err)
 	}

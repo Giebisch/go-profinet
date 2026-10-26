@@ -67,7 +67,7 @@ func TestNewErrors(t *testing.T) {
 		}
 	}
 	closed := n.node("192.168.0.99")
-	closed.mux.Close()
+	_ = closed.mux.Close()
 	<-closed.mux.Done()
 	if _, err := New(Config{Mux: closed.mux, ListenPacket: closed.stack.ListenPacket}); err == nil {
 		t.Fatal("closed mux accepted")
@@ -82,12 +82,12 @@ func TestNewDefaults(t *testing.T) {
 		t.Skipf("no UDP: %v", err)
 	}
 	port := l.LocalAddr().(*net.UDPAddr).Port
-	l.Close()
+	_ = l.Close()
 	c, err := New(Config{Mux: nd.mux, RPCPort: port})
 	if err != nil {
 		t.Skipf("OS UDP stack: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if c.cfg.StationName != "go-profinet-controller" || c.ObjectUUID() != pnio.ObjectUUID(1, 0x0001, 0xF000) {
 		t.Fatalf("%q %s", c.cfg.StationName, c.ObjectUUID())
 	}
@@ -127,7 +127,7 @@ func TestAddDeviceValidation(t *testing.T) {
 		t.Fatal("Device lookup")
 	}
 	// Defaults.
-	if cd.cfg.SendClockFactor != 32 || cd.cfg.ReductionRatio != 4 || cd.cfg.DataHoldFactor != 3 || cd.cfg.WatchdogFactor != 3 ||
+	if cd.cfg.SendClockFactor != 32 || cd.cfg.ReductionRatio != 4 || cd.cfg.DataHoldFactor != 10 || cd.cfg.WatchdogFactor != 10 ||
 		cd.cfg.ActivityTimeout != 10*time.Second || cd.cfg.RTATimeoutFactor != 5 || cd.cfg.RTARetries != 3 || cd.cfg.RPCTimeout != 5*time.Second ||
 		cd.cfg.ReconnectMax != 10*time.Second {
 		t.Fatalf("defaults %+v", cd.cfg)
@@ -178,14 +178,14 @@ func TestAddDeviceValidation(t *testing.T) {
 	if err := waitErr(t, cd); !errors.Is(err, profinet.ErrNotFound) {
 		t.Fatalf("err %v", err)
 	}
-	cd.Close()
+	_ = cd.Close()
 	if _, ok := c.Device("dut"); ok {
 		t.Fatal("closed device still listed")
 	}
 	if st, _ := cd.State(); st != StateStopped {
 		t.Fatalf("state %s", st)
 	}
-	c.Close()
+	_ = c.Close()
 	if _, err := c.AddDevice(DeviceConfig{StationName: "dut", Model: testModel()}); !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("after Close %v", err)
 	}
@@ -217,21 +217,21 @@ func TestResolveErrors(t *testing.T) {
 	if err := waitErr(t, cd); !errors.Is(err, profinet.ErrInvalidConfig) {
 		t.Fatalf("err %v", err)
 	}
-	cd.Close()
+	_ = cd.Close()
 	// No IP address.
 	f.set(func(f *fakeDev) { f.identity.DeviceID, f.identity.IP = 0x0042, dcp.IPSuite{} })
 	cd = add(DeviceConfig{})
 	if err := waitErr(t, cd); !errors.Is(err, profinet.ErrInvalidState) {
 		t.Fatalf("err %v", err)
 	}
-	cd.Close()
+	_ = cd.Close()
 	// Assigned by the controller.
 	cd = add(DeviceConfig{AssignIP: true, IP: suite(devIP), PermanentIP: true})
 	waitState(t, cd, StateWaitAppReady, 5*time.Second)
 	if cd.IP() != suite(devIP) || cd.MAC() != f.mux.HardwareAddr() {
 		t.Fatalf("IP %s MAC %s", cd.IP(), cd.MAC())
 	}
-	cd.Close()
+	_ = cd.Close()
 }
 
 func TestAssignIPRefused(t *testing.T) {
@@ -299,7 +299,7 @@ func TestConnectErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer cd.Close()
+			defer func() { _ = cd.Close() }()
 			if err := waitErr(t, cd); !cs.check(err) {
 				t.Fatalf("err %v", err)
 			}
@@ -337,7 +337,7 @@ func TestConnectErrors(t *testing.T) {
 	if cd.Stats().Connects != 1 || cd.Stats().Aborts != 1 {
 		t.Fatalf("stats %+v", cd.Stats())
 	}
-	cd.Close()
+	_ = cd.Close()
 	f.set(func(f *fakeDev) { f.control = nil })
 
 	// A parameter write fails.
@@ -355,7 +355,7 @@ func TestConnectErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantStatus(t, waitErr(t, cd), pnio.RWAccessDenied, 0)
-	cd.Close()
+	_ = cd.Close()
 	f.set(func(f *fakeDev) { f.raw = nil })
 }
 
@@ -373,7 +373,7 @@ func TestApplicationReady(t *testing.T) {
 	if err := waitErr(t, cd); !errors.Is(err, profinet.ErrTimeout) {
 		t.Fatalf("err %v", err)
 	}
-	cd.Close()
+	_ = cd.Close()
 	for len(f.requests) > 0 {
 		<-f.requests
 	}
@@ -414,7 +414,7 @@ func TestApplicationReady(t *testing.T) {
 	if st, _, err := f.appReady(c, rpc.Port, bad); err != nil || st.Code1 != pnio.Code1AppReady || st.Code2 != 8 {
 		t.Fatalf("PrmEnd block: %s %v", st, err)
 	}
-	cd.Close()
+	_ = cd.Close()
 	if !released.Load() {
 		t.Fatal("no release")
 	}
@@ -425,7 +425,7 @@ func TestApplicationReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cd.Close()
+	defer func() { _ = cd.Close() }()
 	waitState(t, cd, StateWaitAppReady, 5*time.Second)
 	req = <-f.requests
 	cb = pnio.ControlBlock{Type: pnio.BlockAppReadyPlugReq, ARUUID: req.AR.ARUUID, SessionKey: req.AR.SessionKey, Command: pnio.CmdApplicationReady}
@@ -455,7 +455,7 @@ func TestAlarmAckFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cd.Close()
+	defer func() { _ = cd.Close() }()
 	waitState(t, cd, StateWaitAppReady, 5*time.Second)
 	req := <-f.requests
 	// A raw alarm DATA PDU: the fake has no alarm endpoint and never
@@ -486,7 +486,7 @@ func TestAbortByDevice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cd.Close()
+	defer func() { _ = cd.Close() }()
 	waitState(t, cd, StateWaitAppReady, 5*time.Second)
 	req := <-f.requests
 	p := alarm.PDU{FrameID: pnio.FrameIDAlarmLow, Dst: req.AlarmCR.LocalAlarmReference, Src: 0x77, Type: alarm.PDUErr, Version: alarm.Version,
@@ -658,7 +658,7 @@ func TestRunningDevice(t *testing.T) {
 	dn.ep.SetLinkUp(true)
 	waitState(t, cd, StateRunning, 10*time.Second)
 	// The device closes: it aborts the AR.
-	dev.Close()
+	_ = dev.Close()
 	waitState(t, cd, StateOffline, 5*time.Second)
 	if _, err := cd.State(); !errors.Is(err, profinet.ErrAborted) {
 		t.Fatalf("err %v", err)
@@ -672,7 +672,7 @@ func TestRunningDevice(t *testing.T) {
 			t.Fatalf("transitions %v", got)
 		}
 	}
-	cd.Close()
+	_ = cd.Close()
 	if st, _ := cd.State(); st != StateStopped {
 		t.Fatalf("state %s", st)
 	}
@@ -719,7 +719,7 @@ func TestStartupVariants(t *testing.T) {
 			if len(ars) != 1 || ars[0].InputFrameID < lo || ars[0].InputFrameID > hi || ars[0].OutputFrameID < lo || ars[0].OutputFrameID > hi {
 				t.Fatalf("ARs %+v", ars)
 			}
-			c.Close()
+			_ = c.Close()
 			eventually(t, 5*time.Second, "release", func() bool { return len(dev.ARs()) == 0 })
 		})
 	}

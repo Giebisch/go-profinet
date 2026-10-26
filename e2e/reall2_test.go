@@ -39,9 +39,9 @@ func TestRealL2(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() {
-			st.Close()
-			mux.Close()
-			p.Close()
+			_ = st.Close()
+			_ = mux.Close()
+			_ = p.Close()
 		})
 		return mux, st
 	}
@@ -51,12 +51,12 @@ func TestRealL2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 	ctrl, err := controller.New(controller.Config{Mux: cm, ListenPacket: cs.ListenPacket})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ctrl.Close()
+	defer func() { _ = ctrl.Close() }()
 	// A 1 ms cycle; the data hold time of 30 cycles tolerates the
 	// scheduling latency of a container in a VM under the race detector.
 	// Timing is measured, not asserted: see docs/CYCLIC.md.
@@ -65,8 +65,8 @@ func TestRealL2(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitState(t, cd, controller.StateRunning, 15*time.Second)
-	dev.SetInput(1, 1, []byte{1, 3, 5, 7, 9, 11, 13, 15}, pnio.IOxSGood)
-	cd.SetOutput(2, 1, []byte{2, 4, 6, 8}, pnio.IOxSGood)
+	_ = dev.SetInput(1, 1, []byte{1, 3, 5, 7, 9, 11, 13, 15}, pnio.IOxSGood)
+	_ = cd.SetOutput(2, 1, []byte{2, 4, 6, 8}, pnio.IOxSGood)
 	eventually(t, 5*time.Second, "data over real Layer 2", func() bool {
 		in, _, _ := cd.Input(1, 1)
 		out, _, _ := dev.Output(2, 1)

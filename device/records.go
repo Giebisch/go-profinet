@@ -104,6 +104,7 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 		b = binary.BigEndian.AppendUint16(b, 0)
 		binary.BigEndian.PutUint16(b[2:], uint16(len(b)-4))
 		return b, nil
+	default:
 	}
 	if q.Index.IsUserIndex() {
 		d.mu.Lock()
@@ -171,6 +172,7 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 		return nil
 	case pnio.IndexIM0:
 		return rwErr(pnio.RWAccessDenied)
+	default:
 	}
 	if !q.Index.IsUserIndex() {
 		return errInvalidIndex

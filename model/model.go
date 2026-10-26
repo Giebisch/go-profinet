@@ -310,11 +310,11 @@ func (d *Device) Validate() error {
 	// inputs.
 	in, out := 0, 0
 	d.Each(func(p PluggedSubmodule) {
-		switch t := p.Submodule.Type(); {
-		case t == pnio.SubmoduleInputOutput:
+		switch p.Submodule.Type() {
+		case pnio.SubmoduleInputOutput:
 			in += int(p.Submodule.InputLen) + 2
 			out += int(p.Submodule.OutputLen) + 2
-		case t == pnio.SubmoduleOutput:
+		case pnio.SubmoduleOutput:
 			out += int(p.Submodule.OutputLen) + 1
 			in++
 		default:
