@@ -50,7 +50,10 @@ type Handler interface {
 	// activity timeout of the AR).
 	PrmEnd(ctx context.Context, ar ARInfo) error
 
-	// StateChanged reports every state transition of an AR.
+	// StateChanged reports every state transition of an AR, one at a time
+	// and in the order the AR went through them. It may be called from a
+	// different goroutine than the one that caused the transition, and
+	// after that goroutine went on.
 	StateChanged(ar ARInfo, from, to ARState)
 
 	// AlarmAck reports the acknowledgement of an alarm by the controller.
