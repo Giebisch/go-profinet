@@ -42,10 +42,11 @@ Resume from here after an interruption.
 | IO-Device, IO-Controller, supervisor (device access) AR, AR info | done, tested |
 | GSDML parse/validate/encode/model conversion, codegen | done |
 | OS L2 backends | AF_PACKET tested in Docker (`make l2-test`), BPF opened on macOS, Npcap cross-compiled |
-| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 88 pass, 0 fail, 2 n/a, 2 attributed peer deviations |
+| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 90 pass, 0 fail, 2 n/a, 2 attributed peer deviations; CI and contract check |
 | go-profinet interop suite + `make interop` + Interop workflow | done; 10/10 tests pass |
 | profinetctl | done: every command family, 93 % coverage, race-free, verified against p-net |
-| Documentation | README, research notes; the full docs suite is in progress |
+| Documentation | complete: reference documents in the root, guides in docs/ |
+| Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (37 passed incl. 21 chaos runs, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 10/10, profinetctl make check-equivalents and pnet-smoke |
 
 ## Blockers
 
@@ -58,7 +59,8 @@ Resume from here after an interruption.
 
 ## Next actions
 
-1. go-profinet documentation suite (architecture, API, errors, guides,
-   coverage and conformance matrices, limitations, security).
-2. Coverage check (gsdml below 90 %), benchmark report.
-3. Final verification across the three repositories and the delivery report.
+1. The owner decides on B1 (PI membership) and B2 (push the three branches,
+   open pull requests, tag go-profinet, then drop profinetctl's replace).
+2. After pushing: watch CI (the L2 macOS job and the Interop workflow have
+   never run on GitHub).
+3. Hardware tier: test against a commercial PLC and a commercial device.
