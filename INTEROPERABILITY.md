@@ -108,7 +108,7 @@ is an attributed deviation of the peer.
 
 | Peer | Version | go-profinet as | pass | fail | n/a | peer deviation |
 |------|---------|----------------|-----:|-----:|----:|---------------:|
-| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 40 | 0 | 0 | 0 |
+| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 45 | 0 | 0 | 0 |
 | pnio-rs | v0.1.0 | IO-Controller, DCP requester | 12 | 0 | 2 | 0 |
 | profinet-py | 0.6.6 | IO-Device, DCP responder | 22 | 0 | 0 | 2 |
 | pnio-dcp | 1.2.0 | DCP responder | 8 | 0 | 0 | 0 |

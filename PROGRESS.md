@@ -42,13 +42,16 @@ Resume from here after an interruption.
 | IO-Device, IO-Controller, supervisor (device access) AR, AR info | done, tested |
 | GSDML parse/validate/encode/model conversion, codegen | done |
 | OS L2 backends | AF_PACKET tested in Docker (`make l2-test`), BPF opened on macOS, Npcap cross-compiled |
-| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 90 pass, 0 fail, 2 n/a, 2 attributed peer deviations; CI and contract check |
+| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 95 pass, 0 fail, 2 n/a, 2 attributed peer deviations; CI and contract check |
 | go-profinet interop suite + `make interop` + Interop workflow | done; 10/10 tests pass |
 | profinetctl | done: every command family, 93 % coverage, race-free, verified against p-net |
 | Documentation | complete: reference documents in the root, guides in docs/ |
-| Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (37 passed incl. 21 chaos runs, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 10/10, profinetctl make check-equivalents and pnet-smoke |
+| Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (38 passed incl. 21 chaos runs, chaos monkey, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 11/11, profinetctl make check-equivalents and pnet-smoke |
 
 ## Blockers
+
+- B0 PI membership postponed by the owner (2026-10-26); impact in
+  docs/PI-MEMBERSHIP.md.
 
 - B1 GSDML XSD, GSDX and MRCD: PROFIBUS & PROFINET International membership
   and licence needed (D3). Human decision: does OT Fabric hold PI
