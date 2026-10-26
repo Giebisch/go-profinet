@@ -392,6 +392,21 @@ func TestAgentTable(t *testing.T) {
 	if ns := a.Neighbors(); string(ns[0].Frame.ChassisID) != "a" || a.Alias() != "port-009.a" {
 		t.Fatalf("order %+v", ns)
 	}
+	// Our own LLDP coming back (a bridge that reflects it) is not a
+	// neighbor.
+	self := mk("self", "port-001.self", 60)
+	b, _ := self.AppendTo(nil)
+	h := ethernet.Frame{Dst: ethernet.LLDPMulticast, Src: nd.mux.HardwareAddr(), EtherType: ethernet.EtherTypeLLDP}
+	if err := peer.mux.Send(context.Background(), ethernet.Pad(append(h.AppendHeader(nil), b...), 0)); err != nil {
+		t.Fatal(err)
+	}
+	peer.sendLLDP(t, mk("b", "port-001", 91))
+	waitFor(t, "update after the own frame", func() bool { return a.Neighbors()[1].Frame.TTL == 91 })
+	for _, nb := range a.Neighbors() {
+		if string(nb.Frame.ChassisID) == "self" {
+			t.Fatal("own frame taken as a neighbor")
+		}
+	}
 	// Receive-only: SendNow does nothing and nothing was sent.
 	if err := a.SendNow(context.Background()); err != nil || a.Sent() != 0 {
 		t.Fatalf("receive-only SendNow: %v, sent %d", err, a.Sent())

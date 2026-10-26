@@ -156,6 +156,9 @@ each other):
   WriteMultiple itself** (index 0xE040), then one per item. go-profinet's
   device omitted it and its controller counted it as an item; both now
   follow p-net (and Wireshark's dissector).
+- **A Linux bridge with LLDP forwarding (Docker Desktop) returns LLDP
+  frames to their sender**: p-net then lists itself as the neighbor of its
+  port. go-profinet's LLDP agent now ignores frames of its own address.
 - **pnio-rs accepts only RT_CLASS_2 FrameIDs**: a controller must use the
   advanced startup with it.
 

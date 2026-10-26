@@ -207,6 +207,12 @@ func (a *Agent) recv(ctx context.Context) {
 		if err != nil {
 			return
 		}
+		// A frame of our own address is our own LLDP coming back (a bridge
+		// that reflects it, a capture of outgoing frames): it is not a
+		// neighbor.
+		if ef.Src == a.mux.HardwareAddr() {
+			continue
+		}
 		f, err := Decode(ef.Payload)
 		if err != nil {
 			a.malformed.Add(1)
