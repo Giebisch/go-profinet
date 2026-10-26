@@ -4,7 +4,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help all build examples fmt fmt-check lint lint-ci vet vuln test test-e2e coverage cover coverage-check bench fuzz check clean generate generate-check coverpkg-check l2-test interop cross
+.PHONY: help all build examples fmt fmt-check lint lint-ci vet vuln test test-e2e coverage cover coverage-check bench fuzz check clean generate generate-check coverpkg-check l2-test interop interop-images test-interop interop-matrix cross
 
 help: ## This help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -109,6 +109,33 @@ coverpkg-check: ## Fail when CI's coverpkg (.github/workflows/ci.yml) is not COV
 
 l2-test: ## Run the real Layer 2 tests on a veth pair in a privileged container (needs Docker)
 	@scripts/l2-test.sh
+
+# Reference implementations for 'make interop': otfabric/profinet-interop.
+# Its images are built locally (p-net and profinet-py are GPL and are not
+# published): make interop-images clones profinet-interop at
+# INTEROP_REF into PROFINET_INTEROP_DIR, unless that directory exists,
+# and builds every adapter image as profinet-interop-<adapter>:dev.
+INTEROP_REPO          ?= https://github.com/otfabric/profinet-interop.git
+INTEROP_REF           ?= main
+PROFINET_INTEROP_DIR  ?= ../profinet-interop
+PROFINET_INTEROP_RESULTS ?= interop-results
+
+interop-images: ## Build the profinet-interop reference images (needs Docker)
+	@if [ ! -d "$(PROFINET_INTEROP_DIR)" ]; then \
+		git clone --quiet "$(INTEROP_REPO)" "$(PROFINET_INTEROP_DIR)" && \
+		git -C "$(PROFINET_INTEROP_DIR)" checkout --quiet "$(INTEROP_REF)"; \
+	fi
+	@$(MAKE) -C "$(PROFINET_INTEROP_DIR)" images
+
+test-interop: ## Run the interop suite against the profinet-interop images (needs Docker; make interop-images first)
+	@mkdir -p "$(PROFINET_INTEROP_RESULTS)"
+	PROFINET_INTEROP_RESULTS="$(abspath $(PROFINET_INTEROP_RESULTS))" \
+		go test -tags=interop -count=1 -timeout=40m -v ./interop/...
+
+interop: test-interop ## Alias for test-interop
+
+interop-matrix: ## Regenerate profinet-interop's matrix from the results of make test-interop
+	@$(MAKE) -C "$(PROFINET_INTEROP_DIR)" matrix RESULTS="$(abspath $(PROFINET_INTEROP_RESULTS))"
 
 cross: ## Build every package for the supported platforms
 	@for p in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64; do \

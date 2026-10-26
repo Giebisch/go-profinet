@@ -848,3 +848,66 @@ func BenchmarkLoopbackCall(b *testing.B) {
 		}
 	}
 }
+
+// TestClientActivity: calls on one Activity share its UUID and number their
+// sequence consecutively, wait for each other, and are independent of the
+// client's pool (p-net ties an AR to the activity of its Connect, so every
+// call of an AR uses one). An idempotent call is not acknowledged (p-net
+// does not process ACK packets).
+func TestClientActivity(t *testing.T) {
+	c, _, peer := clientEnv(t, ClientOptions{Activities: 1, Retransmit: time.Minute})
+	a := c.NewActivity()
+	if a.UUID().IsNil() {
+		t.Fatal("nil activity UUID")
+	}
+	do := func(ctx context.Context, call Call) chan result {
+		ch := make(chan result, 1)
+		go func() {
+			r, err := c.DoActivity(ctx, a, peer.LocalAddr(), call)
+			ch <- result{r, err}
+		}()
+		return ch
+	}
+	first := do(context.Background(), Call{Idempotent: true})
+	req, _, from := expect(t, peer, TypeRequest)
+	if req.Activity != a.UUID() || req.Flags1&FlagIdempotent == 0 {
+		t.Fatalf("request %+v", req)
+	}
+	// The activity is busy: a second call on it waits until its deadline,
+	// while the pool's activity serves another call.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.DoActivity(ctx, a, peer.LocalAddr(), Call{}); !errors.Is(err, profinet.ErrTimeout) {
+		t.Fatalf("busy activity: %v", err)
+	}
+	pool := doAsync(c, context.Background(), peer.LocalAddr(), Call{})
+	preq, _, pfrom := expect(t, peer, TypeRequest)
+	if preq.Activity == a.UUID() {
+		t.Fatal("pool call on the AR's activity")
+	}
+	peer.sendPkt(pfrom, respond(preq, TypeResponse), nil)
+	if r := wait(t, pool); r.err != nil {
+		t.Fatal(r.err)
+	}
+	expect(t, peer, TypeAck)
+
+	second := do(context.Background(), Call{Idempotent: true})
+	peer.sendPkt(from, respond(req, TypeResponse), nil)
+	if r := wait(t, first); r.err != nil {
+		t.Fatal(r.err)
+	}
+	req2, _, from := expect(t, peer, TypeRequest)
+	if req2.Activity != a.UUID() || req2.SeqNum != req.SeqNum+1 || req2.ServerBoot != 77 {
+		t.Fatalf("second request %+v (first %+v)", req2, req)
+	}
+	peer.sendPkt(from, respond(req2, TypeResponse), nil)
+	if r := wait(t, second); r.err != nil {
+		t.Fatal(r.err)
+	}
+	noPacket(t, peer)
+
+	c.Close()
+	if _, err := c.DoActivity(context.Background(), a, peer.LocalAddr(), Call{}); !errors.Is(err, profinet.ErrClosed) {
+		t.Fatalf("after close: %v", err)
+	}
+}

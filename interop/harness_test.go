@@ -151,6 +151,11 @@ func newEnv(t *testing.T) *env {
 				if out, err := docker(ctx, "logs", "--tail", "60", c); err == nil {
 					t.Logf("logs of %s:\n%s", c, out)
 				}
+				// The raw log of the implementation, for event patterns
+				// that did not match.
+				if out, err := docker(ctx, "exec", c, "sh", "-c", "tail -n 120 /run/profinet-interop/*.log 2>/dev/null"); err == nil && len(out) > 0 {
+					t.Logf("raw log of %s:\n%s", c, out)
+				}
 			}
 			docker(ctx, "rm", "-f", c)
 		}
@@ -279,6 +284,36 @@ func (e *env) waitEvent(container string, timeout time.Duration, what string, ma
 	return nil
 }
 
+// eventually reports whether a container logs an event that matches
+// within timeout: the implementation logs some events (Release) after the
+// operation that caused them has returned.
+func (e *env) eventually(container string, timeout time.Duration, match func(map[string]any) bool) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		for _, ev := range e.events(container) {
+			if match(ev) {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// named matches an event by name.
+func named(names ...string) func(map[string]any) bool {
+	return func(m map[string]any) bool {
+		for _, n := range names {
+			if m["event"] == n {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 func hasEvent(evs []map[string]any, name string) bool {
 	for _, ev := range evs {
 		if ev["event"] == name {
@@ -317,9 +352,19 @@ func (e *env) capture(container, file string) func() string {
 	}
 }
 
+// peerDeviation is an expert info of tshark that a documented deviation of
+// the peer causes in the frames it sends (see docs/INTEROPERABILITY.md of
+// profinet-interop). It is recorded as the peer's deviation, not as a
+// failure of go-profinet.
+type peerDeviation struct {
+	Protocol, Message string
+	Why               string
+}
+
 // oracles decodes a capture with scapy and tshark and fails on malformed,
-// undecoded or warned-about frames.
-func (e *env) oracles(file string) {
+// undecoded or warned-about frames, except for the expert infos of the
+// peer's documented deviations.
+func (e *env) oracles(file string, deviations ...peerDeviation) {
 	e.t.Helper()
 	sc := e.run("scapy", image("scapy"), 250, 2*time.Minute, "decode", "/share/"+file)
 	var s struct {
@@ -345,6 +390,25 @@ func (e *env) oracles(file string) {
 	if err := json.Unmarshal(lastLine(ts), &w); err != nil {
 		e.t.Fatalf("tshark output: %v: %s", err, ts)
 	}
+	var expert []any
+	seen := map[int]bool{}
+	for _, x := range w.Expert {
+		m, _ := x.(map[string]any)
+		matched := false
+		for i, d := range deviations {
+			if m != nil && m["protocol"] == d.Protocol && str(m["message"]) == d.Message {
+				matched = true
+				if !seen[i] {
+					seen[i] = true
+					e.result.deviation(fmt.Sprintf("tshark: %s %q", d.Protocol, d.Message), d.Why)
+				}
+			}
+		}
+		if !matched {
+			expert = append(expert, x)
+		}
+	}
+	w.Expert = expert
 	ok := len(w.Malformed) == 0 && len(w.Expert) == 0
 	e.result.add("tshark check "+file, ok, fmt.Sprintf("%d frames %v, %d malformed, %d warnings", w.Frames, w.ByProto, len(w.Malformed), len(w.Expert)))
 	if !ok {
@@ -380,7 +444,8 @@ type result struct {
 
 type check struct {
 	Feature string `json:"feature"`
-	// Outcome is pass, fail, or n/a (the peer does not implement it).
+	// Outcome is pass, fail, n/a (the peer does not implement it) or
+	// peer-deviation (the peer deviates from the standard; detail says how).
 	Outcome string `json:"outcome"`
 	Detail  string `json:"detail,omitempty"`
 }
@@ -397,6 +462,14 @@ func (r *result) add(feature string, ok bool, detail string) {
 	r.mu.Lock()
 	r.Checks = append(r.Checks, check{Feature: feature, Outcome: o, Detail: detail})
 	r.mu.Unlock()
+}
+
+// deviation records a deviation of the peer from the standard that the
+// test observed and attributed.
+func (r *result) deviation(feature, why string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Checks = append(r.Checks, check{Feature: feature, Outcome: "peer-deviation", Detail: why})
 }
 
 func (r *result) na(feature, why string) {

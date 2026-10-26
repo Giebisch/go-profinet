@@ -62,7 +62,7 @@ func TestPnetController(t *testing.T) {
 	for _, ev := range []string{"connect", "prmend", "appready-confirmed", "write", "read"} {
 		e.expect("p-net reports "+ev, hasEvent(evs, ev), "events %d", len(evs))
 	}
-	e.expect("Release ends the AR at p-net", hasEvent(evs, "release") || hasEvent(evs, "closed"), "")
+	e.expect("Release ends the AR at p-net", e.eventually(dev, 5*time.Second, named("release", "closed")), "")
 	e.oracles(stop())
 }
 
@@ -106,8 +106,7 @@ func TestPnetAlarms(t *testing.T) {
 	joined := strings.Join(types, ",")
 	e.expect("Process alarm received and acknowledged", strings.Contains(joined, "Process"), "alarms %v", types)
 	e.expect("Diagnosis alarm received and acknowledged", strings.Contains(joined, "Diagnosis"), "alarms %v", types)
-	evs := e.events(dev)
-	e.expect("p-net confirms the AlarmAck", hasEvent(evs, "alarm-ack-confirmed") || hasEvent(evs, "alarm-confirmed"), "")
+	e.expect("p-net confirms the AlarmAck", e.eventually(dev, 5*time.Second, named("alarm-ack-confirmed", "alarm-confirmed")), "")
 	e.expect("AR survives the alarms", r["state"] == "Running", "%v", r["state"])
 }
 
