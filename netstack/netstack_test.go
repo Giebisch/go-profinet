@@ -106,11 +106,13 @@ func TestReadDeadlineAndClose(t *testing.T) {
 	if err := <-done; !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err %v", err)
 	}
+	// The deadline of the previous read has passed: clear it before the
+	// next read starts, or that read times out at once.
+	_ = c.SetReadDeadline(time.Time{})
 	go func() {
 		_, _, err := c.ReadFrom(make([]byte, 10))
 		done <- err
 	}()
-	_ = c.SetReadDeadline(time.Time{})
 	_ = c.Close()
 	if err := <-done; !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("err %v", err)

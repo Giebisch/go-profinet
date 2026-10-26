@@ -128,6 +128,12 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 		if errors.Is(err, profinet.ErrTimeout) {
 			go d.abort(a, pnio.AbortAlarmSend, true)
 		}
+		// The AR ended (release, abort) while the transport waited for its
+		// acknowledgement: its endpoint was closed under it. Only a closed
+		// device is "closed".
+		if errors.Is(err, profinet.ErrClosed) && d.ctx.Err() == nil {
+			return fmt.Errorf("device: alarm to AR %s: %w: %w", a.uuid, profinet.ErrAborted, err)
+		}
 		return fmt.Errorf("device: alarm to AR %s: %w", a.uuid, err)
 	}
 	// The application acknowledgement comes as a DATA PDU of the
