@@ -50,6 +50,8 @@ jobs:
         env:
           GOWORK: "off"
           PROFINET_CHAOS_RUNS: "20"
+          # TestChaosMonkey: 400 random disruptions instead of 40.
+          PROFINET_MONKEY_STEPS: "400"
 
   stress:
     name: Stress (race, repeated)
