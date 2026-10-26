@@ -872,7 +872,12 @@ func TestResponderDelay(t *testing.T) {
 		t.Fatal("response over the pending bound")
 	}
 	r.pendingIdentify.Store(0)
-	// Closing with a delayed response pending drops it.
+	// Closing with a delayed response pending drops it. The response is
+	// held for 5 s, so that it is still pending when the test looks: with
+	// the MAC's own delay of a few milliseconds a slow runner could miss
+	// the pending response altogether. (The frame sent below orders this
+	// write before the responder reads the delay.)
+	r.delay = 5 * time.Second
 	raw.send(t, ethernet.DCPIdentifyMulticast, req)
 	waitFor(t, "pending", func() bool { return r.pendingIdentify.Load() == 1 })
 	_ = r.Close()
