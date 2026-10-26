@@ -83,6 +83,9 @@ type serverActivity struct {
 	resp     [][]byte
 	addr     net.Addr
 	lastSeen time.Time
+	// touched orders the activities by their last use for eviction; the
+	// clock cannot, as two uses can share a timestamp on Windows.
+	touched uint64
 }
 
 // ServerStats are the counters of a [Server].
@@ -103,6 +106,7 @@ type Server struct {
 	mu       sync.Mutex
 	handlers map[UUID]registration
 	acts     map[UUID]*serverActivity
+	clock    uint64 // the last value of serverActivity.touched
 
 	sem chan struct{}
 
@@ -257,7 +261,7 @@ func (s *Server) packet(addr net.Addr, h *Header, body []byte) {
 		var resp [][]byte
 		t := TypeNoCall
 		if a != nil && a.seq == h.SeqNum {
-			a.lastSeen = time.Now()
+			s.touch(a)
 			switch a.state {
 			case actExecuting:
 				t = TypeWorking
@@ -297,7 +301,7 @@ func (s *Server) request(addr net.Addr, h *Header, body []byte) {
 			s.mu.Unlock()
 			return // an old call
 		case h.SeqNum == a.seq:
-			a.lastSeen = time.Now()
+			s.touch(a)
 			switch a.state {
 			case actDone:
 				resp := a.resp
@@ -328,7 +332,7 @@ func (s *Server) request(addr net.Addr, h *Header, body []byte) {
 		s.acts[h.Activity] = a
 	}
 	a.addr = addr
-	a.lastSeen = time.Now()
+	s.touch(a)
 	if h.Flags1&FlagFrag != 0 && h.Flags1&FlagNoFack == 0 {
 		defer s.control(addr, h, TypeFack, fackBody(h.DRep, h.Serial))
 	}
@@ -390,17 +394,24 @@ func (s *Server) request(addr net.Addr, h *Header, body []byte) {
 	}()
 }
 
-// evictLocked removes the idle activity seen longest ago.
+// touch records a use of an activity; s.mu is held.
+func (s *Server) touch(a *serverActivity) {
+	a.lastSeen = time.Now()
+	s.clock++
+	a.touched = s.clock
+}
+
+// evictLocked removes the idle activity used longest ago.
 func (s *Server) evictLocked() bool {
 	var oldest UUID
-	var t time.Time
+	var t uint64
 	found := false
 	for id, a := range s.acts {
 		if a.state == actExecuting {
 			continue
 		}
-		if !found || a.lastSeen.Before(t) {
-			oldest, t, found = id, a.lastSeen, true
+		if !found || a.touched < t {
+			oldest, t, found = id, a.touched, true
 		}
 	}
 	if found {
@@ -415,7 +426,7 @@ func (s *Server) finish(h *Header, a *serverActivity, pkts [][]byte) {
 	if a.seq == h.SeqNum {
 		a.state = actDone
 		a.resp = pkts
-		a.lastSeen = time.Now()
+		s.touch(a)
 	}
 	s.mu.Unlock()
 	if s.ctx.Err() == nil {
