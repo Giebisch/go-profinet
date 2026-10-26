@@ -22,7 +22,7 @@ TEST_PKGS := $(shell go list ./... | grep -v '/examples')
 # Packages whose coverage counts, including what the e2e suite exercises.
 # The raw-socket backends (l2/afpacket, l2/bpf, l2/npcap) need privileges
 # and a platform: make l2-test and the L2 workflow measure them.
-COVER_PKGS := $(shell go list ./... | grep -v '/examples' | grep -v '/internal/cmd' | grep -v '/e2e' | grep -v '/l2/afpacket' | grep -v '/l2/bpf' | grep -v '/l2/npcap' | paste -sd, -)
+COVER_PKGS := $(shell go list ./... | grep -v '/examples' | grep -v '/internal/cmd' | grep -v '/interop' | grep -v '/e2e' | grep -v '/l2/afpacket' | grep -v '/l2/bpf' | grep -v '/l2/npcap' | paste -sd, -)
 # The minimum total statement coverage (make coverage-check, CI).
 COVER_MIN := 90
 
