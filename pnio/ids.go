@@ -282,6 +282,7 @@ const (
 	IndexDiagAllSubslot       Index = 0x800B
 	IndexDiagDMQSSubslot      Index = 0x800C
 	IndexRecordInputData      Index = 0x8028
+	IndexPDPortDataReal       Index = 0x802A
 	IndexRecordOutputData     Index = 0x8029
 	IndexIM0                  Index = 0xAFF0
 	IndexIM1                  Index = 0xAFF1

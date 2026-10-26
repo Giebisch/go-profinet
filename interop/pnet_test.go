@@ -5,10 +5,13 @@
 package interop
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-profinet/pnio"
 )
 
 // pnet starts the p-net device.
@@ -28,7 +31,7 @@ func TestPnetController(t *testing.T) {
 	stop := e.capture(dev, "pnet-controller.pcap")
 	out := e.otf("ctrl", 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", "/otfnode-testdata/pnet-model.json",
 		"-im0", "-param", "1:1:123:01020304", "-read", "1:1:123", "-write", "2:1:125:00000002", "-read", "2:1:125",
-		"-read", "0:1:0xF000", "-read", "1:1:0x7777", "-write", "1:1:0x7777:00", "-diag",
+		"-read", "0:1:0xF000", "-read", "0:0x8001:0x802A", "-read", "0:1:0xF841", "-read", "1:1:0x7777", "-write", "1:1:0x7777:00", "-diag",
 		"-output", "1:1:0:5a", "-output", "2:1:0:1122334455667788", "-duration", "4s")
 	r := report(t, out)
 	e.expect("DCP Identify by name, Connect, PrmEnd, ApplicationReady (RT_CLASS_1 legacy)", r["running"] == true, "running=%v error=%v", r["running"], r["error"])
@@ -47,6 +50,13 @@ func TestPnetController(t *testing.T) {
 	e.expect("Write record in Data, read back", byKey["write 2/1/125"]["error"] == nil && byKey["read 2/1/125"]["data"] == "00000002", "%v %v", byKey["write 2/1/125"], byKey["read 2/1/125"])
 	real := str(byKey["read 0/1/61440"]["data"])
 	e.expect("RealIdentificationData (0xF000)", strings.HasPrefix(real, "0013") && strings.Contains(real, "00000032") && strings.Contains(real, "00000040"), "%s", real)
+	pd, _ := hex.DecodeString(str(byKey["read 0/32769/32810"]["data"]))
+	blk, _, err := pnio.ReadBlock(pd)
+	port, perr := pnio.DecodePDPortDataReal(blk)
+	e.expect("PDPortDataReal (0x802A) decoded", err == nil && perr == nil && port.Subslot == 0x8001 && strings.HasPrefix(port.OwnPortID, "port-001"), "%+v %v %v %v", port, err, perr, byKey["read 0/32769/32810"])
+	rd, _ := hex.DecodeString(str(byKey["read 0/1/63553"]["data"]))
+	ports, err := pnio.DecodePDRealData(rd)
+	e.expect("PDRealData (0xF841) decoded", err == nil && len(ports) >= 1 && ports[0].Subslot == 0x8001, "%+v %v %v", ports, err, byKey["read 0/1/63553"])
 	e.expect("Read of an unknown index answers a PNIORW read error", strings.HasPrefix(str(byKey["read 1/1/30583"]["status"]), "DE 80"), "%v", byKey["read 1/1/30583"])
 	e.expect("Write of an invalid index is rejected with a PNIO status", strings.HasPrefix(str(byKey["write 1/1/30583"]["status"]), "DF 80"), "%v", byKey["write 1/1/30583"])
 	e.expect("Read diagnosis (0xF80C)", r["diagnosisError"] == nil, "%v", r["diagnosisError"])

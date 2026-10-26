@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-profinet"
+	"github.com/otfabric/go-profinet/device"
 	"github.com/otfabric/go-profinet/pnio"
 	"github.com/otfabric/go-profinet/rpc"
 )
@@ -222,5 +223,51 @@ func TestRecordClientMalformed(t *testing.T) {
 	}
 	if _, err := dead.Connect(cctx, &pnio.ConnectRequest{}); err == nil {
 		t.Fatal("connect to nowhere")
+	}
+}
+
+// TestSupervisorAR: a device access AR reads and writes records without an
+// IOCAR, and is released once.
+func TestSupervisorAR(t *testing.T) {
+	n := newNet(t)
+	c, cn := n.controller()
+	dev, _ := n.device(devIP)
+	rc := NewRecordClient(c.RPC(), devAddr(), dev.ObjectUUID())
+	ctx := context.Background()
+	if _, err := rc.OpenSupervisor(ctx, SupervisorConfig{InitiatorMAC: cn.mux.HardwareAddr()}); !errors.Is(err, profinet.ErrInvalidConfig) {
+		t.Fatalf("without object: %v", err)
+	}
+	s, err := rc.OpenSupervisor(ctx, SupervisorConfig{InitiatorMAC: cn.mux.HardwareAddr(), InitiatorObject: c.ObjectUUID()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.UUID().IsNil() || s.SessionKey() == 0 {
+		t.Fatalf("AR %s key %d", s.UUID(), s.SessionKey())
+	}
+	if ars := dev.ARs(); len(ars) != 1 || ars[0].Type != pnio.ARTypeIOSAR || ars[0].ControllerName != "go-profinet-supervisor" {
+		t.Fatalf("device ARs %+v", ars)
+	}
+	rec := Record{Slot: 2, Subslot: 1, Index: 0x10}
+	if err := s.Write(ctx, rec, []byte{0, 7}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := s.Read(ctx, rec, 0); err != nil || !bytes.Equal(b, []byte{0, 7}) {
+		t.Fatalf("%x %v", b, err)
+	}
+	if sts, err := s.WriteMultiple(ctx, []WriteItem{{Record: rec, Data: []byte{0, 8}}}); err != nil || len(sts) != 1 || !sts[0].OK() {
+		t.Fatalf("write multiple %v %v", sts, err)
+	}
+	if err := s.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Release(ctx); err != nil {
+		t.Fatalf("second release: %v", err)
+	}
+	eventually(t, 2*time.Second, "AR closed", func() bool { return len(dev.ARs()) == 0 })
+	// A device that refuses device access.
+	dev2, _ := n.device("192.168.0.13", func(cfg *device.Config) { cfg.RejectSupervisorAR = true; cfg.StationName = "dut2" })
+	rc2 := NewRecordClient(c.RPC(), &net.UDPAddr{IP: net.ParseIP("192.168.0.13").To4(), Port: rpc.Port}, dev2.ObjectUUID())
+	if _, err := rc2.OpenSupervisor(ctx, SupervisorConfig{InitiatorMAC: cn.mux.HardwareAddr(), InitiatorObject: c.ObjectUUID(), StationName: "tool", ActivityTimeout: time.Second}); !errors.As(err, new(*pnio.StatusError)) {
+		t.Fatalf("refused: %v", err)
 	}
 }

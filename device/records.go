@@ -5,6 +5,7 @@ package device
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sort"
 	"time"
 
@@ -87,6 +88,15 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 		return d.diagnosis(q), nil
 	case pnio.IndexRecordInputData:
 		return d.recordInput(a, q)
+	case pnio.IndexPDPortDataReal:
+		for _, p := range d.portData() {
+			if p.Slot == q.Slot && p.Subslot == q.Subslot {
+				return p.Append(nil), nil
+			}
+		}
+		return nil, errInvalidIndex
+	case pnio.IndexPDRealData:
+		return pnio.AppendPDRealData(nil, model.API, d.portData()), nil
 	case pnio.IndexLogBook:
 		// LogBookData with the local time and no entries.
 		b := []byte{0x00, 0x19, 0, 0, 1, 0}
@@ -227,6 +237,36 @@ func filterIdent(id pnio.IdentificationData, slot, subslot uint16, bySlot, bySub
 			na.Slots = append(na.Slots, ns)
 		}
 		out.APIs = append(out.APIs, na)
+	}
+	return out
+}
+
+// portData returns the PDPortDataReal of the DAP's ports. The device has
+// one Ethernet port: the neighbors its LLDP agent knows are the peers of
+// the first port; the other ports have none.
+func (d *Device) portData() []pnio.PDPortDataReal {
+	var out []pnio.PDPortDataReal
+	for _, sm := range d.model.DAP.Submodules {
+		if sm.Subslot < model.SubslotPort1 || sm.Subslot >= model.SubslotPort1+0xFF {
+			continue
+		}
+		n := sm.Subslot - model.SubslotPort1 + 1
+		p := pnio.PDPortDataReal{Slot: 0, Subslot: sm.Subslot, OwnPortID: fmt.Sprintf("port-%03d", n),
+			LinkState: pnio.LinkStateDown, MediaType: 1}
+		if n == 1 {
+			p.LinkState = pnio.LinkStateUp
+			p.MAUType = 0x0010 // 100BASE-TX full duplex
+			if d.lldpA != nil {
+				for _, nb := range d.lldpA.Neighbors() {
+					peer := pnio.PDPortPeer{PortID: nb.Frame.PortString(), ChassisID: nb.Frame.ChassisString(), MAC: nb.MAC}
+					if nb.Frame.Delay != nil {
+						peer.LineDelay = nb.Frame.Delay.Cable
+					}
+					p.Peers = append(p.Peers, peer)
+				}
+			}
+		}
+		out = append(out, p)
 	}
 	return out
 }

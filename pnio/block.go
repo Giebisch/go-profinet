@@ -59,6 +59,10 @@ const (
 	BlockPrmBeginReq      BlockType = 0x0118
 	BlockSubmoduleListReq BlockType = 0x0119
 
+	BlockPDPortDataReal      BlockType = 0x020F
+	BlockPDInterfaceDataReal BlockType = 0x0240
+	BlockMultipleBlockHeader BlockType = 0x0400
+
 	BlockAlarmAckHigh  BlockType = 0x8001
 	BlockAlarmAckLow   BlockType = 0x8002
 	BlockWriteRes      BlockType = 0x8008
@@ -97,6 +101,12 @@ func (t BlockType) String() string {
 		return "RealIdentificationData"
 	case BlockExpectedIdentData:
 		return "ExpectedIdentificationData"
+	case BlockPDPortDataReal:
+		return "PDPortDataReal"
+	case BlockPDInterfaceDataReal:
+		return "PDInterfaceDataReal"
+	case BlockMultipleBlockHeader:
+		return "MultipleBlockHeader"
 	case BlockIM0:
 		return "I&M0"
 	case BlockIM1:

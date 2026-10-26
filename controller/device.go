@@ -189,6 +189,10 @@ type arState struct {
 	outFrameID uint16
 	inLayout   rt.Layout
 	outLayout  rt.Layout
+	class      pnio.RTClass
+	localRef   uint16
+	remoteRef  uint16
+	addr       net.Addr
 	proper     map[subKey]bool
 	provider   *rt.Provider
 	consumer   *rt.Consumer
@@ -666,10 +670,13 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 		inFrameID:  inID,
 		inLayout:   inL,
 		outLayout:  outL,
+		class:      cls,
+		localRef:   localRef,
 		appReady:   make(chan struct{}),
 		failed:     make(chan error, 1),
 	}
 	addr := &net.UDPAddr{IP: id.IP.Addr.AsSlice(), Port: rpc.Port}
+	a.addr = addr
 	a.records = NewRecordClient(d.c.rpcCli, addr, pnio.ObjectUUID(max(id.Instance, 1), id.DeviceID, id.VendorID))
 	tag := uint16(6) << 13
 	iocr := func(t pnio.IOCRType, frameID uint16, l rt.Layout, ref uint16) pnio.IOCRBlockReq {
@@ -726,6 +733,7 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 		return nil, fmt.Errorf("controller: connect %s: %w: no output FrameID", cfg.StationName, profinet.ErrMalformed)
 	}
 	d.connects.Add(1)
+	a.remoteRef = resp.AlarmCR.LocalAlarmReference
 	a.proper = d.properSubmodules(resp.ModuleDiff)
 	d.mu.Lock()
 	d.ar = a

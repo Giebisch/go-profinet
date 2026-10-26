@@ -576,8 +576,17 @@ func TestRunningDevice(t *testing.T) {
 			}
 		}
 	}
-	if ars := dev.ARs(); len(ars) != 1 || ars[0].UUID != cd.ARUUID() || ars[0].InputFrameID < pnio.FrameIDRTC1Min {
+	ars := dev.ARs()
+	if len(ars) != 1 || ars[0].UUID != cd.ARUUID() || ars[0].InputFrameID < pnio.FrameIDRTC1Min {
 		t.Fatalf("device ARs %+v", ars)
+	}
+	// What Connect negotiated, as the device sees it.
+	info, ok := cd.AR()
+	if !ok || info.UUID != cd.ARUUID() || info.Type != pnio.ARTypeIOCARSingle || info.RTClass != pnio.RTClass1 || info.Advanced ||
+		info.Input.FrameID != ars[0].InputFrameID || info.Output.FrameID != ars[0].OutputFrameID || info.Input.Type != pnio.IOCRInput ||
+		info.Input.DataLength < 40 || info.Input.Cycle != 4*time.Millisecond || info.Output.DataHoldFactor != 100 ||
+		info.LocalAlarmRef == 0 || info.DeviceAddr != devAddr().String() || len(info.Input.Objects) == 0 || len(info.Output.IOCS) == 0 {
+		t.Fatalf("AR info %+v (device %+v)", info, ars[0])
 	}
 	// The parameter was written.
 	if b, err := cd.ReadRecord(ctx, Record{Slot: 2, Subslot: 1, Index: 0x10}, 0); err != nil || !bytes.Equal(b, []byte{0, 2}) {

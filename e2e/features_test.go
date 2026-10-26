@@ -464,3 +464,52 @@ func TestResetToFactory(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestTopology: two devices learn each other with LLDP and report it in
+// PDPortDataReal (0x802A) and PDRealData (0xF841), which a tool reads
+// implicitly to draw the topology.
+func TestTopology(t *testing.T) {
+	e := newEnv(t, 11)
+	m := testModel()
+	devA, _ := e.device("dev-a", "192.168.0.10", m, nil)
+	_, dnB := e.device("dev-b", "192.168.0.11", testModel(), nil)
+	cn := e.node("192.168.0.2")
+	conn, _ := cn.stack.ListenUDP(0)
+	cli := rpc.NewClient(conn, true, rpc.ClientOptions{})
+	defer cli.Close()
+	rc := controller.NewRecordClient(cli, &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10), Port: rpc.Port}, devA.ObjectUUID())
+	ctx := context.Background()
+	var ports []pnio.PDPortDataReal
+	eventually(t, 5*time.Second, "dev-a sees dev-b", func() bool {
+		b, err := rc.Read(ctx, rpc.NilUUID, controller.Record{Slot: 0, Subslot: 0xFFFF, Index: pnio.IndexPDRealData}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ports, err = pnio.DecodePDRealData(b); err != nil {
+			t.Fatal(err)
+		}
+		return len(ports) == 1 && len(ports[0].Peers) == 1
+	})
+	p := ports[0]
+	peer := p.Peers[0]
+	if p.Subslot != 0x8001 || p.OwnPortID != "port-001" || p.LinkState != pnio.LinkStateUp || peer.ChassisID != "dev-b" || peer.PortID != "port-001.dev-b" || peer.MAC != dnB.mux.HardwareAddr() {
+		t.Fatalf("port %+v (dev-b is %s)", p, dnB.mux.HardwareAddr())
+	}
+	b, err := rc.Read(ctx, rpc.NilUUID, controller.Record{Slot: 0, Subslot: 0x8001, Index: pnio.IndexPDPortDataReal}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blk, _, err := pnio.ReadBlock(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := pnio.DecodePDPortDataReal(blk); err != nil || got.Peers[0].ChassisID != "dev-b" {
+		t.Fatalf("0x802A %+v %v", got, err)
+	}
+	// Only a port subslot has port data.
+	_, err = rc.Read(ctx, rpc.NilUUID, controller.Record{Slot: 0, Subslot: 1, Index: pnio.IndexPDPortDataReal}, 0)
+	var se *pnio.StatusError
+	if !errors.As(err, &se) || se.Status.Code1 != pnio.RWInvalidIndex {
+		t.Fatalf("0x802A of the DAP: %v", err)
+	}
+}

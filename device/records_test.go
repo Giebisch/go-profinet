@@ -222,7 +222,7 @@ func TestRecords(t *testing.T) {
 	_, err = read(3, 1, 0x7777)
 	rwCode(err, pnio.RWInvalidIndex, 0)
 	// An unknown index of the device range goes to the handler too.
-	_, err = read(0, 0, pnio.IndexPDRealData)
+	_, err = read(0, 0, pnio.IndexPDExpectedData)
 	rwCode(err, pnio.RWInvalidIndex, 0)
 	if err := write(3, 1, 0x7000, []byte("x")); err != nil {
 		t.Fatal(err)
