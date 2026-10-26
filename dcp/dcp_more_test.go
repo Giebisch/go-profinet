@@ -568,7 +568,7 @@ func TestClientRetriesDefaults(t *testing.T) {
 		t.Fatalf("opts %+v", c.opts)
 	}
 	_, c2, _ := newClientEnv(t, ClientOptions{Timeout: -1})
-	if c2.opts.Retries != 2 || c2.opts.Timeout != time.Second {
+	if c2.opts.Retries != 3 || c2.opts.Timeout != time.Second {
 		t.Fatalf("opts %+v", c2.opts)
 	}
 	// The context ends a transaction waiting for its response.
@@ -1004,5 +1004,11 @@ func BenchmarkAppendTo(b *testing.B) {
 		if buf, err = f.AppendTo(buf[:0]); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestIPSuiteStringZero(t *testing.T) {
+	if got := (IPSuite{}).String(); got != "0.0.0.0/0.0.0.0 gw 0.0.0.0" {
+		t.Fatal(got)
 	}
 }

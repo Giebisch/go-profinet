@@ -58,8 +58,10 @@ const (
 	FlagTACK   uint8 = 0x10
 )
 
-// Initial sequence numbers: the first DATA PDU has sequence number 0, and
-// the acknowledgement of "nothing received yet" is 0xFFFE.
+// Initial sequence numbers. The first DATA PDU of an endpoint carries
+// 0xFFFF, the following ones 0, 1, 2, ... wrapping at 0x7FFF (p-net,
+// pnio-rs and profinet-py all number them so); "nothing sent" and
+// "nothing received yet" are 0xFFFE.
 const (
 	InitialSendSeq uint16 = 0xFFFF
 	InitialAckSeq  uint16 = 0xFFFE

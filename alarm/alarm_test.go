@@ -235,7 +235,9 @@ func TestSendAndAck(t *testing.T) {
 	ea.mu.Lock()
 	seq, last := ea.sendSeq, ea.lastRecv
 	ea.mu.Unlock()
-	if seq != 2 || last != 0 {
+	// Three DATA PDUs were sent as 0xFFFF, 0 and 1; one was received, the
+	// peer's first, 0xFFFF.
+	if seq != 1 || last != InitialSendSeq {
 		t.Fatalf("a: sendSeq %d lastRecv %d", seq, last)
 	}
 }
@@ -310,8 +312,9 @@ func TestOutOfSequence(t *testing.T) {
 	if err := ea.Send(ctx, []byte("y")); err != nil {
 		t.Fatal(err)
 	}
-	// A duplicate without TACK is not acknowledged.
-	data.SendSeq = 0
+	// A duplicate (of the first DATA, 0xFFFF) without TACK is not
+	// acknowledged.
+	data.SendSeq = InitialSendSeq
 	acks := ea.Stats().Acks
 	if err := a.mux.Send(ctx, data.AppendEthernet(nil, eb.mgr.mux.HardwareAddr(), a.mac)); err != nil {
 		t.Fatal(err)
@@ -458,10 +461,44 @@ func TestNoCallbacks(t *testing.T) {
 	}
 }
 
+// TestFirstSequence: the first DATA PDU of an endpoint carries 0xFFFF, the
+// next 0, as p-net, pnio-rs and profinet-py number them, and the first
+// DATA a receiver accepts is 0xFFFF.
+func TestFirstSequence(t *testing.T) {
+	a, _, ea, eb := pair(t, time.Second, 3)
+	var seqs []uint16
+	var mu sync.Mutex
+	// Match is consulted only while a fault is set; it records and
+	// applies none.
+	a.ep.SetFaults(vnet.Faults{Delay: time.Nanosecond, Match: func(f []byte) bool {
+		if fr, err := ethernet.Decode(f); err == nil {
+			if p, err := Decode(fr.Payload); err == nil && p.Type == PDUData {
+				mu.Lock()
+				seqs = append(seqs, p.SendSeq)
+				mu.Unlock()
+			}
+		}
+		return false
+	}})
+	for i := 0; i < 2; i++ {
+		if err := ea.Send(context.Background(), []byte{byte(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seqs) != 2 || seqs[0] != 0xFFFF || seqs[1] != 0 {
+		t.Fatalf("sequence numbers %v", seqs)
+	}
+	if eb.Stats().Received != 2 || eb.Stats().OutOfSequence != 0 {
+		t.Fatalf("b %+v", eb.Stats())
+	}
+}
+
 func TestSequenceWrap(t *testing.T) {
 	_, b, ea, eb := pair(t, time.Second, 3)
 	ea.mu.Lock()
-	ea.sendSeq = 0x7FFD
+	ea.nextSend, ea.sendSeq = 0x7FFE, 0x7FFD
 	ea.mu.Unlock()
 	eb.mu.Lock()
 	eb.expect, eb.lastRecv = 0x7FFE, 0x7FFD

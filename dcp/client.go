@@ -43,8 +43,9 @@ type ClientOptions struct {
 	// transmission. Zero means 1 s.
 	Timeout time.Duration
 	// Retries is how often Get and Set are retransmitted (with the same
-	// transaction ID) when no response arrives. Zero means 2; a negative
-	// value disables retransmission.
+	// transaction ID) when no response arrives. Zero means 3, which
+	// outlasts the 3 s a device such as p-net ignores a requester while it
+	// serves another; a negative value disables retransmission.
 	Retries int
 	// Logger receives diagnostics. nil logs nothing.
 	Logger profinet.Logger
@@ -82,7 +83,7 @@ func NewClient(mux *l2.Mux, opts ClientOptions) (*Client, error) {
 		opts.Timeout = time.Second
 	}
 	if opts.Retries == 0 {
-		opts.Retries = 2
+		opts.Retries = 3
 	} else if opts.Retries < 0 {
 		opts.Retries = 0
 	}
@@ -419,9 +420,11 @@ func (c *Client) Get(ctx context.Context, dst ethernet.MAC, ids ...BlockID) ([]B
 	return out, first
 }
 
-// GetIdentity reads the identity blocks of one device.
+// GetIdentity reads the identity blocks of one device. It asks for the
+// blocks by name, not with the AllSelector, which devices such as p-net do
+// not answer for Get.
 func (c *Client) GetIdentity(ctx context.Context, dst ethernet.MAC) (Identity, error) {
-	bs, err := c.Get(ctx, dst, AllSelector)
+	bs, err := c.Get(ctx, dst, DeviceName, IPParameter, DeviceVendor, DeviceID, DeviceRole, DeviceInst)
 	if err != nil && len(bs) == 0 {
 		return Identity{}, err
 	}

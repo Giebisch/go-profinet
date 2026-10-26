@@ -462,7 +462,7 @@ func TestAlarmAckFailure(t *testing.T) {
 	// acknowledges the controller's AlarmAck.
 	note := pnio.AlarmNotification{Type: pnio.AlarmProcess, Slot: 1, Subslot: 1, ModuleIdentNumber: 0x10, SubmoduleIdentNumber: 0x11}
 	p := alarm.PDU{FrameID: pnio.FrameIDAlarmLow, Dst: req.AlarmCR.LocalAlarmReference, Src: 0x77, Type: alarm.PDUData, Version: alarm.Version,
-		AddFlags: alarm.WindowSize | alarm.FlagTACK, SendSeq: 0, AckSeq: alarm.InitialAckSeq, VarPart: note.Append(nil)}
+		AddFlags: alarm.WindowSize | alarm.FlagTACK, SendSeq: alarm.InitialSendSeq, AckSeq: alarm.InitialAckSeq, VarPart: note.Append(nil)}
 	if err := f.mux.Send(context.Background(), p.AppendEthernet(nil, cn.mux.HardwareAddr(), f.mux.HardwareAddr())); err != nil {
 		t.Fatal(err)
 	}

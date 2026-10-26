@@ -54,7 +54,8 @@ type Endpoint struct {
 	sendMu sync.Mutex // one Send at a time
 
 	mu       sync.Mutex
-	sendSeq  uint16
+	nextSend uint16 // the sequence number of the next DATA PDU
+	sendSeq  uint16 // the last DATA PDU sent, InitialAckSeq before any
 	lastRecv uint16
 	expect   uint16
 	waitSeq  int32 // the sequence number awaiting its ACK, -1 when none
@@ -80,9 +81,10 @@ func newEndpoint(m *Manager, cfg EndpointConfig) *Endpoint {
 		cfg:      cfg,
 		frameID:  pnio.FrameIDAlarmLow,
 		mgr:      m,
-		sendSeq:  InitialSendSeq,
+		nextSend: InitialSendSeq,
+		sendSeq:  InitialAckSeq,
 		lastRecv: InitialAckSeq,
-		expect:   nextSeq(InitialSendSeq),
+		expect:   InitialSendSeq,
 		waitSeq:  -1,
 		deliver:  make(chan []byte, 32),
 		done:     make(chan struct{}),
@@ -142,7 +144,8 @@ func (e *Endpoint) Send(ctx context.Context, varPart []byte) error {
 	default:
 	}
 	e.mu.Lock()
-	seq := nextSeq(e.sendSeq)
+	seq := e.nextSend
+	e.nextSend = nextSeq(seq)
 	e.sendSeq = seq
 	e.waitSeq = int32(seq)
 	acked := make(chan struct{})

@@ -428,9 +428,16 @@ type IPSuite struct {
 	Addr, Mask, Gateway netip.Addr
 }
 
-// String formats the suite as "addr/mask gw gateway".
+// String formats the suite as "addr/mask gw gateway"; unset addresses
+// print as 0.0.0.0.
 func (s IPSuite) String() string {
-	return fmt.Sprintf("%s/%s gw %s", s.Addr, s.Mask, s.Gateway)
+	a := func(x netip.Addr) string {
+		if !x.IsValid() {
+			return "0.0.0.0"
+		}
+		return x.String()
+	}
+	return fmt.Sprintf("%s/%s gw %s", a(s.Addr), a(s.Mask), a(s.Gateway))
 }
 
 // IsZero reports whether no address is set.
