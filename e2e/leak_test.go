@@ -104,6 +104,11 @@ func session(t *testing.T, seed uint64) {
 	if _, err := cd.ReadIM0(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// The device enters Data just after the controller is Running.
+	eventually(t, 5*time.Second, "AR in Data at the device", func() bool {
+		ars := dev.ARs()
+		return len(ars) == 1 && ars[0].State == device.ARStateData
+	})
 	if err := dev.AddDiagnosis(ctx, 1, 1, pnio.DiagnosisItem{ChannelNumber: 1, ErrorType: pnio.ChannelErrLineBreak}); err != nil {
 		t.Fatal(err)
 	}
