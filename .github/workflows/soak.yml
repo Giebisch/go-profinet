@@ -1,0 +1,213 @@
+name: Soak
+run-name: "Soak (${{ inputs.runs || '25' }} runs) on ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Before a release: every CI test job and the interop suite, each run RUNS
+# times in parallel, to flush out races and flaky tests. Run N gets chaos
+# seed 1000+N, so the chaos tests explore RUNS different fault sequences;
+# a failure names its run, and PROFINET_CHAOS_SEED=<1000+N> reproduces it.
+# Started by hand, or by a push to a soak/ branch (with the defaults): a
+# soak occupies many runners.
+
+on:
+  push:
+    branches: ["soak/**"]
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Parallel runs of every job"
+        required: false
+        default: "25"
+      interop_ref:
+        description: "profinet-interop ref to build the images from (default: the Makefile's INTEROP_REF)"
+        required: false
+        default: ""
+      platforms:
+        description: "Run the native platform tests (macOS, Windows, ARM) too"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  GOWORK: "off"
+
+jobs:
+  runs:
+    name: Runs
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - id: list
+        env:
+          RUNS: ${{ inputs.runs || '25' }}
+        run: |
+          case "$RUNS" in ''|*[!0-9]*) echo "::error::runs must be a number"; exit 1 ;; esac
+          [ "$RUNS" -ge 1 ] && [ "$RUNS" -le 50 ] || { echo "::error::runs must be 1..50"; exit 1; }
+          echo "list=$(seq -s, 1 "$RUNS" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
+
+  # The shared go-ci jobs: tests with and without the race detector, with
+  # its 120 s timeout, on the oldest and the newest Go.
+  unit:
+    name: Unit ${{ matrix.race && 'race ' || '' }}Go ${{ matrix.go }} (run ${{ matrix.run }})
+    needs: runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+        go: ["1.23", "1.26"]
+        race: [false, true]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Tests
+        env:
+          RACE: ${{ matrix.race && '-race' || '' }}
+        run: |
+          # The flag and the package list are split into words on purpose.
+          # shellcheck disable=SC2086,SC2046
+          PROFINET_CHAOS_SEED=$((1000 + ${{ matrix.run }})) go test -count=1 -timeout=120s $RACE $(go list ./... | grep -Ev '(/example(s)?($|/)|/cmd($|/)|/e2e$)')
+
+  coverage:
+    name: Coverage ≥ 90% (run ${{ matrix.run }})
+    needs: runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: PROFINET_CHAOS_SEED=$((1000 + ${{ matrix.run }})) make coverage-check
+
+  e2e:
+    name: End to end and chaos (race, run ${{ matrix.run }})
+    needs: runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: PROFINET_CHAOS_SEED=$((1000 + ${{ matrix.run }})) go test -race -count=1 -timeout=20m ./e2e
+
+  platforms:
+    name: Tests on ${{ matrix.os }} (run ${{ matrix.run }})
+    needs: runs
+    if: github.event_name == 'push' || inputs.platforms
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+        os: [ubuntu-24.04-arm, macos-15-intel, macos-latest, windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: PROFINET_CHAOS_SEED=$((1000 + RUN)) go test -count=1 ./...
+        shell: bash
+        env:
+          PROFINET_CHAOS_RUNS: "1"
+          RUN: ${{ matrix.run }}
+
+  l2-linux:
+    name: Real Layer 2 (Linux AF_PACKET, run ${{ matrix.run }})
+    needs: runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - name: veth pair
+        run: |
+          sudo ip link add pnA type veth peer name pnB
+          sudo ip link set pnA up
+          sudo ip link set pnB up
+          sudo sysctl -qw net.ipv6.conf.pnA.disable_ipv6=1 net.ipv6.conf.pnB.disable_ipv6=1
+      - name: Tests as root
+        run: |
+          go test -c -race -o afpacket.test ./l2/afpacket
+          go test -c -race -o e2e.test ./e2e
+          sudo PROFINET_L2_IFACE_A=pnA PROFINET_L2_IFACE_B=pnB ./afpacket.test -test.count=1
+          sudo PROFINET_L2_IFACE_A=pnA PROFINET_L2_IFACE_B=pnB ./e2e.test -test.count=1 -test.run TestRealL2
+
+  l2-macos:
+    name: Real Layer 2 (macOS BPF, run ${{ matrix.run }})
+    needs: runs
+    if: github.event_name == 'push' || inputs.platforms
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - name: feth pair
+        run: |
+          sudo ifconfig feth0 create
+          sudo ifconfig feth1 create
+          sudo ifconfig feth0 peer feth1
+          sudo ifconfig feth0 up
+          sudo ifconfig feth1 up
+      - name: Tests as root
+        run: |
+          go test -c -race -o bpf.test ./l2/bpf
+          go test -c -race -o e2e.test ./e2e
+          sudo PROFINET_L2_IFACE_A=feth0 PROFINET_L2_IFACE_B=feth1 ./bpf.test -test.count=1
+          sudo PROFINET_L2_IFACE_A=feth0 PROFINET_L2_IFACE_B=feth1 ./e2e.test -test.count=1 -test.run TestRealL2
+
+  # The interop suite against the reference implementations; every run
+  # builds the images itself (the GPL ones are never published).
+  interop:
+    name: Interop (run ${{ matrix.run }})
+    needs: runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.runs.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - name: Build the reference images
+        env:
+          REF: ${{ inputs.interop_ref || '' }}
+        run: make interop-images PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop" ${REF:+INTEROP_REF=$REF}
+      - name: Interop tests
+        run: make test-interop
+      - name: Upload results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: interop-results-run-${{ matrix.run }}
+          path: interop-results/

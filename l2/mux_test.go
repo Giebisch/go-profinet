@@ -179,7 +179,7 @@ func TestDispatch(t *testing.T) {
 	s.send(t, ethernet.EtherTypeProfinet, 0x80, 0x00, 2)
 	s.send(t, ethernet.EtherTypeARP, 3)
 	s.send(t, 0x0005, 4) // 802.3 length: malformed
-	waitFor(t, "4 frames", func() bool { return s.mux.Stats().Received == 4 })
+	waitFor(t, "4 frames", func() bool { return s.mux.handled.Load() == 4 })
 
 	if f := recv(t, a); f.EtherType != etTest || f.Payload[0] != 1 || f.Src != mac(1) {
 		t.Fatalf("a got %+v", f)
@@ -226,7 +226,7 @@ func TestOverflow(t *testing.T) {
 	for i := byte(0); i < 5; i++ {
 		s.send(t, etTest, i)
 	}
-	waitFor(t, "5 frames", func() bool { return s.mux.Stats().Received == 5 })
+	waitFor(t, "5 frames", func() bool { return s.mux.handled.Load() == 5 })
 	if sub.Overflow() != 3 || other.Overflow() != 0 || s.mux.Stats().Overflow != 3 {
 		t.Fatalf("overflow %d/%d/%d", sub.Overflow(), other.Overflow(), s.mux.Stats().Overflow)
 	}
@@ -253,7 +253,7 @@ func TestOverflow(t *testing.T) {
 	held := f.Payload[0]
 	s.send(t, etTest, 12)
 	s.send(t, etTest, 13)
-	waitFor(t, "frames 12 and 13", func() bool { return s.mux.Stats().Received == 9 })
+	waitFor(t, "frames 12 and 13", func() bool { return s.mux.handled.Load() == 9 })
 	if f.Payload[0] != held || held != 11 {
 		t.Fatalf("buffer of the current frame reused: %d", f.Payload[0])
 	}
@@ -307,7 +307,7 @@ func TestSubscriptionClose(t *testing.T) {
 	sub, _ := s.mux.Subscribe(MatchEtherType(etTest), 4)
 	s.send(t, etTest, 1)
 	s.send(t, etTest, 2)
-	waitFor(t, "2 frames", func() bool { return s.mux.Stats().Received == 2 })
+	waitFor(t, "2 frames", func() bool { return s.mux.handled.Load() == 2 })
 	sub.Close()
 	sub.Close()
 	select {
@@ -337,7 +337,7 @@ func TestMuxClose(t *testing.T) {
 	s := newSetup(t)
 	sub, _ := s.mux.Subscribe(MatchEtherType(etTest), 4)
 	s.send(t, etTest, 1)
-	waitFor(t, "a frame", func() bool { return s.mux.Stats().Received == 1 })
+	waitFor(t, "a frame", func() bool { return s.mux.handled.Load() == 1 })
 	errc := make(chan error, 1)
 	idle, _ := s.mux.Subscribe(MatchEtherType(ethernet.EtherTypeLLDP), 1)
 	go func() {
