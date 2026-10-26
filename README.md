@@ -57,7 +57,50 @@ A command-line tool on top of it is
 > and claims no conformance. PROFINET has no security of its own: run it
 > on isolated networks. See [SECURITY.md](SECURITY.md).
 
+**Comparison:** [go-profinet vs other stacks](#go-profinet-vs-p-net-pnio-rs-profinet-py-and-the-pi-community-stack)
+
 **Docs:** [API.md](API.md) (public API) · [ARCHITECTURE.md](ARCHITECTURE.md) (packages, goroutines, state machines) · [INTEROPERABILITY.md](INTEROPERABILITY.md) (implemented services, conformance and interop matrices) · [ERRORS.md](ERRORS.md) · [OBSERVABILITY.md](OBSERVABILITY.md) · [SECURITY.md](SECURITY.md) · [LIMITATIONS.md](LIMITATIONS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · guides in [docs/](docs/README.md) (controller, device, DCP, LLDP, RPC, cyclic data, diagnostics, GSDML, code generation, testing, coverage, benchmarks)
+
+## go-profinet vs p-net, pnio-rs, profinet-py and the PI Community Stack
+
+go-profinet is tested against three of these stacks (see
+[INTEROPERABILITY.md](INTEROPERABILITY.md)). Each suits different needs;
+the table shows where they differ, from their public sources, so that you
+can pick the right one. The PI Community Stack is members-only; its column
+is from PI's public pages.
+
+| Capability | otfabric/go-profinet | rt-labs p-net | pnio-rs | profinet-py | PI Community Stack |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Language | Go | C | Rust | Python | C |
+| Licence | MIT | GPL-3.0-only or commercial | MIT OR Apache-2.0 | GPL-3.0-only or commercial | PNO Community Source Code License (members only; no combination with copyleft) |
+| Status | pre-1.0 | maintained privately; public tree is an evaluation snapshot without ports (v1.0.2, 2025) | young, single author (v0.1.0, 2026) | active, one maintainer (0.6.6, 2026) | maintained by PI |
+| IO-Controller | ✅ | — | — | ✅ minimal (cyclic marked experimental) | not documented publicly |
+| IO-Device | ✅ | ✅ | ✅ | — | ✅ |
+| DCP requester | ✅ Identify (all filters), Get, Set, Signal, Reset | — | — | ✅ | — |
+| DCP responder | ✅ incl. filters, response delay, requester lock | ✅ incl. Hello | ◐ Identify by name or all; no Get, Set name, Signal or Reset | — | ✅ |
+| LLDP | ✅ agent and neighbor table | ✅ | — | — (reads PDRealData only) | ✅ |
+| RT_CLASS_1 / RT_CLASS_2 (unsynchronized) | ✅ / ✅ | ✅ / ✅ | ◐ RT_CLASS_2 FrameIDs only | ✅ / — | ✅ |
+| IRT (RT_CLASS_3) | — | — | — | — | ✅ with a hardware driver |
+| Alarms | ✅ both priorities, all types | ✅ | ◐ low priority, diagnosis only | ✅ receive and acknowledge | ✅ |
+| Diagnosis records | ✅ serve and read | ✅ | — (invalid index) | ✅ read | ✅ |
+| I&M | ✅ I&M0–4 | ✅ I&M0–4 (device only) | ◐ I&M0–3 | ✅ read I&M0–15, write I&M1–3 | ✅ |
+| Several ARs on a device | ✅ IOCAR + IOSAR | ◐ 2 IOCARs | — single AR | n/a | ✅ |
+| Device access AR (IOSAR) | ✅ both roles | — | — | ✅ | not documented |
+| ModuleDiffBlock | ✅ both roles | ✅ (plugs expected modules) | — (mismatch rejects Connect) | ✅ read | ✅ |
+| ReadImplicit, WriteMultiple | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ |
+| PDPortDataReal / PDRealData (topology) | ✅ serve and decode | ✅ | — | ✅ read | ✅ |
+| GSDML | ✅ parse, validate (catalog), generate, model conversion | — (static file) | ◐ generate | ◐ parse for cyclic | — |
+| Platforms | Linux, macOS/BSD, Windows (Npcap) | Linux, RTOS ports (not in the public tree) | Linux | Linux | Linux (Raspberry Pi demo) |
+| Runs without privileges in tests | ✅ virtual Ethernet in process | — | — | — | — |
+| Tested against other stacks in CI | ✅ p-net, pnio-rs, profinet-py, pnio-dcp; scapy and Wireshark decode every capture | not documented | golden frames from p-net and an S7-1500 | p-net (integration tests) | not documented |
+| PI certification | — (not certified) | v1.0.2 release notes: "PROFINET Test Bundle 2.45.0.2 PASS" | — | — | basis for certified products |
+
+✅ = available · ◐ = partly (the cell says what) · — = not available. For
+p-net `ea5e554` (the last complete public tree; current release v1.0.2),
+pnio-rs v0.1.0 and profinet-py 0.6.6, from their source and documentation
+([docs/research/STACKS.md](docs/research/STACKS.md)) and the interop tests,
+as of October 2026. If you spot an inaccuracy, please
+[open an issue](https://github.com/otfabric/go-profinet/issues).
 
 ## Install
 
@@ -88,7 +131,7 @@ Requires Go 1.23 or later.
 | `vnet` | virtual Ethernet switch with loss, duplication, corruption, reordering, delay and jitter |
 | `netstack` | ARP, IPv4 and UDP over a `l2.Mux` |
 | `pcap` | pcap reader and writer |
-| `examples/` | quickstart, discovery, controller, device, alarms, GSDML |
+| `examples/` | quickstart, discovery, alarms, records, topology, chaos, GSDML generation and import, a device and a controller on a real interface ([outputs](examples/README.md)) |
 | `e2e/` | end-to-end and chaos tests on vnet; real Layer 2 tests |
 | `interop/` | the interop suite against profinet-interop (build tag `interop`) |
 
@@ -111,7 +154,7 @@ io1.SetOutput(2, 1, []byte{1, 2, 3, 4}, pnio.IOxSGood)
 in, iops, _ := io1.Input(1, 1)
 ```
 
-The full program is [examples/quickstart](examples/quickstart/main.go):
+The full program is [examples/quickstart](examples/quickstart/main.go) ([all examples with their output](examples/README.md)):
 `go run ./examples/quickstart`. It needs no privileges.
 
 ## On a real network

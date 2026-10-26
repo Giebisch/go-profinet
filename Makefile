@@ -36,7 +36,7 @@ build: ## Build the examples into ./bin
 	done
 
 # The self-contained examples: each starts both sides on a virtual network and exits by itself.
-RUN_EXAMPLES := quickstart discovery alarms gsdml
+RUN_EXAMPLES := quickstart discovery alarms gsdml records topology chaos gsdmlimport
 
 examples: ## Run the self-contained examples (each must exit successfully)
 	@for e in $(RUN_EXAMPLES); do \
