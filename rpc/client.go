@@ -67,6 +67,9 @@ type activity struct {
 type clientCall struct {
 	act *activity
 	in  chan []byte
+	// done is closed when the call returns: the read loop stops waiting
+	// to hand it a packet.
+	done chan struct{}
 }
 
 // Client issues calls over one UDP socket. It is safe for concurrent use.
@@ -187,10 +190,17 @@ func (c *Client) readLoop() {
 		if call == nil {
 			continue
 		}
+		// The read loop waits for the call to take the packet rather than
+		// drop it: a fragmented response arrives as a burst, and dropping
+		// what does not fit lost the same last fragments again on every
+		// retransmission of the response, so the call never completed.
+		// The socket's receive buffer holds what arrives meanwhile.
 		p := append([]byte(nil), buf[:n]...)
 		select {
 		case call.in <- p:
-		default:
+		case <-call.done:
+		case <-c.done:
+			return
 		}
 	}
 }
@@ -294,7 +304,7 @@ func (c *Client) do(ctx context.Context, act *activity, addr net.Addr, call Call
 	}
 	pkts := packets(h, call.Body, c.opts.MaxFragmentBody)
 
-	cc := &clientCall{act: act, in: make(chan []byte, 64)}
+	cc := &clientCall{act: act, in: make(chan []byte, 64), done: make(chan struct{})}
 	c.mu.Lock()
 	c.calls[act.id] = cc
 	c.mu.Unlock()
@@ -302,6 +312,7 @@ func (c *Client) do(ctx context.Context, act *activity, addr net.Addr, call Call
 		c.mu.Lock()
 		delete(c.calls, act.id)
 		c.mu.Unlock()
+		close(cc.done)
 	}()
 
 	send := func() error {

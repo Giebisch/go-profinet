@@ -131,8 +131,11 @@ func TestFragmentation(t *testing.T) {
 				t.Fatal("body mismatch")
 			}
 			r, err = c.Do(context.Background(), srv.LocalAddr(), Call{Iface: testIface, IfaceVersion: 1, OpNum: 4})
-			if err != nil || len(r.Body) != 10000 {
-				t.Fatalf("%v %d", err, len(r.Body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.Body) != 10000 {
+				t.Fatalf("response of %d octets, want 10000", len(r.Body))
 			}
 		})
 	}
