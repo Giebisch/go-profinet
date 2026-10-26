@@ -4,7 +4,7 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## v0.1.2 (2026-10-27)
+## v0.1.2 (2026-10-26)
 
 Fixes found by soaking every CI job and the interop suite 25 times in
 parallel. No API change.

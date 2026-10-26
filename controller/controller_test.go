@@ -603,6 +603,12 @@ func TestRunningDevice(t *testing.T) {
 	if im0, err := cd.ReadIM0(ctx); err != nil || im0.OrderID != "OTF-CTL-1" {
 		t.Fatalf("I&M0 %+v %v", im0, err)
 	}
+	// The device enters Data when the response to its ApplicationReady
+	// arrives, just after the controller is Running; alarms need Data.
+	eventually(t, 5*time.Second, "device AR in Data", func() bool {
+		ars := dev.ARs()
+		return len(ars) == 1 && ars[0].State == device.ARStateData
+	})
 	if err := dev.AddDiagnosis(ctx, 1, 1, pnio.DiagnosisItem{ChannelNumber: 1, ErrorType: pnio.ChannelErrLineBreak}); err != nil {
 		t.Fatal(err)
 	}
