@@ -130,7 +130,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	setup(t)
 	var b [3]byte
-	rand.Read(b[:])
+	_, _ = rand.Read(b[:])
 	subnetSeq.Lock()
 	subnetSeq.n++
 	n := subnetSeq.n

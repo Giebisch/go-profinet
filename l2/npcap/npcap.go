@@ -94,7 +94,7 @@ func Devices() ([]Device, error) {
 	if int32(r) != 0 {
 		return nil, fmt.Errorf("npcap: find devices: %s", goString(&errbuf[0]))
 	}
-	defer pFreeAllDevs.Call(uintptr(unsafe.Pointer(list)))
+	defer func() { _, _, _ = pFreeAllDevs.Call(uintptr(unsafe.Pointer(list))) }()
 	var out []Device
 	for d := list; d != nil; d = d.Next {
 		out = append(out, Device{Name: goString(d.Name), Description: goString(d.Description)})
@@ -168,7 +168,7 @@ func Open(name string, opts Options) (*Port, error) {
 	if h == 0 {
 		return nil, fmt.Errorf("npcap: open %s: %s", dev, goString(&errbuf[0]))
 	}
-	pSetMinToCopy.Call(h, 0)
+	_, _, _ = pSetMinToCopy.Call(h, 0)
 	return &Port{handle: h, name: dev, mac: mac, mtu: mtu, closed: make(chan struct{})}, nil
 }
 
@@ -249,7 +249,7 @@ func (p *Port) Close() error {
 		close(p.closed)
 		p.writeMu.Lock()
 		p.readMu.Lock()
-		pClose.Call(p.handle)
+		_, _, _ = pClose.Call(p.handle)
 		p.readMu.Unlock()
 		p.writeMu.Unlock()
 	})

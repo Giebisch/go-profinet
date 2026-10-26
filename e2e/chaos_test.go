@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-profinet"
 	"github.com/otfabric/go-profinet/controller"
 	"github.com/otfabric/go-profinet/dcp"
 	"github.com/otfabric/go-profinet/device"
@@ -103,9 +105,17 @@ func TestChaos(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 					defer cancel()
 					for i := 0; i < 5; i++ {
+						ar := cd.ARUUID()
 						if _, err := cd.ReadIM0(ctx); err != nil {
-							if st, _ := cd.State(); st != controller.StateRunning {
-								waitState(t, cd, controller.StateRunning, 90*time.Second)
+							// Under heavy loss the device may close the AR
+							// (its data hold expires) without the controller
+							// hearing of it; the read then ends the AR. A new
+							// AR must follow.
+							if st, _ := cd.State(); st != controller.StateRunning || errors.Is(err, profinet.ErrAborted) {
+								eventually(t, 90*time.Second, "a new AR", func() bool {
+									st, _ := cd.State()
+									return st == controller.StateRunning && cd.ARUUID() != ar
+								})
 								continue
 							}
 							t.Fatalf("read under chaos: %v", err)

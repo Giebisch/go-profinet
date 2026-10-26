@@ -31,12 +31,12 @@ func pair(t *testing.T) (*Port, *Port) {
 	}
 	pb, err := Open(b, Options{})
 	if err != nil {
-		pa.Close()
+		_ = pa.Close()
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		pa.Close()
-		pb.Close()
+		_ = pa.Close()
+		_ = pb.Close()
 	})
 	return pa, pb
 }
@@ -73,14 +73,14 @@ func TestUnicastMulticastAndTags(t *testing.T) {
 	}
 	// The DCP multicast arrives without joining (all-multicast).
 	f.Dst = ethernet.DCPIdentifyMulticast
-	a.WriteFrame(ctx, f.Encode())
+	_ = a.WriteFrame(ctx, f.Encode())
 	if got := recv(t, b, ethernet.EtherTypeProfinet); got.Dst != ethernet.DCPIdentifyMulticast {
 		t.Fatalf("multicast %+v", got)
 	}
 	// A priority-tagged frame keeps its tag, which the kernel strips and
 	// the port restores from the auxiliary data.
 	tagged := ethernet.Frame{Dst: b.HardwareAddr(), Src: a.HardwareAddr(), Tagged: true, VLAN: ethernet.VLANTag{Priority: 6}, EtherType: ethernet.EtherTypeLLDP, Payload: []byte{9, 9}}
-	a.WriteFrame(ctx, tagged.Encode())
+	_ = a.WriteFrame(ctx, tagged.Encode())
 	got = recv(t, b, ethernet.EtherTypeLLDP)
 	if !got.Tagged || got.VLAN.Priority != 6 {
 		t.Fatalf("tag lost: %+v", got)
@@ -100,7 +100,7 @@ func TestOwnFramesAndClose(t *testing.T) {
 	a, _ := pair(t)
 	// A frame a sends is not read back on a.
 	f := ethernet.Frame{Dst: ethernet.Broadcast, Src: a.HardwareAddr(), EtherType: 0x88B5, Payload: []byte{1}}
-	a.WriteFrame(context.Background(), f.Encode())
+	_ = a.WriteFrame(context.Background(), f.Encode())
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	buf := make([]byte, 2000)
@@ -122,7 +122,7 @@ func TestOwnFramesAndClose(t *testing.T) {
 		done <- err
 	}()
 	time.Sleep(50 * time.Millisecond)
-	a.Close()
+	_ = a.Close()
 	if err := <-done; !errors.Is(err, profinet.ErrClosed) {
 		t.Fatalf("read after close: %v", err)
 	}

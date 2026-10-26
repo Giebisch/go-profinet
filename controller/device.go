@@ -461,7 +461,8 @@ func (d *Device) ReadRecord(ctx context.Context, rec Record, maxLen uint32) ([]b
 	if err != nil {
 		return nil, err
 	}
-	return a.records.Read(ctx, a.uuid, rec, maxLen)
+	b, err := a.records.Read(ctx, a.uuid, rec, maxLen)
+	return b, d.lost(a, err)
 }
 
 // WriteRecord writes a record within the AR.
@@ -470,7 +471,7 @@ func (d *Device) WriteRecord(ctx context.Context, rec Record, data []byte) error
 	if err != nil {
 		return err
 	}
-	return a.records.Write(ctx, a.uuid, rec, data)
+	return d.lost(a, a.records.Write(ctx, a.uuid, rec, data))
 }
 
 // WriteMultiple writes several records in one call.
@@ -479,7 +480,14 @@ func (d *Device) WriteMultiple(ctx context.Context, items []WriteItem) ([]pnio.S
 	if err != nil {
 		return nil, err
 	}
-	return a.records.WriteMultiple(ctx, a.uuid, items)
+	sts, err := a.records.WriteMultiple(ctx, a.uuid, items)
+	// A WriteMultiple the device refuses as a whole answers one status.
+	if err == nil && len(sts) == 1 {
+		if lerr := d.lost(a, &pnio.StatusError{Op: "write multiple", Status: sts[0]}); errors.Is(lerr, profinet.ErrAborted) {
+			return sts, lerr
+		}
+	}
+	return sts, d.lost(a, err)
 }
 
 // ReadIM0 reads the device's I&M0.
@@ -488,7 +496,8 @@ func (d *Device) ReadIM0(ctx context.Context) (pnio.IM0, error) {
 	if err != nil {
 		return pnio.IM0{}, err
 	}
-	return a.records.ReadIM0(ctx, a.uuid, 0, model.SubslotDAP)
+	im0, err := a.records.ReadIM0(ctx, a.uuid, 0, model.SubslotDAP)
+	return im0, d.lost(a, err)
 }
 
 // ReadDiagnosis reads the diagnosis of the whole device.
@@ -497,7 +506,23 @@ func (d *Device) ReadDiagnosis(ctx context.Context) ([]pnio.DiagnosisData, error
 	if err != nil {
 		return nil, err
 	}
-	return a.records.ReadDiagnosis(ctx, a.uuid, 0, 0, false)
+	diag, err := a.records.ReadDiagnosis(ctx, a.uuid, 0, 0, false)
+	return diag, d.lost(a, err)
+}
+
+// lost ends the AR when the device answered a call within it with "AR UUID
+// unknown": the device has closed the AR (after a watchdog or data hold
+// expiry it may not have told us, as an ERR PDU can be lost), so the
+// lifecycle reconnects at once instead of waiting for its own watchdog. The
+// error is returned, and also matches profinet.ErrAborted.
+func (d *Device) lost(a *arState, err error) error {
+	var se *pnio.StatusError
+	if !errors.As(err, &se) || se.Status.Decode != pnio.DecodePNIO || se.Status.Code1 != pnio.Code1CMRPC || se.Status.Code2 != pnio.CMRPCARUUIDUnknown {
+		return err
+	}
+	err = fmt.Errorf("controller: %s: %w: the device no longer knows the AR: %w", d.cfg.StationName, profinet.ErrAborted, err)
+	a.fail(err)
+	return err
 }
 
 // Close releases the AR (when established) and stops the lifecycle. The

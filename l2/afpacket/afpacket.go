@@ -102,7 +102,7 @@ func Open(name string, opts Options) (*Port, error) {
 	ok := false
 	defer func() {
 		if !ok {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 		}
 	}()
 	sa := &syscall.SockaddrLinklayer{Protocol: htons(syscall.ETH_P_ALL), Ifindex: ifi.Index}
@@ -125,7 +125,7 @@ func Open(name string, opts Options) (*Port, error) {
 	}
 	p.file = os.NewFile(uintptr(fd), "afpacket:"+name)
 	if p.raw, err = p.file.SyscallConn(); err != nil {
-		p.file.Close()
+		_ = p.file.Close()
 		ok = true
 		return nil, err
 	}

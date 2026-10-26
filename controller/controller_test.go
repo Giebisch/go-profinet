@@ -848,3 +848,30 @@ func TestLayoutTooLong(t *testing.T) {
 		}
 	}
 }
+
+// TestLostAR: a call the device answers with "AR UUID unknown" ends the AR
+// at once, so that the lifecycle reconnects; other errors leave it alone.
+func TestLostAR(t *testing.T) {
+	d := &Device{cfg: DeviceConfig{StationName: "dut"}}
+	a := &arState{failed: make(chan error, 1)}
+	other := &pnio.StatusError{Op: "read", Status: pnio.RWStatus(false, pnio.RWInvalidIndex, 0)}
+	if err := d.lost(a, other); err != other {
+		t.Fatalf("other status: %v", err)
+	}
+	if d.lost(a, nil) != nil || len(a.failed) != 0 {
+		t.Fatal("no error ended the AR")
+	}
+	unknown := &pnio.StatusError{Op: "read", Status: pnio.ServiceStatus(pnio.CodeRead, pnio.Code1CMRPC, pnio.CMRPCARUUIDUnknown)}
+	err := d.lost(a, unknown)
+	if !errors.Is(err, profinet.ErrAborted) || !errors.Is(err, profinet.ErrNotFound) || !errors.As(err, new(*pnio.StatusError)) {
+		t.Fatalf("lost AR: %v", err)
+	}
+	select {
+	case got := <-a.failed:
+		if !errors.Is(got, profinet.ErrAborted) {
+			t.Fatalf("failure %v", got)
+		}
+	default:
+		t.Fatal("the AR was not ended")
+	}
+}
