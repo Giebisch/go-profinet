@@ -1,0 +1,61 @@
+name: Interop
+run-name: "Interop (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Runs go-profinet against the reference implementations of
+# otfabric/profinet-interop (p-net, pnio-rs, profinet-py, pnio-dcp; scapy and
+# tshark decode every capture) on Docker bridge networks. The images are
+# built here from profinet-interop's source: the GPL ones are not published.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      interop_ref:
+        description: "profinet-interop ref to build the images from"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  INTEROP_REF: ${{ inputs.interop_ref || 'main' }}
+  GOWORK: "off"
+
+jobs:
+  interop:
+    name: p-net + pnio-rs + profinet-py + pnio-dcp, controller and device
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+
+      - name: Build the reference images
+        run: make interop-images PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop"
+
+      - name: Interop tests
+        run: make test-interop
+
+      - name: Matrix
+        if: always()
+        run: make interop-matrix PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: interop-results
+          path: |
+            interop-results/
+            ${{ runner.temp }}/profinet-interop/docs/MATRIX.md
+            ${{ runner.temp }}/profinet-interop/matrix/results.json

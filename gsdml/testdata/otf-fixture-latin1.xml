@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- Written for go-profinet (MIT). Exercises records, unknown content (vnd:*, which a schema validator rejects on purpose) and Latin-1. -->
+<ISO15745Profile xmlns="http://www.profibus.com/GSDML/2003/11/DeviceProfile" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vnd="urn:example:vendor" xsi:schemaLocation="http://www.profibus.com/GSDML/2003/11/DeviceProfile ..\xsd\GSDML-DeviceProfile-V2.43.xsd">
+  <ProfileHeader>
+    <ProfileIdentification>PROFINET Device Profile</ProfileIdentification>
+    <ProfileRevision>1.00</ProfileRevision>
+    <ProfileName>Device Profile for PROFINET Devices</ProfileName>
+    <ProfileSource>PROFIBUS Nutzerorganisation e. V. (PNO)</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>4</ISO15745Part>
+      <ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>GSDML</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity VendorID="0xF000" DeviceID="0x0099">
+      <InfoText TextId="T_Info"/>
+      <VendorName Value="OT Fabric Test"/>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <Family MainFamily="I/O" ProductFamily="Fixture"/>
+    </DeviceFunction>
+    <ApplicationProcess>
+      <DeviceAccessPointList>
+        <DeviceAccessPointItem ID="DAP_A" PNIO_Version="V2.43" PhysicalSlots="0..8" ModuleIdentNumber="0x00000200" MinDeviceInterval="32" DNS_CompatibleName="otf-fixture" FixedInSlots="0" ObjectUUID_LocalIndex="1" MultipleWriteSupported="true" DeviceAccessSupported="false" CheckDeviceID_Allowed="true" NameOfStationNotTransferable="false" LLDP_NoD_Supported="true" vnd:Special="kept">
+          <ModuleInfo CategoryRef="CAT_IO">
+            <Name TextId="T_DAP"/>
+            <InfoText TextId="T_DAP_Info"/>
+            <VendorName Value="OT Fabric Test"/>
+            <OrderNumber Value="OTF-FIX-1"/>
+            <HardwareRelease Value="3"/>
+            <SoftwareRelease Value="V2.1.7"/>
+          </ModuleInfo>
+          <CertificationInfo ConformanceClass="B" ApplicationClass="" NetloadClass="II"/>
+          <IOConfigData MaxInputLength="64" MaxOutputLength="64"/>
+          <UseableModules>
+            <ModuleItemRef ModuleItemTarget="MOD_DI" AllowedInSlots="1..8" FixedInSlots="1"/>
+            <ModuleItemRef ModuleItemTarget="MOD_AO" AllowedInSlots="1..8" UsedInSlots="2 4"/>
+            <ModuleItemRef ModuleItemTarget="MOD_SPARE" AllowedInSlots="1..8"/>
+          </UseableModules>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="DAP_A_SM" SubmoduleIdentNumber="0x00000001" MayIssueProcessAlarm="false" Writeable_IM_Records="1 2 3">
+              <IOData/>
+              <ModuleInfo>
+                <Name TextId="T_DAP"/>
+                <InfoText TextId="T_DAP_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+          <SystemDefinedSubmoduleList>
+            <InterfaceSubmoduleItem ID="IF" SubslotNumber="32768" TextId="T_IF" SubmoduleIdentNumber="0x00008000" SupportedRT_Classes="RT_CLASS_1;RT_CLASS_2" SupportedProtocols="SNMP;LLDP">
+              <ApplicationRelations StartupMode="Advanced" NumberOfAR="2">
+                <TimingProperties SendClock="32" ReductionRatio="1 2 4 8 16"/>
+              </ApplicationRelations>
+              <vnd:FutureFeature level="3">text is kept</vnd:FutureFeature>
+            </InterfaceSubmoduleItem>
+            <PortSubmoduleItem ID="P1" SubslotNumber="32769" TextId="T_P1" SubmoduleIdentNumber="0x00008001">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+            <PortSubmoduleItem ID="P2" SubslotNumber="32770" TextId="T_P2" SubmoduleIdentNumber="0x00008002">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+          </SystemDefinedSubmoduleList>
+          <Graphics>
+            <GraphicItemRef Type="DeviceSymbol" GraphicItemTarget="G1"/>
+          </Graphics>
+        </DeviceAccessPointItem>
+      </DeviceAccessPointList>
+      <ModuleList>
+        <ModuleItem ID="MOD_DI" ModuleIdentNumber="0x00000010">
+          <ModuleInfo>
+            <Name TextId="T_DI"/>
+            <InfoText TextId="T_DI_Info"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_DI" SubmoduleIdentNumber="0x00000011" MayIssueProcessAlarm="true">
+              <IOData>
+                <Input Consistency="Item consistency">
+                  <DataItem DataType="Unsigned16" TextId="T_DI_In"/>
+                  <DataItem DataType="Unsigned8" UseAsBits="true" TextId="T_DI_Bits">
+                    <BitDataItem BitOffset="0" TextId="T_B0"/>
+                  </DataItem>
+                  <DataItem DataType="VisibleString" Length="5" TextId="T_Tag"/>
+                </Input>
+              </IOData>
+              <RecordDataList>
+                <ParameterRecordDataItem Index="100" Length="8">
+                  <Name TextId="T_Rec"/>
+                  <Const Data="0x01,0x02"/>
+                  <Ref ByteOffset="2" BitOffset="3" DataType="Bit" DefaultValue="1" TextId="T_RefBit" ValueItemTarget="V_ONOFF"/>
+                  <Ref ByteOffset="3" BitOffset="0" BitLength="4" DataType="BitArea" DefaultValue="5" TextId="T_RefArea"/>
+                  <Ref ByteOffset="4" DataType="Unsigned16" DefaultValue="0x1234" AllowedValues="0..65535" TextId="T_RefU16"/>
+                  <Ref ByteOffset="6" DataType="Integer16" DefaultValue="-2" TextId="T_RefI16"/>
+                </ParameterRecordDataItem>
+              </RecordDataList>
+              <ModuleInfo>
+                <Name TextId="T_DI"/>
+                <InfoText TextId="T_DI_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_AO" ModuleIdentNumber="0x00000020">
+          <ModuleInfo>
+            <Name TextId="T_AO"/>
+            <InfoText TextId="T_AO_Info"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_AO" SubmoduleIdentNumber="0x00000021" FixedInSubslots="2" MayIssueProcessAlarm="false">
+              <IOData>
+                <Input>
+                  <DataItem DataType="Unsigned8" TextId="T_AO_St"/>
+                </Input>
+                <Output Consistency="All items consistency">
+                  <DataItem DataType="Float32" TextId="T_AO_Out"/>
+                  <DataItem DataType="Float32+Status8" TextId="T_AO_Out2"/>
+                </Output>
+              </IOData>
+              <ModuleInfo>
+                <Name TextId="T_AO"/>
+                <InfoText TextId="T_AO_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_SPARE" ModuleIdentNumber="0x00000030">
+          <ModuleInfo>
+            <Name TextId="T_SP"/>
+            <InfoText TextId="T_SP"/>
+          </ModuleInfo>
+        </ModuleItem>
+      </ModuleList>
+      <ValueList>
+        <ValueItem ID="V_ONOFF">
+          <Assignments>
+            <Assign Content="0" TextId="T_Off"/>
+            <Assign Content="1" TextId="T_On"/>
+          </Assignments>
+        </ValueItem>
+      </ValueList>
+      <ChannelDiagList>
+        <ChannelDiagItem ErrorType="256">
+          <Name TextId="T_Diag"/>
+          <ExtChannelDiagList>
+            <ExtChannelDiagItem ErrorType="1">
+              <Name TextId="T_DiagExt"/>
+            </ExtChannelDiagItem>
+          </ExtChannelDiagList>
+        </ChannelDiagItem>
+      </ChannelDiagList>
+      <GraphicsList>
+        <GraphicItem ID="G1" GraphicFile="GSDML-F000-0099-Fixture"/>
+      </GraphicsList>
+      <CategoryList>
+        <CategoryItem ID="CAT_IO" TextId="T_Cat"/>
+      </CategoryList>
+      <ExternalTextList>
+        <PrimaryLanguage>
+          <Text TextId="T_Info" Value="Fixture device"/>
+          <Text TextId="T_DAP" Value="Fixture DAP"/>
+          <Text TextId="T_DAP_Info" Value="Kopfstation für Prüfungen été"/>
+          <Text TextId="T_IF" Value="X1"/>
+          <Text TextId="T_P1" Value="X1 P1"/>
+          <Text TextId="T_P2" Value="X1 P2"/>
+          <Text TextId="T_DI" Value="DI module"/>
+          <Text TextId="T_DI_Info" Value="Digital input"/>
+          <Text TextId="T_DI_In" Value="Counter"/>
+          <Text TextId="T_DI_Bits" Value="Bits"/>
+          <Text TextId="T_B0" Value="Bit 0"/>
+          <Text TextId="T_Tag" Value="Tag"/>
+          <Text TextId="T_Rec" Value="Settings"/>
+          <Text TextId="T_RefBit" Value="Enable"/>
+          <Text TextId="T_RefArea" Value="Mode"/>
+          <Text TextId="T_RefU16" Value="Limit"/>
+          <Text TextId="T_RefI16" Value="Offset"/>
+          <Text TextId="T_AO" Value="AO module"/>
+          <Text TextId="T_AO_Info" Value="Analog output"/>
+          <Text TextId="T_AO_Out" Value="Setpoint"/>
+          <Text TextId="T_AO_Out2" Value="Setpoint 2"/>
+          <Text TextId="T_AO_St" Value="Status"/>
+          <Text TextId="T_SP" Value="Spare"/>
+          <Text TextId="T_Off" Value="Off"/>
+          <Text TextId="T_On" Value="On"/>
+          <Text TextId="T_Diag" Value="Vendor diagnosis"/>
+          <Text TextId="T_DiagExt" Value="Detail"/>
+          <Text TextId="T_Cat" Value="I/O"/>
+        </PrimaryLanguage>
+        <Language xml:lang="de">
+          <Text TextId="T_Info" Value="Prüfgerät"/>
+        </Language>
+      </ExternalTextList>
+    </ApplicationProcess>
+  </ProfileBody>
+</ISO15745Profile>

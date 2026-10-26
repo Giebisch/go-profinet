@@ -1,0 +1,68 @@
+name: Extended
+run-name: "Extended (${{ github.event_name }}) by @${{ github.actor }}"
+
+# Nightly: every fuzz target for five minutes, and the chaos suite with
+# twenty seeds per fault profile. A failing chaos run prints its seed;
+# reproduce it with PROFINET_CHAOS_SEED=<seed> go test -run TestChaos ./e2e.
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "Time per fuzz target"
+        required: false
+        default: "5m"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz (extended)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: make fuzz FUZZTIME=${{ inputs.fuzztime || '5m' }}
+      - name: Upload the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: "**/testdata/fuzz/"
+          if-no-files-found: warn
+
+  chaos:
+    name: Chaos (20 seeds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: go test -race -count=1 -timeout=110m -run 'TestChaos|TestMalformedInput|TestReconnectStorm' ./e2e
+        env:
+          GOWORK: "off"
+          PROFINET_CHAOS_RUNS: "20"
+          # TestChaosMonkey: 400 random disruptions instead of 40.
+          PROFINET_MONKEY_STEPS: "400"
+
+  stress:
+    name: Stress (race, repeated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+      - run: go test -race -count=10 -timeout=110m ./...
+        env:
+          GOWORK: "off"
+          PROFINET_CHAOS_RUNS: "1"

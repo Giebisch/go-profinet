@@ -1,0 +1,128 @@
+# Public API
+
+An overview of what each package exports. The authoritative reference is the
+Go documentation (`go doc github.com/otfabric/go-profinet/<package>`). Until
+v1.0.0 the API may change between minor versions; changes are listed in
+[RELEASE.md](RELEASE.md).
+
+## Conventions
+
+- Constructors (`New`, `NewClient`, `NewResponder`, `NewAgent`, ...) start a
+  component; `Close` stops it, waits for its goroutines and is safe to call
+  twice. Methods of the components are safe for concurrent use.
+- Blocking calls take a `context.Context` and return when it is done.
+  Defaults that bound a call (timeouts, retries) apply when the context has
+  no deadline.
+- Options structs use zero values for documented defaults.
+- Errors match the sentinels of the root package with `errors.Is`
+  ([ERRORS.md](ERRORS.md)). Network input never makes a decoder panic.
+- `Append*` functions append an encoding to a byte slice and return it;
+  `Decode*` functions decode one unit and report `profinet.ErrMalformed`.
+- A `Logger` (`profinet.Logger`) is optional everywhere; nil logs nothing.
+
+## controller — IO-Controller
+
+| Symbol | Purpose |
+|--------|---------|
+| `New(Config) (*Controller, error)` | start a controller on a `*l2.Mux`; `Config.ListenPacket` opens its UDP sockets (nil: the OS), `RPCPort` its RPC server port (34964), `StationName`, `VendorID`/`DeviceID`/`Instance` (its object UUID), `DCP` options |
+| `(*Controller).AddDevice(DeviceConfig) (*Device, error)` | add a device and start its lifecycle |
+| `(*Controller).Device(name)`, `Devices()`, `DCP()`, `RPC()`, `ObjectUUID()`, `Close()` | access and shutdown |
+| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
+| `(*Device).WaitState(ctx, State)`, `State()` | the lifecycle: `StateOffline` … `StateRunning`, `StateStopped` |
+| `(*Device).SetOutput(slot, subslot, data, iops)`, `Input(slot, subslot)`, `ConsumerStatus(slot, subslot)` | cyclic process data |
+| `(*Device).ReadRecord`, `WriteRecord`, `WriteMultiple`, `ReadIM0`, `ReadDiagnosis` | acyclic services within the AR |
+| `(*Device).AR() (ARInfo, bool)` | what Connect negotiated: AR UUID, session key, RT class, alarm references, both IOCRs with FrameID, length, cycle and C_SDU layout |
+| `(*Device).ModuleDiff()`, `ARUUID()`, `MAC()`, `IP()`, `Stats()`, `Close()` | |
+| `NewRecordClient(*rpc.Client, addr, object) *RecordClient` | the acyclic services of one device without a controller: `Read` (with a nil AR UUID: ReadImplicit), `Write`, `WriteMultiple`, `Control`, `Connect`, `ReadIM0`, `ReadDiagnosis` |
+| `(*RecordClient).OpenSupervisor(ctx, SupervisorConfig) (*SupervisorAR, error)` | a device access AR (IOSAR) for an engineering tool: `Read`, `Write`, `WriteMultiple`, `Release` |
+| `AlarmEvent`, `Record`, `WriteItem`, `Parameter`, `DeviceStats` | |
+
+## device — IO-Device
+
+| Symbol | Purpose |
+|--------|---------|
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout` |
+| `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
+| `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
+| `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
+| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
+| `Handler`, `NopHandler` | what the application decides: user records (`ReadRecord`, `WriteRecord`), `PrmEnd`, `StateChanged`, `AlarmAck`, `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` |
+| `RecordError(code1, code2) error` | a PNIORW error for a Handler to return |
+| `ARState`, `CanTransition`, `RecordRequest`, `IMData`, `Alarm` | |
+
+## model — device model
+
+`Device` (`Identity`, `Capabilities`, `DAP`, `Slots`, `Catalog`), `Module`,
+`Submodule` (`InputLen`, `OutputLen`, `Records`), `Record`, `Slot`;
+`StandardDAP(name, ident, ports)`; methods `Validate`, `Each`, `Module`,
+`Submodule`, `ModuleTypes`, `Expected` (ExpectedSubmoduleBlockReqs),
+`RealIdentification`. Models are JSON-serializable.
+
+## gsdml — GSDML documents
+
+| Symbol | Purpose |
+|--------|---------|
+| `Parse(io.Reader)`, `ParseBytes([]byte) (*Document, error)` | read a document (UTF-8 or ISO-8859-1, at most `MaxDocumentSize`) |
+| `Validate(*Document) error` | structural, lexical and reference checks; a `*ValidationError` lists the `Issue`s |
+| `Encode(io.Writer, *Document)`, `Marshal(*Document)` | write; unknown elements and attributes are kept |
+| `ToModel(doc, dapID)`, `FromModel(model, GenerateOptions)` | conversion to and from `model.Device` |
+| `FileName(model, version, date)` | the conventional file name |
+| `(*Document).Text(id)`, `DataItemSize`, `ParseUint16/32`, `ParseBool`, `ParseValueList`, `FormatValueList` | helpers |
+| the generated element types (`ISO15745Profile`, `DeviceAccessPointItem`, `ModuleItem`, `VirtualSubmoduleItem`, …) | see [gsdml/SCHEMA.md](gsdml/SCHEMA.md) |
+
+## dcp — Discovery and Configuration Protocol
+
+| Symbol | Purpose |
+|--------|---------|
+| `NewClient(*l2.Mux, ClientOptions) (*Client, error)` | a requester: `Identify(ctx, Filter, IdentifyOptions)`, `IdentifyName`, `Get`, `GetIdentity`, `Set`, `SetName`, `SetIP`, `Signal`, `ResetToFactory`, `Hellos` |
+| `FilterAll`, `FilterName`, `FilterAlias`, `FilterIP`, `FilterDeviceID` | Identify filters |
+| `NewResponder(*l2.Mux, Station, ResponderOptions) (*Responder, error)` | a responder for a `Station` (the device uses one) |
+| `Identity`, `ParseIdentity`, `IPSuite`, `Block`, `BlockID`, `SetBlock`, `SetError`, `BlockError`, `ValidateStationName` | |
+| `Decode`, `Frame`, `AppendIPSuite`, `DecodeIPSuite`, `AppendControlResponse`, `DecodeControlResponse` | codec |
+
+## lldp — Link Layer Discovery Protocol
+
+`NewAgent(*l2.Mux, AgentOptions)` sends the local information (`LocalInfo`:
+station name as chassis ID, port name, description, management address)
+with the PROFINET TLVs every interval (`SendNow` at once; a negative interval
+only listens) and keeps the neighbor table (`Neighbors`, `Alias`). `Decode`, `Frame.AppendTo`,
+`TLV`, `Neighbor.Alias` (the AliasName for DCP).
+
+## rpc — connectionless DCE/RPC
+
+`NewClient(net.PacketConn, owned, ClientOptions)` with `Do(ctx, addr, Call)`
+and `NewActivity`/`DoActivity` for calls that must share an activity;
+`NewServer(net.PacketConn, owned, ServerOptions)` with `Register(iface,
+major, Handler)`. `UUID`, `ParseUUID`, `NewRandomUUID`, `Header`, `Fault`,
+`Errorf`, `Port` (34964).
+
+## pnio — PNIO blocks
+
+The block codecs (`ConnectRequest`, `ConnectResponse`, `ARBlockReq`,
+`IOCRBlockReq`, `AlarmCRBlockReq`, `ExpectedSubmoduleBlockReq`,
+`ModuleDiffBlock`, `ControlBlock`, `ReadReq`, `WriteReq`, `AlarmNotification`,
+`AlarmAck`, `DiagnosisData`, `IdentificationData`, `IM0`–`IM4`,
+`PDPortDataReal`, …), `ReadBlock`, `SplitBlocks`, NDR (`AppendNDRRequest`,
+`DecodeNDRResponse`), `Status` and `StatusError`, `ObjectUUID`, the
+identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`) and the
+interface UUIDs.
+
+## rt and alarm — real-time transports
+
+`rt`: `Frame`, `AppendEthernet`, `Layout`/`ComputeLayout`/`LayoutFromIOCR`,
+`Provider`, `Consumer`, `Dispatcher`, `Scheduler`/`Task`, `DataStatus`,
+`CycleNanos`. `alarm`: `PDU`, `Manager`, `Endpoint` (`Send`, `SendErr`, the `OnData` and
+`OnErr` callbacks), `EndpointStats`. Applications rarely use them directly; the
+controller and the device do.
+
+## Transports
+
+| Package | Symbol | Purpose |
+|---------|--------|---------|
+| `l2` | `Port`, `MulticastPort`, `LinkStater`, `NewMux`, `Mux.Subscribe`, `MatchEtherType`, `MatchFrameIDs`, `JoinMulticast` | the frame interface and demultiplexer |
+| `l2/osport` | `Open(name, Options)`, `Interfaces()`, `Backend()` | the raw Ethernet backend of the platform |
+| `l2/afpacket`, `l2/bpf`, `l2/npcap` | `Open`, `Port` | the backends themselves (Linux, macOS/BSD, Windows) |
+| `vnet` | `New(seed)`, `Network.NewEndpoint`, `Endpoint.SetFaults(Faults)`, `SetLinkUp`, `Network.AddTap` | the virtual switch |
+| `netstack` | `New(*l2.Mux, Config)`, `Stack.ListenPacket`, `ListenUDP`, `SetAddr` | ARP/IPv4/UDP for vnet |
+| `ethernet` | `MAC`, `ParseMAC`, `Frame`, `Decode`, `Pad`, the EtherTypes and multicast addresses | |
+| `pcap` | `NewWriter`, `NewReader` | capture files |
