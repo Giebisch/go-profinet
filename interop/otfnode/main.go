@@ -211,7 +211,15 @@ func runController(args []string) error {
 	dap := fs.String("dap", "", "GSDML device access point ID")
 	advanced := fs.Bool("advanced", false, "advanced startup with RTClass 2")
 	rr := fs.Uint("rr", 8, "reduction ratio (send clock 1 ms)")
-	dhf := fs.Uint("dhf", 10, "data hold factor")
+	// 32 cycles (256 ms at 8 ms) rather than the library's 10: the peers
+	// run their watchdogs on a general-purpose OS in a container on a
+	// shared CI runner, and p-net runs its watchdog on the thread that
+	// also serves RPC, so a long stall there fires its overdue watchdog
+	// ticks before it reads the frames that arrived meanwhile (it aborted
+	// an AR with "consumer DHT expired" once in a hundred CI runs, in the
+	// middle of a WriteMultiple). The tests check interoperability, not
+	// real-time behaviour.
+	dhf := fs.Uint("dhf", 32, "data hold factor")
 	dur := fs.Duration("duration", 3*time.Second, "how long to run the AR")
 	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for Running")
 	im0 := fs.Bool("im0", false, "read I&M0")
