@@ -10,6 +10,7 @@
 | [CYCLIC.md](CYCLIC.md) | cyclic data: frames, layout, timing parameters, measured timing |
 | [DIAGNOSTICS.md](DIAGNOSTICS.md) | diagnosis, I&M, identification and topology records |
 | [GSDML.md](GSDML.md) | reading, validating and writing GSDML; models |
+| [PI-MEMBERSHIP.md](PI-MEMBERSHIP.md) | what is missing or degraded without PROFIBUS & PROFINET International membership |
 | [CODEGEN.md](CODEGEN.md) | how the GSDML types are generated from the catalog |
 | [TESTING.md](TESTING.md) | test tiers, the virtual network, writing tests |
 | [COVERAGE.md](COVERAGE.md) | coverage per package |

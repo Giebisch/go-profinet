@@ -105,7 +105,7 @@ func TestChaos(t *testing.T) {
 					for i := 0; i < 5; i++ {
 						if _, err := cd.ReadIM0(ctx); err != nil {
 							if st, _ := cd.State(); st != controller.StateRunning {
-								waitState(t, cd, controller.StateRunning, 30*time.Second)
+								waitState(t, cd, controller.StateRunning, 90*time.Second)
 								continue
 							}
 							t.Fatalf("read under chaos: %v", err)

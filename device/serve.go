@@ -203,7 +203,12 @@ func (d *Device) write(ctx context.Context, blocks []byte) ([]byte, pnio.Status)
 		st := pnio.RWStatus(true, pnio.RWWriteLength, 0)
 		return d.writeRes(q, st), st
 	}
-	var out []byte
+	// The response starts with the IODWriteResHeader of the WriteMultiple
+	// itself (RecordDataLength 0), then one per item, as p-net answers and
+	// Wireshark decodes it.
+	outer := q
+	outer.Length = 0
+	out := d.writeRes(outer, pnio.Status{})
 	var first pnio.Status
 	for _, it := range items {
 		h := it.Header

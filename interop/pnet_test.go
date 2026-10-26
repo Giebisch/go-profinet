@@ -6,6 +6,9 @@ package interop
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"fmt"
 	"strings"
 	"testing"
@@ -29,7 +32,11 @@ func TestPnetController(t *testing.T) {
 	e := newEnv(t)
 	dev := pnet(e, "pnet-dut")
 	stop := e.capture(dev, "pnet-controller.pcap")
+	im1 := pnio.IM1{TagFunction: "otf function", TagLocation: "otf location"}
+	im1Hex := hex.EncodeToString(im1.Append(nil))
 	out := e.otf("ctrl", 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", "/otfnode-testdata/pnet-model.json",
+		"-implicit", "0:1:0xAFF0", "-wm", "1:1:124:0a0b0c0d", "-wm", "2:1:125:00000003", "-read", "1:1:124",
+		"-write", "0:1:0xAFF1:"+im1Hex, "-read", "0:1:0xAFF1",
 		"-im0", "-param", "1:1:123:01020304", "-read", "1:1:123", "-write", "2:1:125:00000002", "-read", "2:1:125",
 		"-read", "0:1:0xF000", "-read", "0:0x8001:0x802A", "-read", "0:1:0xF841", "-read", "1:1:0x7777", "-write", "1:1:0x7777:00", "-diag",
 		"-output", "1:1:0:5a", "-output", "2:1:0:1122334455667788", "-duration", "4s")
@@ -59,6 +66,15 @@ func TestPnetController(t *testing.T) {
 	e.expect("PDRealData (0xF841) decoded", err == nil && len(ports) >= 1 && ports[0].Subslot == 0x8001, "%+v %v %v", ports, err, byKey["read 0/1/63553"])
 	e.expect("Read of an unknown index answers a PNIORW read error", strings.HasPrefix(str(byKey["read 1/1/30583"]["status"]), "DE 80"), "%v", byKey["read 1/1/30583"])
 	e.expect("Write of an invalid index is rejected with a PNIO status", strings.HasPrefix(str(byKey["write 1/1/30583"]["status"]), "DF 80"), "%v", byKey["write 1/1/30583"])
+	impl, _ := r["implicit"].([]any)
+	var implData string
+	if len(impl) == 1 {
+		implData = str(impl[0].(map[string]any)["data"])
+	}
+	e.expect("ReadImplicit of I&M0 (no AR)", strings.HasPrefix(implData, "00200038"), "%v", impl)
+	wmr, _ := r["writeMultiple"].(map[string]any)
+	e.expect("WriteMultiple of two records", wmr != nil && wmr["error"] == nil && fmt.Sprint(wmr["status"]) == "[OK OK]" && byKey["read 1/1/124"]["data"] == "0a0b0c0d", "%v %v", wmr, byKey["read 1/1/124"])
+	e.expect("Write I&M1 in the AR, read it back", byKey["write 0/1/45041"]["error"] == nil && byKey["read 0/1/45041"]["data"] == im1Hex, "%v %v", byKey["write 0/1/45041"], byKey["read 0/1/45041"])
 	e.expect("Read diagnosis (0xF80C)", r["diagnosisError"] == nil, "%v", r["diagnosisError"])
 	stats, _ := r["stats"].(map[string]any)
 	cons, _ := stats["Consumer"].(map[string]any)
@@ -188,4 +204,42 @@ func TestPnetLLDP(t *testing.T) {
 		}
 	}
 	e.expect("LLDP neighbor (p-net)", ok, "%v", ns)
+}
+
+// TestPnetConfigurationMismatch: negative tests of the expected
+// configuration. A module p-net does not have in slot 2: the p-net sample
+// application plugs whatever module the controller expects (it logs
+// "unknown") and reports no ModuleDiff, so the AR runs; this is recorded as
+// p-net's behaviour. A model with another DeviceID: the controller must
+// refuse the device before it connects.
+func TestPnetConfigurationMismatch(t *testing.T) {
+	e := newEnv(t)
+	pnet(e, "pnet-dut")
+	b, err := os.ReadFile(filepath.Join(testdata, "pnet-model.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, edit func(m map[string]any)) string {
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		edit(m)
+		out, _ := json.Marshal(m)
+		if err := os.WriteFile(filepath.Join(e.share, name), out, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return "/share/" + name
+	}
+	wrongModule := write("wrong-module.json", func(m map[string]any) {
+		m["slots"].([]any)[1].(map[string]any)["module"].(map[string]any)["identNumber"] = 0x41
+	})
+	wrongDevice := write("wrong-device.json", func(m map[string]any) {
+		m["identity"].(map[string]any)["deviceId"] = 0x77
+	})
+	e.result.peer("p-net", image("pnet"), "device")
+	r := report(t, e.otf("module", 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", wrongModule, "-duration", "1s"))
+	e.expect("Unexpected module in slot 2: p-net plugs it (no ModuleDiff), the AR runs", r["running"] == true && r["moduleDiff"] == nil, "running=%v diff=%v", r["running"], r["moduleDiff"])
+	r = report(t, e.otf("device", 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", wrongDevice, "-timeout", "5s"))
+	e.expect("Model of another DeviceID: the controller refuses the device", r["running"] == false && strings.Contains(str(r["error"]), "device"), "running=%v error=%v", r["running"], r["error"])
 }

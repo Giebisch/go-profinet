@@ -50,6 +50,9 @@ generated files and connects with them (the interop suite).
 
 ## Validation
 
+> Without PI membership the official XSDs are not available: see
+> [PI-MEMBERSHIP.md](PI-MEMBERSHIP.md) for what this means.
+
 `Validate` checks what go-profinet's catalog defines
 ([CODEGEN.md](CODEGEN.md)): required elements and attributes, the lexical
 types of attributes (hexadecimal and decimal unsigned values, value lists,

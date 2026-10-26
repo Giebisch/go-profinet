@@ -6,6 +6,8 @@ one input, `gsdml/schema/catalog.json`, by `internal/cmd/gengsdml`.
 
 ## Why a catalog, not the XSDs
 
+(What changes once OT Fabric is a PI member: [PI-MEMBERSHIP.md](PI-MEMBERSHIP.md).)
+
 The GSDML XSDs are published by PROFIBUS & PROFINET International to its
 members under a licence that does not allow redistributing them
 ([research/GSDML.md](research/GSDML.md)). The catalog is written

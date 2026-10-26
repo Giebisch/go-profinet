@@ -43,6 +43,7 @@ import (
 	"github.com/otfabric/go-profinet/model"
 	"github.com/otfabric/go-profinet/pcap"
 	"github.com/otfabric/go-profinet/pnio"
+	"github.com/otfabric/go-profinet/rpc"
 )
 
 func main() {
@@ -218,11 +219,13 @@ func runController(args []string) error {
 	alarms := fs.Int("wait-alarms", 0, "wait for this many alarms")
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	assignIP := fs.String("assign-ip", "", "assign this IP/prefix with DCP before connecting")
-	var outputs, reads, writes, params multi
+	var outputs, reads, writes, params, implicit, wm multi
 	fs.Var(&outputs, "output", "slot:subslot:0:hex output data (repeatable)")
 	fs.Var(&reads, "read", "slot:subslot:index record to read while running (repeatable)")
 	fs.Var(&writes, "write", "slot:subslot:index:hex record to write while running (repeatable)")
 	fs.Var(&params, "param", "slot:subslot:index:hex parameter written before PrmEnd (repeatable)")
+	fs.Var(&implicit, "implicit", "slot:subslot:index record to read with ReadImplicit, outside the AR (repeatable)")
+	fs.Var(&wm, "wm", "slot:subslot:index:hex record of one WriteMultiple call while running (repeatable)")
 	_ = fs.Parse(args)
 	m, err := loadModel(*modelFile, *dap)
 	if err != nil {
@@ -321,6 +324,27 @@ func runController(args []string) error {
 			report["im0"] = v
 		}
 	}
+	if len(wm) > 0 {
+		var items []controller.WriteItem
+		for _, w := range wm {
+			slot, sub, idx, data, err := parseAddr(w, 4)
+			if err != nil {
+				return err
+			}
+			items = append(items, controller.WriteItem{Record: controller.Record{Slot: slot, Subslot: sub, Index: idx}, Data: data})
+		}
+		sts, err := d.WriteMultiple(rctx, items)
+		r := map[string]any{}
+		if err != nil {
+			r["error"] = err.Error()
+		}
+		var ss []string
+		for _, s := range sts {
+			ss = append(ss, s.String())
+		}
+		r["status"] = ss
+		report["writeMultiple"] = r
+	}
 	var results []map[string]any
 	for _, w := range writes {
 		slot, sub, idx, data, err := parseAddr(w, 4)
@@ -356,6 +380,24 @@ func runController(args []string) error {
 		results = append(results, r)
 	}
 	report["records"] = results
+	var implicitResults []map[string]any
+	for _, rd := range implicit {
+		slot, sub, idx, _, err := parseAddr(rd, 3)
+		if err != nil {
+			return err
+		}
+		r := map[string]any{"slot": slot, "subslot": sub, "index": uint16(idx)}
+		ip := d.IP().Addr
+		rc := controller.NewRecordClient(ctrl.RPC(), &net.UDPAddr{IP: ip.AsSlice(), Port: rpc.Port}, pnio.ObjectUUID(max(m.Identity.Instance, 1), m.Identity.DeviceID, m.Identity.VendorID))
+		v, err := rc.Read(rctx, rpc.NilUUID, controller.Record{Slot: slot, Subslot: sub, Index: idx}, 0)
+		if err != nil {
+			r["error"] = err.Error()
+		} else {
+			r["data"] = hex.EncodeToString(v)
+		}
+		implicitResults = append(implicitResults, r)
+	}
+	report["implicit"] = implicitResults
 	if *diag {
 		v, err := d.ReadDiagnosis(rctx)
 		if err != nil {

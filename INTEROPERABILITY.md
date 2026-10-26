@@ -58,7 +58,7 @@ against (see [the matrix](#interop-matrix)).
 |--------|:---:|:---:|---------|
 | User records of the model (0x0000–0x7FFF), application records (Handler) | ✅ | ✅ | p-net, pnio-rs, profinet-py |
 | ReadImplicit (no AR) | ✅ | n/a | profinet-py, p-net |
-| WriteMultiple (0xE040) | ✅ | ✅ | |
+| WriteMultiple (0xE040) | ✅ | ✅ | p-net |
 | I&M0 (0xAFF0), I&M1–4 (0xAFF1–0xAFF4), I&M0FilterData (0xF840) | ✅ | ✅ (I&M1–4) | p-net, pnio-rs, profinet-py |
 | RealIdentificationData (0xF000, 0xC001, 0x8001), ExpectedIdentificationData | ✅ | n/a | p-net, profinet-py |
 | ModuleDiff (0xE002) | ✅ | n/a | profinet-py |
@@ -152,6 +152,10 @@ each other):
 - **p-net does not answer DCP Get with the AllSelector** and ignores another
   requester for 3 s after a Get or Set; the requester asks for the blocks by
   name and retransmits three times.
+- **WriteMultiple answers start with the IODWriteResHeader of the
+  WriteMultiple itself** (index 0xE040), then one per item. go-profinet's
+  device omitted it and its controller counted it as an item; both now
+  follow p-net (and Wireshark's dissector).
 - **pnio-rs accepts only RT_CLASS_2 FrameIDs**: a controller must use the
   advanced startup with it.
 
@@ -161,7 +165,7 @@ Recorded, not worked around in go-profinet:
 
 | Peer | Discrepancy |
 |------|-------------|
-| p-net | answers an unknown record index with `DE 80 A0 00` (application read error) rather than invalid index; the veth speed check has to be patched out of its Connect; the tested tree predates its v1.0.2 security fixes |
+| p-net | plugs any module the controller expects (logged as "unknown") instead of reporting it in a ModuleDiffBlock, so a wrong module cannot be detected against p-net; answers an unknown record index with `DE 80 A0 00` (application read error) rather than invalid index; the veth speed check has to be patched out of its Connect; the tested tree predates its v1.0.2 security fixes |
 | profinet-py | writes I&M1 with BlockLength 58 and two padding octets (the block is 56); `read_all_diagnosis` reads 0xF000 and decodes it as diagnosis |
 | pnio-rs | answers diagnosis indices and I&M4 with invalid index; rejects a Connect without exact ModuleDiff agreement |
 

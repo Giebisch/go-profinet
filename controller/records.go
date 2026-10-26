@@ -147,10 +147,15 @@ func (r *RecordClient) WriteMultiple(ctx context.Context, ar rpc.UUID, items []W
 		return nil, fmt.Errorf("controller: write multiple: %w: no results", profinet.ErrMalformed)
 	}
 	out := make([]pnio.Status, 0, len(raws))
-	for _, b := range raws {
+	for i, b := range raws {
 		res, err := pnio.DecodeWriteRes(b)
 		if err != nil {
 			return out, err
+		}
+		// The first header is that of the WriteMultiple itself (p-net
+		// sends it; Wireshark expects it); the items follow.
+		if i == 0 && len(raws) > 1 && res.Index == pnio.IndexWriteMultiple {
+			continue
 		}
 		out = append(out, res.Status)
 	}

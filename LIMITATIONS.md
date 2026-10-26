@@ -16,6 +16,14 @@ and what would lift it.
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
 
+## Without PI membership
+
+Several artefacts are published by PROFIBUS & PROFINET International to
+members only: the GSDML XSDs, GSDX, MRCD, the PROFINET security and test
+specifications. [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md) lists, feature by
+feature, what is missing or degraded as a result, and what membership would
+change.
+
 ## GSDML
 
 The official GSDML schemas and specification are licensed by PROFIBUS &

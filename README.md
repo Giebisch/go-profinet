@@ -184,7 +184,10 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 
 Conformance classes A and B as controller and device (RT_CLASS_1 and
 RT_CLASS_2 without synchronization); no IRT, MRP, shared device, system
-redundancy, PROFIsafe or PROFINET security classes. GSDML validation follows
+redundancy, PROFIsafe or PROFINET security classes. OT Fabric is not a PI
+member: what that costs (official XSD validation, GSDX, MRCD, signing,
+certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
+GSDML validation follows
 an independent catalog, not PI's licensed schemas; GSDX and MRCD are not
 implemented (their formats are not public). The full list is in
 [LIMITATIONS.md](LIMITATIONS.md).
