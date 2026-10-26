@@ -4,6 +4,14 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
+## v0.1.2 (2026-10-26)
+
+No code change.
+
+- CI tests Intel macOS on `macos-15-intel` (GitHub retired `macos-13`).
+- The interop suite stays pinned to profinet-interop v0.1.0, its latest
+  release.
+
 ## v0.1.1 (2026-10-26)
 
 No code change.
