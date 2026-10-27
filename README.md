@@ -233,9 +233,13 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 
 ## Limitations
 
-Conformance classes A and B as controller and device (RT_CLASS_1 and
-RT_CLASS_2 without synchronization) and shared device; no IRT, MRP, system
-redundancy, PROFIsafe or PROFINET security classes. OT Fabric is not a PI
+The features of conformance class A as controller and device (RT_CLASS_1
+and RT_CLASS_2 without synchronization), and shared device; class B also
+requires SNMP, which is missing. This is feature coverage, not
+conformance: go-profinet is not certified for any class. No IRT, MRP,
+system redundancy, PROFIsafe or PROFINET security classes. What can still
+be built without PI membership or hardware, and in which order, is in
+[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md). OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
 GSDML validation follows

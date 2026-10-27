@@ -881,3 +881,26 @@ func TestLostAR(t *testing.T) {
 		t.Fatal("the AR was not ended")
 	}
 }
+
+// TestWaitStateAfterOnState: WaitState returns for a state only once its
+// OnState callback has run, also when it starts waiting in between.
+func TestWaitStateAfterOnState(t *testing.T) {
+	var done atomic.Bool
+	entered := make(chan struct{})
+	d := &Device{c: &Controller{log: profinet.NopLogger()}, cfg: DeviceConfig{StationName: "dut",
+		OnState: func(_, to State, _ error) {
+			if to == StateResolving {
+				close(entered)
+				time.Sleep(50 * time.Millisecond)
+				done.Store(true)
+			}
+		}}}
+	go d.setState(StateResolving, nil)
+	<-entered
+	if err := d.WaitState(context.Background(), StateResolving); err != nil {
+		t.Fatal(err)
+	}
+	if !done.Load() {
+		t.Fatal("WaitState returned before OnState ran")
+	}
+}

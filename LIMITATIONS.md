@@ -16,6 +16,10 @@ and what would lift it.
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
 
+What of this list can be built without PI membership or PROFINET hardware,
+with the protocol evidence for each feature and the order of work, is in
+[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md).
+
 ## Without PI membership
 
 Several artefacts are published by PROFIBUS & PROFINET International to
@@ -34,7 +38,10 @@ structure, attribute types and references that a device model relies on.
 `gengsdml -xsd DIR` compares the catalog with a licensed local copy of the
 XSDs (0 differences against v2.35). `gsdml.Validate` is not PI's GSDML
 checker, and a file it accepts may still fail PI's. Elements and attributes
-outside the catalog are kept verbatim, not validated.
+outside the catalog are kept verbatim and reported as unvalidated by
+`gsdml.Check`; its semantic rules are a small set, each with its basis
+(docs/GSDML.md), several of them local heuristics. Schema versions after 2.45
+(2.46, 2.50) are not in the catalog: their schemas are members-only.
 
 ## Timing
 

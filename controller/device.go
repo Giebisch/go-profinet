@@ -160,14 +160,18 @@ type Device struct {
 	c   *Controller
 	cfg DeviceConfig
 
-	mu       sync.Mutex
-	state    State
-	lastErr  error
-	mac      ethernet.MAC
-	ip       dcp.IPSuite
-	ar       *arState
-	diff     *pnio.ModuleDiffBlock
-	waiters  []chan struct{}
+	mu      sync.Mutex
+	state   State
+	lastErr error
+	mac     ethernet.MAC
+	ip      dcp.IPSuite
+	ar      *arState
+	diff    *pnio.ModuleDiffBlock
+	waiters []chan struct{}
+	// notified is the last state whose OnState callback has run: WaitState
+	// waits for it. setMu orders the transitions and their callbacks.
+	notified State
+	setMu    sync.Mutex
 	outputs  map[subKey]*ioData
 	inputs   map[subKey]*ioData
 	iocs     map[subKey]uint8
@@ -375,7 +379,7 @@ func (d *Device) inputFrameID() uint16 {
 func (d *Device) WaitState(ctx context.Context, s State) error {
 	for {
 		d.mu.Lock()
-		if d.state == s {
+		if d.notified == s {
 			d.mu.Unlock()
 			return nil
 		}
@@ -391,6 +395,8 @@ func (d *Device) WaitState(ctx context.Context, s State) error {
 }
 
 func (d *Device) setState(to State, err error) {
+	d.setMu.Lock()
+	defer d.setMu.Unlock()
 	d.mu.Lock()
 	from := d.state
 	if from == to || !CanTransition(from, to) {
@@ -401,8 +407,6 @@ func (d *Device) setState(to State, err error) {
 	if err != nil {
 		d.lastErr = err
 	}
-	ws := d.waiters
-	d.waiters = nil
 	d.mu.Unlock()
 	d.c.log.Debugf("controller: %s: %s → %s", d.cfg.StationName, from, to)
 	// OnState runs before WaitState returns, so that a caller of WaitState
@@ -410,6 +414,11 @@ func (d *Device) setState(to State, err error) {
 	if d.cfg.OnState != nil {
 		d.cfg.OnState(from, to, err)
 	}
+	d.mu.Lock()
+	d.notified = to
+	ws := d.waiters
+	d.waiters = nil
+	d.mu.Unlock()
 	for _, w := range ws {
 		close(w)
 	}

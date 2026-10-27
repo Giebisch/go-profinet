@@ -32,7 +32,8 @@ func (e *env) sharedController(ip string, slots []uint16, alarms chan<- controll
 	e.t.Helper()
 	ctrl, _ := e.controller(ip)
 	cfg := controller.DeviceConfig{StationName: "shared", Model: sharedModel().WithSlots(slots...),
-		ReconnectMin: 100 * time.Millisecond, ReconnectMax: 500 * time.Millisecond}
+		ReconnectMin: 100 * time.Millisecond, ReconnectMax: 500 * time.Millisecond,
+		DataHoldFactor: stallHold, WatchdogFactor: stallHold}
 	if alarms != nil {
 		cfg.OnAlarm = func(a controller.AlarmEvent) { alarms <- a }
 	}
@@ -42,6 +43,12 @@ func (e *env) sharedController(ip string, slots []uint16, alarms chan<- controll
 	}
 	return cd
 }
+
+// stallHold is a data hold and watchdog factor, in cycles of the default 4
+// ms, that rides out the scheduling stalls of shared CI runners (seen up to
+// 2.4 s): tests of ownership, not of the watchdog, use it so that a stall
+// does not end every AR at once and hand their submodules around.
+const stallHold = 1500
 
 // lockedSlots returns the slots whose submodules a controller's ModuleDiff
 // reports as locked by another IO controller.

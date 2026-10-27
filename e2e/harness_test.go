@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	profinet "github.com/otfabric/go-profinet"
 	"github.com/otfabric/go-profinet/controller"
 	"github.com/otfabric/go-profinet/dcp"
 	"github.com/otfabric/go-profinet/device"
@@ -61,11 +62,52 @@ type env struct {
 	net *vnet.Network
 	mu  sync.Mutex
 	n   byte
+	log *testLog
 }
+
+// testLog keeps the last lines the devices and controllers of a test log,
+// printed when the test fails.
+type testLog struct {
+	mu    sync.Mutex
+	start time.Time
+	lines []string
+}
+
+const testLogLines = 2000
+
+func (l *testLog) logger(name string) profinet.Logger { return nodeLog{l, name} }
+
+func (l *testLog) add(name, level, f string, a ...any) {
+	line := fmt.Sprintf("%8.3fs %-5s %s: %s", time.Since(l.start).Seconds(), level, name, fmt.Sprintf(f, a...))
+	l.mu.Lock()
+	if len(l.lines) == testLogLines {
+		l.lines = l.lines[1:]
+	}
+	l.lines = append(l.lines, line)
+	l.mu.Unlock()
+}
+
+func (l *testLog) dump(t *testing.T) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, line := range l.lines {
+		t.Log(line)
+	}
+}
+
+type nodeLog struct {
+	l    *testLog
+	name string
+}
+
+func (n nodeLog) Debugf(f string, a ...any) { n.l.add(n.name, "DEBUG", f, a...) }
+func (n nodeLog) Infof(f string, a ...any)  { n.l.add(n.name, "INFO", f, a...) }
+func (n nodeLog) Warnf(f string, a ...any)  { n.l.add(n.name, "WARN", f, a...) }
+func (n nodeLog) Errorf(f string, a ...any) { n.l.add(n.name, "ERROR", f, a...) }
 
 func newEnv(t *testing.T, seed uint64) *env {
 	t.Helper()
-	e := &env{t: t, net: vnet.New(seed)}
+	e := &env{t: t, net: vnet.New(seed), log: &testLog{start: time.Now()}}
 	if dir := os.Getenv("PROFINET_PCAP_DIR"); dir != "" {
 		f, err := os.Create(fmt.Sprintf("%s/%s.pcap", dir, sanitize(t.Name())))
 		if err == nil {
@@ -79,6 +121,7 @@ func newEnv(t *testing.T, seed uint64) *env {
 	t.Cleanup(func() {
 		_ = e.net.Close()
 		if t.Failed() {
+			e.log.dump(t)
 			t.Logf("vnet seed %d", seed)
 		}
 	})
@@ -135,6 +178,7 @@ func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*devic
 			return n.stack.SetAddr(s.Addr, s.Mask, s.Gateway)
 		},
 		Handler: h, NoResponseDelay: true, LLDPInterval: 200 * time.Millisecond,
+		Logger: e.log.logger(name),
 	}
 	if ip != "" {
 		cfg.IP = suite(ip)
@@ -150,7 +194,7 @@ func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*devic
 func (e *env) controller(ip string) (*controller.Controller, *node) {
 	e.t.Helper()
 	n := e.node(ip)
-	c, err := controller.New(controller.Config{Mux: n.mux, ListenPacket: n.stack.ListenPacket, StationName: "plc"})
+	c, err := controller.New(controller.Config{Mux: n.mux, ListenPacket: n.stack.ListenPacket, StationName: "plc", Logger: e.log.logger("plc@" + ip)})
 	if err != nil {
 		e.t.Fatal(err)
 	}

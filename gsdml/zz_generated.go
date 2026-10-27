@@ -133,6 +133,7 @@ func (x *ISO15745Profile) validate(v *validator) {
 		v.missing("ProfileBody")
 	}
 	x.ProfileBody.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -183,6 +184,7 @@ func (x *ProfileHeader) validate(v *validator) {
 		v.missing("ISO15745Reference")
 	}
 	x.ISO15745Reference.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -202,6 +204,7 @@ func (x *ProfileIdentification) validate(v *validator) {
 	}
 	v.push("ProfileIdentification")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileRevision is the GSDML element ProfileRevision.
@@ -220,6 +223,7 @@ func (x *ProfileRevision) validate(v *validator) {
 	}
 	v.push("ProfileRevision")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileName is the GSDML element ProfileName.
@@ -238,6 +242,7 @@ func (x *ProfileName) validate(v *validator) {
 	}
 	v.push("ProfileName")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileSource is the GSDML element ProfileSource.
@@ -256,6 +261,7 @@ func (x *ProfileSource) validate(v *validator) {
 	}
 	v.push("ProfileSource")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileClassID is the GSDML element ProfileClassID.
@@ -274,6 +280,7 @@ func (x *ProfileClassID) validate(v *validator) {
 	}
 	v.push("ProfileClassID")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ISO15745Reference is the GSDML element ISO15745Reference.
@@ -308,6 +315,7 @@ func (x *ISO15745Reference) validate(v *validator) {
 		v.missing("ProfileTechnology")
 	}
 	x.ProfileTechnology.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -327,6 +335,7 @@ func (x *ISO15745Part) validate(v *validator) {
 	}
 	v.push("ISO15745Part")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ISO15745Edition is the GSDML element ISO15745Edition.
@@ -345,6 +354,7 @@ func (x *ISO15745Edition) validate(v *validator) {
 	}
 	v.push("ISO15745Edition")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileTechnology is the GSDML element ProfileTechnology.
@@ -363,6 +373,7 @@ func (x *ProfileTechnology) validate(v *validator) {
 	}
 	v.push("ProfileTechnology")
 	defer v.pop()
+	v.unknownAttrs(x.Attrs)
 }
 
 // ProfileBody is the GSDML element ProfileBody.
@@ -397,6 +408,7 @@ func (x *ProfileBody) validate(v *validator) {
 		v.missing("ApplicationProcess")
 	}
 	x.ApplicationProcess.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -433,6 +445,7 @@ func (x *DeviceIdentity) validate(v *validator) {
 		v.missing("VendorName")
 	}
 	x.VendorName.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -456,6 +469,7 @@ func (x *InfoText) validate(v *validator) {
 	v.push("InfoText")
 	defer v.pop()
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -479,6 +493,7 @@ func (x *VendorName) validate(v *validator) {
 	v.push("VendorName")
 	defer v.pop()
 	v.attr("Value", x.Value, "token", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -504,6 +519,7 @@ func (x *DeviceFunction) validate(v *validator) {
 		v.missing("Family")
 	}
 	x.Family.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -530,6 +546,7 @@ func (x *Family) validate(v *validator) {
 	defer v.pop()
 	v.attr("MainFamily", x.MainFamily, "MainFamily", true)
 	v.attr("ProductFamily", x.ProductFamily, "token", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -572,6 +589,7 @@ func (x *ApplicationProcess) validate(v *validator) {
 		v.missing("ExternalTextList")
 	}
 	x.ExternalTextList.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -599,6 +617,7 @@ func (x *DeviceAccessPointList) validate(v *validator) {
 	for _, c := range x.DeviceAccessPointItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -721,6 +740,7 @@ func (x *DeviceAccessPointItem) validate(v *validator) {
 	x.SystemDefinedSubmoduleList.validate(v)
 	x.Graphics.validate(v)
 	x.UseableSubmodules.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -765,6 +785,7 @@ func (x *ModuleInfo) validate(v *validator) {
 	x.OrderNumber.validate(v)
 	x.HardwareRelease.validate(v)
 	x.SoftwareRelease.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -788,6 +809,7 @@ func (x *Name) validate(v *validator) {
 	v.push("Name")
 	defer v.pop()
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -811,6 +833,7 @@ func (x *OrderNumber) validate(v *validator) {
 	v.push("OrderNumber")
 	defer v.pop()
 	v.attr("Value", x.Value, "token", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -834,6 +857,7 @@ func (x *HardwareRelease) validate(v *validator) {
 	v.push("HardwareRelease")
 	defer v.pop()
 	v.attr("Value", x.Value, "token", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -857,6 +881,7 @@ func (x *SoftwareRelease) validate(v *validator) {
 	v.push("SoftwareRelease")
 	defer v.pop()
 	v.attr("Value", x.Value, "SoftwareRelease", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -886,6 +911,7 @@ func (x *CertificationInfo) validate(v *validator) {
 	v.attr("ConformanceClass", x.ConformanceClass, "ConformanceClass", true)
 	v.attr("ApplicationClass", x.ApplicationClass, "TokenList", false)
 	v.attr("NetloadClass", x.NetloadClass, "NetloadClass", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -913,6 +939,7 @@ func (x *SubslotList) validate(v *validator) {
 	for _, c := range x.SubslotItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -939,6 +966,7 @@ func (x *SubslotItem) validate(v *validator) {
 	defer v.pop()
 	v.attr("SubslotNumber", x.SubslotNumber, "Unsigned16", true)
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -971,6 +999,7 @@ func (x *IOConfigData) validate(v *validator) {
 	v.attr("MaxOutputLength", x.MaxOutputLength, "Unsigned16", true)
 	v.attr("MaxDataLength", x.MaxDataLength, "Unsigned16", false)
 	v.attr("ApplicationLengthIncludesIOxS", x.ApplicationLengthIncludesIOxS, "Boolean", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -998,6 +1027,7 @@ func (x *UseableModules) validate(v *validator) {
 	for _, c := range x.ModuleItemRefs {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1030,6 +1060,7 @@ func (x *ModuleItemRef) validate(v *validator) {
 	v.attr("AllowedInSlots", x.AllowedInSlots, "ValueList", false)
 	v.attr("UsedInSlots", x.UsedInSlots, "ValueList", false)
 	v.attr("FixedInSlots", x.FixedInSlots, "ValueList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1057,6 +1088,7 @@ func (x *UseableSubmodules) validate(v *validator) {
 	for _, c := range x.SubmoduleItemRefs {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1089,6 +1121,7 @@ func (x *SubmoduleItemRef) validate(v *validator) {
 	v.attr("AllowedInSubslots", x.AllowedInSubslots, "ValueList", false)
 	v.attr("UsedInSubslots", x.UsedInSubslots, "ValueList", false)
 	v.attr("FixedInSubslots", x.FixedInSubslots, "ValueList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1116,6 +1149,7 @@ func (x *VirtualSubmoduleList) validate(v *validator) {
 	for _, c := range x.VirtualSubmoduleItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1174,6 +1208,7 @@ func (x *VirtualSubmoduleItem) validate(v *validator) {
 	}
 	x.ModuleInfo.validate(v)
 	x.Graphics.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1201,6 +1236,7 @@ func (x *SubmoduleList) validate(v *validator) {
 	for _, c := range x.SubmoduleItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1250,6 +1286,7 @@ func (x *SubmoduleItem) validate(v *validator) {
 	}
 	x.ModuleInfo.validate(v)
 	x.Graphics.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1280,6 +1317,7 @@ func (x *IOData) validate(v *validator) {
 	v.attr("F_IO_StructureDescCRC", x.FIOStructureDescCRC, "Unsigned32", false)
 	x.Input.validate(v)
 	x.Output.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1310,6 +1348,7 @@ func (x *Input) validate(v *validator) {
 	for _, c := range x.DataItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1340,6 +1379,7 @@ func (x *Output) validate(v *validator) {
 	for _, c := range x.DataItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1379,6 +1419,7 @@ func (x *DataItem) validate(v *validator) {
 	for _, c := range x.BitDataItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1405,6 +1446,7 @@ func (x *BitDataItem) validate(v *validator) {
 	defer v.pop()
 	v.attr("BitOffset", x.BitOffset, "Unsigned8", true)
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1431,6 +1473,7 @@ func (x *RecordDataList) validate(v *validator) {
 		c.validate(v)
 	}
 	x.FParameterRecordDataItem.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1478,6 +1521,7 @@ func (x *ParameterRecordDataItem) validate(v *validator) {
 		c.validate(v)
 	}
 	x.MenuList.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1504,6 +1548,7 @@ func (x *Const) validate(v *validator) {
 	defer v.pop()
 	v.attr("ByteOffset", x.ByteOffset, "Unsigned32", false)
 	v.attr("Data", x.Data, "string", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1560,6 +1605,7 @@ func (x *Ref) validate(v *validator) {
 	v.attr("TextId", x.TextID, "IDRef", true)
 	v.attr("Length", x.Length, "Unsigned32", false)
 	v.attr("ID", x.ID, "ID", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1587,6 +1633,7 @@ func (x *MenuList) validate(v *validator) {
 	for _, c := range x.MenuItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1623,6 +1670,7 @@ func (x *MenuItem) validate(v *validator) {
 	for _, c := range x.ParameterRefs {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1646,6 +1694,7 @@ func (x *MenuRef) validate(v *validator) {
 	v.push("MenuRef")
 	defer v.pop()
 	v.attr("MenuTarget", x.MenuTarget, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1669,6 +1718,7 @@ func (x *ParameterRef) validate(v *validator) {
 	v.push("ParameterRef")
 	defer v.pop()
 	v.attr("ParameterTarget", x.ParameterTarget, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1698,6 +1748,7 @@ func (x *FParameterRecordDataItem) validate(v *validator) {
 	v.attr("F_ParamDescCRC", x.FParamDescCRC, "Unsigned16", true)
 	v.attr("Index", x.Index, "Unsigned16", true)
 	v.attr("TransferSequence", x.TransferSequence, "Unsigned16", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1729,6 +1780,7 @@ func (x *SystemDefinedSubmoduleList) validate(v *validator) {
 	for _, c := range x.PortSubmoduleItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1799,6 +1851,7 @@ func (x *InterfaceSubmoduleItem) validate(v *validator) {
 	x.SynchronisationMode.validate(v)
 	x.ApplicationRelations.validate(v)
 	x.MediaRedundancy.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1844,6 +1897,7 @@ func (x *ApplicationRelations) validate(v *validator) {
 	v.attr("NumberOfAR", x.NumberOfAR, "Unsigned16", false)
 	x.TimingProperties.validate(v)
 	x.RTClass3TimingProperties.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1873,6 +1927,7 @@ func (x *TimingProperties) validate(v *validator) {
 	v.attr("SendClock", x.SendClock, "ValueList", false)
 	v.attr("ReductionRatio", x.ReductionRatio, "ValueList", false)
 	v.attr("ReductionRatioPow2", x.ReductionRatioPow2, "ValueList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1902,6 +1957,7 @@ func (x *RTClass3TimingProperties) validate(v *validator) {
 	v.attr("SendClock", x.SendClock, "ValueList", false)
 	v.attr("ReductionRatio", x.ReductionRatio, "ValueList", false)
 	v.attr("ReductionRatioPow2", x.ReductionRatioPow2, "ValueList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1934,6 +1990,7 @@ func (x *RTClass3Properties) validate(v *validator) {
 	v.attr("MaxNumberIR_FrameData", x.MaxNumberIRFrameData, "Unsigned32", true)
 	v.attr("StartupMode", x.StartupMode, "StartupMode", false)
 	v.attr("ForwardingMode", x.ForwardingMode, "TokenList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1966,6 +2023,7 @@ func (x *SynchronisationMode) validate(v *validator) {
 	v.attr("MaxLocalJitter", x.MaxLocalJitter, "Unsigned32", false)
 	v.attr("T_PLL_MAX", x.TPLLMAX, "Unsigned32", false)
 	v.attr("SupportedSyncProtocols", x.SupportedSyncProtocols, "TokenList", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -1995,6 +2053,7 @@ func (x *MediaRedundancy) validate(v *validator) {
 	v.attr("SupportedRole", x.SupportedRole, "TokenList", false)
 	v.attr("MaxMRP_Instances", x.MaxMRPInstances, "Unsigned8", false)
 	v.attr("AdditionalProtocolsSupported", x.AdditionalProtocolsSupported, "Boolean", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2056,6 +2115,7 @@ func (x *PortSubmoduleItem) validate(v *validator) {
 	v.attr("Writeable_IM_Records", x.WriteableIMRecords, "ValueList", false)
 	v.attr("ShortPreamble100MBitSupported", x.ShortPreamble100MBitSupported, "Boolean", false)
 	x.MAUTypeList.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2083,6 +2143,7 @@ func (x *MAUTypeList) validate(v *validator) {
 	for _, c := range x.MAUTypeItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2112,6 +2173,7 @@ func (x *MAUTypeItem) validate(v *validator) {
 	v.attr("Value", x.Value, "Unsigned16", true)
 	v.attr("AdjustSupported", x.AdjustSupported, "Boolean", false)
 	v.attr("Extension", x.Extension, "Unsigned16", false)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2139,6 +2201,7 @@ func (x *Graphics) validate(v *validator) {
 	for _, c := range x.GraphicItemRefs {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2165,6 +2228,7 @@ func (x *GraphicItemRef) validate(v *validator) {
 	defer v.pop()
 	v.attr("Type", x.Type, "token", true)
 	v.attr("GraphicItemTarget", x.GraphicItemTarget, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2192,6 +2256,7 @@ func (x *ModuleList) validate(v *validator) {
 	for _, c := range x.ModuleItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2237,6 +2302,7 @@ func (x *ModuleItem) validate(v *validator) {
 	x.VirtualSubmoduleList.validate(v)
 	x.UseableSubmodules.validate(v)
 	x.Graphics.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2264,6 +2330,7 @@ func (x *ValueList) validate(v *validator) {
 	for _, c := range x.ValueItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2291,6 +2358,7 @@ func (x *ValueItem) validate(v *validator) {
 	v.attr("ID", x.ID, "ID", true)
 	x.Help.validate(v)
 	x.Assignments.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2314,6 +2382,7 @@ func (x *Help) validate(v *validator) {
 	v.push("Help")
 	defer v.pop()
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2341,6 +2410,7 @@ func (x *Assignments) validate(v *validator) {
 	for _, c := range x.Assigns {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2367,6 +2437,7 @@ func (x *Assign) validate(v *validator) {
 	defer v.pop()
 	v.attr("Content", x.Content, "string", true)
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2394,6 +2465,7 @@ func (x *ChannelDiagList) validate(v *validator) {
 	for _, c := range x.ChannelDiagItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2429,6 +2501,7 @@ func (x *ChannelDiagItem) validate(v *validator) {
 	x.Name.validate(v)
 	x.Help.validate(v)
 	x.ExtChannelDiagList.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2456,6 +2529,7 @@ func (x *ExtChannelDiagList) validate(v *validator) {
 	for _, c := range x.ExtChannelDiagItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2489,6 +2563,7 @@ func (x *ExtChannelDiagItem) validate(v *validator) {
 	}
 	x.Name.validate(v)
 	x.Help.validate(v)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2516,6 +2591,7 @@ func (x *GraphicsList) validate(v *validator) {
 	for _, c := range x.GraphicItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2542,6 +2618,7 @@ func (x *GraphicItem) validate(v *validator) {
 	defer v.pop()
 	v.attr("ID", x.ID, "ID", true)
 	v.attr("GraphicFile", x.GraphicFile, "token", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2569,6 +2646,7 @@ func (x *CategoryList) validate(v *validator) {
 	for _, c := range x.CategoryItems {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2595,6 +2673,7 @@ func (x *CategoryItem) validate(v *validator) {
 	defer v.pop()
 	v.attr("ID", x.ID, "ID", true)
 	v.attr("TextId", x.TextID, "IDRef", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2624,6 +2703,7 @@ func (x *ExternalTextList) validate(v *validator) {
 	for _, c := range x.Languages {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2651,6 +2731,7 @@ func (x *PrimaryLanguage) validate(v *validator) {
 	for _, c := range x.Texts {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2681,6 +2762,7 @@ func (x *Language) validate(v *validator) {
 	for _, c := range x.Texts {
 		c.validate(v)
 	}
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }
 
@@ -2707,5 +2789,6 @@ func (x *Text) validate(v *validator) {
 	defer v.pop()
 	v.attr("TextId", x.TextID, "ID", true)
 	v.attr("Value", x.Value, "string", true)
+	v.unknownAttrs(x.Attrs)
 	v.unknown(x.Unknown)
 }

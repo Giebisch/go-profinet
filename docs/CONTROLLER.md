@@ -1,7 +1,8 @@
 # IO-Controller
 
 `controller.Controller` connects to IO-Devices, parameterizes them and
-exchanges their cyclic data: what a PLC does, in conformance class A/B.
+exchanges their cyclic data: what a PLC does with the features of
+conformance class A. This describes features, not certification.
 
 ## Setup
 
