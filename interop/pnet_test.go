@@ -120,6 +120,42 @@ func TestPnetController(t *testing.T) {
 	e.oracles(stop())
 }
 
+// TestPnetReparameterize: go-profinet's controller tries to
+// re-parameterize p-net in Data (PrmBegin, a write, PrmEnd). p-net (the
+// pinned tree) answers any DControl whose ControlCommand is not PrmEnd
+// with DD 81 14 08 (faulty IODControlReq, ControlCommand), so its
+// parameter begin-end machine is never reached: not applicable, and the
+// AR must run on with the old value.
+func TestPnetReparameterize(t *testing.T) {
+	e := newEnv(t)
+	dev := pnet(e, "pnet-dut")
+	stop := e.capture(dev, "pnet-reparameterize.pcap")
+	out := e.otf("ctrl", 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", "/otfnode-testdata/pnet-model.json",
+		"-param", "1:1:123:01020304", "-reparam", "1:1:123:05060708", "-read", "1:1:123", "-duration", "2s")
+	r := report(t, out)
+	if r["running"] != true {
+		t.Fatalf("not running: %v", r["error"])
+	}
+	var re, rd map[string]any
+	for _, x := range r["records"].([]any) {
+		m := x.(map[string]any)
+		switch m["op"] {
+		case "reparameterize":
+			re = m
+		case "read":
+			rd = m
+		}
+	}
+	if re != nil && re["error"] == nil {
+		e.expect("Re-parameterization in Data (p-net)", rd != nil && rd["data"] == "05060708", "%v %v", re, rd)
+	} else {
+		e.result.na("Re-parameterization in Data (p-net)", "p-net refuses PrmBegin: every DControl but PrmEnd is answered DD 81 14 08 (pf_cmrpc.c checks ControlCommand == PrmEnd); "+str(re["error"]))
+		e.expect("A refused PrmBegin leaves the AR running with its parameters (p-net)", re != nil && re["state"] == "Running" && rd != nil && rd["data"] == "01020304",
+			"%v %v", re, rd)
+	}
+	e.oracles(stop())
+}
+
 // TestPnetLegacyAndAdvanced connects in both startup modes.
 func TestPnetStartupModes(t *testing.T) {
 	e := newEnv(t)

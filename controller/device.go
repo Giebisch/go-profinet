@@ -172,7 +172,9 @@ type Device struct {
 	c   *Controller
 	cfg DeviceConfig
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// reparam serializes Reparameterize.
+	reparam sync.Mutex
 	state   State
 	lastErr error
 	mac     ethernet.MAC
@@ -240,6 +242,11 @@ type arState struct {
 	alarmLow   *alarm.Endpoint
 	appReady   chan struct{}
 	appOnce    sync.Once
+	// reAppReady is the ApplicationReady a re-parameterization awaits
+	// (guarded by Device.mu); nil when none runs.
+	reAppReady chan struct{}
+	// dead is closed by fail.
+	dead chan struct{}
 	// plugPending are the submodules handed over by a Released alarm
 	// whose ApplicationReady (plug) is awaited, by alarm sequence number
 	// (guarded by Device.mu).
@@ -252,6 +259,9 @@ type arState struct {
 func (a *arState) fail(err error) {
 	a.failOnce.Do(func() {
 		a.failErr = err
+		if a.dead != nil {
+			close(a.dead)
+		}
 		a.failed <- err
 	})
 }
@@ -846,6 +856,7 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 		localRef:    localRef,
 		appReady:    make(chan struct{}),
 		failed:      make(chan error, 1),
+		dead:        make(chan struct{}),
 	}
 	addr := &net.UDPAddr{IP: id.IP.Addr.AsSlice(), Port: rpc.Port}
 	a.addr = addr
@@ -1032,7 +1043,7 @@ func (d *Device) takeReleased(a *arState, n pnio.AlarmNotification) {
 	}
 	ctx, cancel := context.WithTimeout(d.c.ctx, d.cfg.RPCTimeout)
 	defer cancel()
-	for _, p := range d.cfg.Parameters {
+	for _, p := range d.parameters() {
 		if p.Slot != n.Slot || p.Subslot != n.Subslot {
 			continue
 		}
@@ -1138,7 +1149,7 @@ func (d *Device) storeInputs(a *arState, c []byte, s rt.DataStatus) {
 
 // parameterize writes the parameters and ends the parameterization.
 func (d *Device) parameterize(ctx context.Context, a *arState) error {
-	for _, p := range d.cfg.Parameters {
+	for _, p := range d.parameters() {
 		// A submodule another controller owns (shared device) is not
 		// this one's to parameterize; its parameters are written when it
 		// is handed over (takeReleased).
@@ -1188,8 +1199,126 @@ func (d *Device) applicationReady(cb pnio.ControlBlock) bool {
 		// Otherwise it stands for the AR's ApplicationReady, as some
 		// devices send it.
 	}
+	d.mu.Lock()
+	re := a.reAppReady
+	a.reAppReady = nil
+	d.mu.Unlock()
+	if re != nil {
+		close(re)
+		return true
+	}
 	a.appOnce.Do(func() { close(a.appReady) })
 	return true
+}
+
+// Reparameterize writes parameters to the device while its AR runs: a
+// PrmBegin, the writes, a PrmEnd, then it waits for the device's
+// ApplicationReady (bounded by DeviceConfig.ActivityTimeout). Cyclic data
+// goes on throughout; a device stops sending alarms until its
+// ApplicationReady is acknowledged. The parameters also replace those of
+// the same slot, subslot and index in the device's configuration, so that
+// a reconnect writes them again. Only one re-parameterization of a device
+// runs at a time.
+//
+// It returns profinet.ErrInvalidState unless the device is running. When
+// a step fails the AR is left as the device keeps it (a device that
+// refused PrmBegin still runs with its old parameters); a device that
+// sends no ApplicationReady makes it fail with profinet.ErrTimeout and
+// aborts the AR, which then reconnects.
+func (d *Device) Reparameterize(ctx context.Context, params []Parameter) error {
+	d.reparam.Lock()
+	defer d.reparam.Unlock()
+	d.mu.Lock()
+	a := d.ar
+	running := a != nil && d.state == StateRunning
+	d.mu.Unlock()
+	if !running {
+		return fmt.Errorf("controller: %s: re-parameterize: %w: not running", d.cfg.StationName, profinet.ErrInvalidState)
+	}
+	ready := make(chan struct{})
+	d.mu.Lock()
+	a.reAppReady = ready
+	d.mu.Unlock()
+	clear := func() {
+		d.mu.Lock()
+		if a.reAppReady == ready {
+			a.reAppReady = nil
+		}
+		d.mu.Unlock()
+	}
+	call := func(what string, f func(ctx context.Context) error) error {
+		cctx, cancel := context.WithTimeout(ctx, d.cfg.RPCTimeout)
+		defer cancel()
+		if err := f(cctx); err != nil {
+			clear()
+			return fmt.Errorf("controller: %s: re-parameterize: %s: %w", d.cfg.StationName, what, err)
+		}
+		return nil
+	}
+	if err := call("PrmBegin", func(ctx context.Context) error {
+		return a.records.Control(ctx, pnio.ControlBlock{Type: pnio.BlockPrmBeginReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdPrmBegin})
+	}); err != nil {
+		return err
+	}
+	for _, p := range params {
+		if err := call(fmt.Sprintf("parameter %d/%d %s", p.Slot, p.Subslot, p.Index), func(ctx context.Context) error {
+			return a.records.Write(ctx, a.uuid, Record{API: model.API, Slot: p.Slot, Subslot: p.Subslot, Index: p.Index}, p.Data)
+		}); err != nil {
+			return err
+		}
+	}
+	d.mu.Lock()
+	d.cfg.Parameters = mergeParameters(d.cfg.Parameters, params)
+	d.mu.Unlock()
+	if err := call("PrmEnd", func(ctx context.Context) error {
+		return a.records.Control(ctx, pnio.ControlBlock{Type: pnio.BlockPrmEndReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdPrmEnd})
+	}); err != nil {
+		return err
+	}
+	t := time.NewTimer(d.cfg.ActivityTimeout)
+	defer t.Stop()
+	select {
+	case <-ready:
+		d.c.log.Infof("controller: %s: re-parameterized (%d parameters)", d.cfg.StationName, len(params))
+		return nil
+	case <-a.dead:
+		clear()
+		return fmt.Errorf("controller: %s: re-parameterize: %w", d.cfg.StationName, profinet.ErrAborted)
+	case <-t.C:
+		clear()
+		err := fmt.Errorf("controller: %s: re-parameterize: %w: no ApplicationReady within %s", d.cfg.StationName, profinet.ErrTimeout, d.cfg.ActivityTimeout)
+		a.fail(err)
+		return err
+	case <-ctx.Done():
+		clear()
+		return ctx.Err()
+	}
+}
+
+// parameters returns the device's parameters (Reparameterize changes
+// them).
+func (d *Device) parameters() []Parameter {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.cfg.Parameters
+}
+
+// mergeParameters replaces the parameters of the same slot, subslot and
+// index and appends the others.
+func mergeParameters(old, upd []Parameter) []Parameter {
+	out := append([]Parameter(nil), old...)
+next:
+	for _, p := range upd {
+		p.Data = append([]byte(nil), p.Data...)
+		for i := range out {
+			if out[i].Slot == p.Slot && out[i].Subslot == p.Subslot && out[i].Index == p.Index {
+				out[i] = p
+				continue next
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // release ends the AR with a Release call.
