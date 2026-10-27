@@ -133,7 +133,7 @@ func (v *view) get(name OID) Value {
 			return rows[j].Value
 		}
 		if r.get != nil {
-			if val, ok := r.get(name); ok && val.valid() == nil && !val.Type.IsException() && !(v.v1 && val.Type == TypeCounter64) {
+			if val, ok := r.get(name); ok && val.valid() == nil && !val.Type.IsException() && (!v.v1 || val.Type != TypeCounter64) {
 				return val
 			}
 		}
