@@ -282,7 +282,7 @@ and experiments only, **—** deferred.
 | DHCP | P3 | DCP option 3 suboptions are DHCP option codes (61 client ID, 255 control) and IP BlockInfo bit 1 "set by DHCP" VERIFIED; no PI guidance on DHCP use found; p-net has none | decode the DCP DHCP blocks; addressing stays with the operating system (`ApplyIP`), no DHCP client in the library |
 | SNMP (CC-B features) | P2 | CC-B needs SNMP with MIB-II and the LLDP-MIB (VERIFIED, PI guideline); p-net uses net-snmp; the PNO LLDP extension MIB's text is not public (only its OIDs) | a read-only SNMPv1/v2c agent with MIB-II system/interfaces and the LLDP-MIB, standard library only |
 | DCP restricted modes, hardening | P2 | DCPBoundary and the device's own policies | configurable read-only DCP (no Set), rate limits, audit events; never called Security Class 1 |
-| GSDX/MRCD | P3 | GSDX is an Open Packaging Conventions container (ISO/IEC 29500-2, Ecma-376 Part 2, public); its PI rules, signing and MRCD are members-only | a generic container inspector (parts, content types, relationships, signature metadata), unknown parts preserved; no PI-specific validation |
+| GSDX/MRCD | P3 | GSDX is an Open Packaging Conventions container (ISO/IEC 29500-2, Ecma-376 Part 2, public); its PI rules, signing and MRCD are members-only | a generic container inspector (parts, content types, relationships, signature metadata), unknown parts preserved; no PI-specific validation. **Status: GSDX inspector done** (`gsdml/gsdx`): signatures reported, not verified; MRCD not implemented |
 | GSDML 2.46/2.50 | — | XSDs members-only | unknown elements preserved and reported as unvalidated |
 
 ### Deferred
