@@ -72,6 +72,20 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `(*Document).Text(id)`, `DataItemSize`, `ParseUint16/32`, `ParseBool`, `ParseValueList`, `FormatValueList` | helpers |
 | the generated element types (`ISO15745Profile`, `DeviceAccessPointItem`, `ModuleItem`, `VirtualSubmoduleItem`, …) | see [gsdml/SCHEMA.md](gsdml/SCHEMA.md) |
 
+## gsdml/gsdx — GSDX (OPC) containers
+
+A generic Open Packaging Conventions inspector; no PI-specific rule, no
+signature verification ([LIMITATIONS.md](LIMITATIONS.md#gsdx-containers)).
+
+| Symbol | Purpose |
+|--------|---------|
+| `Open(io.ReaderAt, size, Options)`, `OpenFile(path) (*Package, error)` | read the ZIP within `Options` limits (`MaxParts`, `MaxPartSize`, `MaxTotalSize`, `MaxRatio`); hostile or equivalent names are `ErrMalformed`, limits `ErrResourceExhausted` |
+| `Package` | `Parts` (`Name`, resolved `ContentType`, sizes, `CRC32`, `Relationships`), `Defaults`/`Overrides`, package `Relationships` (`ResolvedTarget`), `CoreProperties`, `Signatures`, `Issues` (OPC rules broken) |
+| `(*Package).Part`, `ReadPart`, `Unreachable` | look up a part, read its content, parts no relationship reaches |
+| `Signature` | `SignedInfoReferences`, `PartReferences` (`Digest`: `DigestMatch`/`DigestMismatch`/`DigestNotChecked`), `SignatureTime`, `Certificates` (subject, issuer, validity, serial); `Verified` is always false, `Reason` says why |
+| `(*Package).GSDMLParts`, `GSDML(name)`, `CheckGSDML(name)`, `IsGSDML` | find GSDML parts, read one, parse it and run `gsdml.Check` |
+| `(*Package).WriteTo(io.Writer)` | write every entry back unchanged (name, method, time, content) |
+
 ## dcp — Discovery and Configuration Protocol
 
 | Symbol | Purpose |
