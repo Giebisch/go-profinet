@@ -26,6 +26,7 @@ against (see [the matrix](#interop-matrix)).
 | Control/Start and Control/Stop around a Set | ✅ | ✅ | |
 | DHCP options (option 3: client ID 61, control 255, others raw), IP BlockInfo "set by DHCP" | ✅ (Get, `SetDHCP`, parsed in `Identity`) | ✅ (reports `Config.DHCP`; Set only through `Config.SetDHCP`, else "option not supported"; no DHCP client) | tshark decodes them (`TestDCPDHCPDecoders`; it shows options other than 61 and 255 as undecoded data); scapy 2.6.1 has no DCP DHCP block class and leaves them Raw |
 | Requester lock of another requester (3 s) | — | ✅ | p-net (as the locking side) |
+| Read-only DCP, per-source rate limits, audit events (`DCPPolicy`, opt-in) | — | ✅ | own e2e and flood tests only (local policy, no peer behaviour to compare) |
 
 ### LLDP (IEEE 802.1AB with the PROFINET TLVs)
 

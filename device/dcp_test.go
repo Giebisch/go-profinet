@@ -128,3 +128,34 @@ func TestSetDHCP(t *testing.T) {
 		t.Fatalf("after reset %v", opts)
 	}
 }
+
+// TestDCPPolicy: a read-only device refuses DCP Set with "SET not
+// possible by local reasons" and audits it; an invalid policy is refused.
+func TestDCPPolicy(t *testing.T) {
+	n := newNet(t)
+	if _, err := New(Config{Model: testModel(), Mux: n.node("").mux, DCPPolicy: dcp.Policy{Sources: -1}}); !errors.Is(err, profinet.ErrInvalidConfig) {
+		t.Fatalf("invalid policy: %v", err)
+	}
+	var mu sync.Mutex
+	var events []dcp.AuditEvent
+	d, nd := n.device(nil, func(c *Config) {
+		c.DCPPolicy = dcp.Policy{ReadOnly: true, Audit: func(e dcp.AuditEvent) {
+			mu.Lock()
+			events = append(events, e)
+			mu.Unlock()
+		}}
+	})
+	cli := n.dcpClient()
+	var se *dcp.SetError
+	if err := cli.SetName(context.Background(), nd.mux.HardwareAddr(), "other", true); !errors.As(err, &se) || se.Code != dcp.BlockErrorSetNotPossible {
+		t.Fatalf("set name %v", err)
+	}
+	if d.StationName() != "dut" {
+		t.Fatalf("renamed to %q", d.StationName())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(events) != 1 || events[0].Outcome != dcp.AuditReadOnly || events[0].Block != dcp.DeviceName {
+		t.Fatalf("events %+v", events)
+	}
+}

@@ -105,6 +105,11 @@ type Config struct {
 	// dcp.BlockErrorNone the device reports the new value. nil refuses
 	// every such Set with "option not supported".
 	SetDHCP func(p dcp.DHCPParameter, permanent bool) dcp.BlockError
+	// DCPPolicy restricts the DCP responder: a read-only mode (Set
+	// refused, Identify and Get answered), rate limits per source for
+	// Identify responses and Set requests, and audit events for every Set,
+	// ResetToFactory and refused request. The zero value restricts nothing.
+	DCPPolicy dcp.Policy
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
@@ -321,7 +326,7 @@ func (d *Device) start() error {
 	d.rpcSrv.Register(pnio.DeviceInterface, pnio.InterfaceVersion, rpc.HandlerFunc(d.serveRPC))
 	// DCP last: once the device can be found, everything a controller
 	// talks to is in place.
-	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay})
+	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay, Policy: d.cfg.DCPPolicy})
 	if err != nil {
 		return err
 	}

@@ -55,11 +55,18 @@ type ResponderOptions struct {
 	// MaxPendingIdentify bounds the delayed Identify responses waiting to
 	// be sent. Zero means 16.
 	MaxPendingIdentify int
+	// Policy restricts the responder: read-only, rate limits, audit
+	// events. The zero value restricts nothing.
+	Policy Policy
 }
 
 // ResponderStats are the counters of a [Responder].
 type ResponderStats struct {
 	Identify, Get, Set, Malformed, Ignored uint64
+	// RateLimited counts the Identify responses and Set requests dropped
+	// by the policy's rate limits; Refused the Set blocks refused, by the
+	// read-only mode or the station.
+	RateLimited, Refused uint64
 	// Hello is the number of DCP Hello requests sent.
 	Hello uint64
 }
@@ -74,7 +81,12 @@ type Responder struct {
 	delay   time.Duration
 
 	identify, get, set, malformed, ignored, hellos atomic.Uint64
+	rateLimited, refused                           atomic.Uint64
 	pendingIdentify                                atomic.Int32
+
+	// identifyLim and setLim are the policy's rate limits (nil: none);
+	// only the run goroutine uses them.
+	identifyLim, setLim *limiter
 
 	// helloMu guards the running Hello sequence (see StartHello).
 	helloMu   sync.Mutex
@@ -94,6 +106,11 @@ func NewResponder(mux *l2.Mux, station Station, opts ResponderOptions) (*Respond
 	if opts.MaxPendingIdentify <= 0 {
 		opts.MaxPendingIdentify = 16
 	}
+	pol, err := opts.Policy.normalize()
+	if err != nil {
+		return nil, err
+	}
+	opts.Policy = pol
 	log := opts.Logger
 	if log == nil {
 		log = profinet.NopLogger()
@@ -103,7 +120,8 @@ func NewResponder(mux *l2.Mux, station Station, opts ResponderOptions) (*Respond
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &Responder{mux: mux, sub: sub, station: station, opts: opts, log: log, ctx: ctx, cancel: cancel}
+	r := &Responder{mux: mux, sub: sub, station: station, opts: opts, log: log, ctx: ctx, cancel: cancel,
+		identifyLim: newLimiter(pol.IdentifyLimit, pol.Sources), setLim: newLimiter(pol.SetLimit, pol.Sources)}
 	// The spread of Identify responses: a fixed fraction of the window,
 	// derived from the MAC address as IEC 61158-6-10 suggests.
 	h := fnv.New32a()
@@ -124,6 +142,9 @@ func (r *Responder) Stats() ResponderStats {
 		Malformed: r.malformed.Load(),
 		Ignored:   r.ignored.Load(),
 		Hello:     r.hellos.Load(),
+
+		RateLimited: r.rateLimited.Load(),
+		Refused:     r.refused.Load(),
 	}
 }
 
@@ -164,9 +185,13 @@ func (r *Responder) run(ctx context.Context) {
 			r.get.Add(1)
 			r.handleGet(ctx, ef.Src, &f)
 		case f.FrameID == FrameIDGetSet && ef.Dst == own && f.Service == ServiceSet:
+			if !r.admit(r.setLim, ef.Src, ServiceSet) {
+				continue
+			}
 			r.set.Add(1)
 			r.handleSet(ctx, ef.Src, &f)
 		case f.FrameID == FrameIDGetSet && ef.Dst == own:
+			r.audit(AuditEvent{Source: ef.Src, Service: f.Service, Outcome: AuditUnsupported})
 			r.reply(ctx, ef.Src, &Frame{FrameID: FrameIDGetSet, Service: f.Service, Type: TypeResponseUnsupported, Xid: f.Xid})
 		default:
 			r.ignored.Add(1)
@@ -205,6 +230,9 @@ func (r *Responder) handleIdentify(ctx context.Context, src ethernet.MAC, f *Fra
 	id.MAC = r.mux.HardwareAddr()
 	if !matches(&id, f.Blocks) {
 		r.ignored.Add(1)
+		return
+	}
+	if !r.admit(r.identifyLim, src, ServiceIdentify) {
 		return
 	}
 	r.identify.Add(1)
@@ -274,10 +302,63 @@ func (r *Responder) handleSet(ctx context.Context, src ethernet.MAC, f *Frame) {
 	r.stopHelloAsync()
 	resp := &Frame{FrameID: FrameIDGetSet, Service: ServiceSet, Type: TypeResponseSuccess, Xid: f.Xid}
 	for _, b := range f.Blocks {
-		code := r.apply(b)
+		outcome := AuditApplied
+		var code BlockError
+		if r.opts.Policy.ReadOnly && changes(b.ID) {
+			outcome, code = AuditReadOnly, BlockErrorSetNotPossible
+		} else if code = r.apply(b); code != BlockErrorNone {
+			outcome = AuditRefused
+		}
+		if code != BlockErrorNone {
+			r.refused.Add(1)
+		}
+		if b.ID != CtrlStart && b.ID != CtrlStop {
+			r.audit(AuditEvent{Source: src, Service: ServiceSet, Block: b.ID, Qualifier: b.Info, Outcome: outcome, Error: code})
+		}
 		resp.Blocks = append(resp.Blocks, Block{ID: CtrlResponse, Data: AppendControlResponse(nil, ControlResponse{Block: b.ID, Error: code})})
 	}
 	r.reply(ctx, src, resp)
+}
+
+// changes reports whether a Set block changes the device: every block but
+// the transaction brackets and Signal.
+func changes(id BlockID) bool {
+	return id != CtrlStart && id != CtrlStop && id != CtrlSignal
+}
+
+// admit applies a rate limit to a request from src; a dropped request is
+// counted, and audited when it starts an episode.
+func (r *Responder) admit(l *limiter, src ethernet.MAC, s ServiceID) bool {
+	ok, first := l.allow(src, time.Now())
+	if ok {
+		return true
+	}
+	r.rateLimited.Add(1)
+	if first {
+		r.audit(AuditEvent{Source: src, Service: s, Outcome: AuditRateLimited})
+	}
+	return false
+}
+
+// audit reports an event to the policy's callback and the logger, with
+// fields when the logger takes them.
+func (r *Responder) audit(e AuditEvent) {
+	e.Time = time.Now()
+	if fl, ok := r.log.(profinet.FieldLogger); ok {
+		kv := []any{"source", e.Source.String(), "service", e.Service.String(), "outcome", e.Outcome.String()}
+		if e.Block != 0 {
+			kv = append(kv, "block", e.Block.String(), "qualifier", e.Qualifier)
+		}
+		if e.Error != BlockErrorNone {
+			kv = append(kv, "error", e.Error.String())
+		}
+		fl.InfoKV("dcp audit", kv...)
+	} else {
+		r.log.Infof("%s", e)
+	}
+	if r.opts.Policy.Audit != nil {
+		r.opts.Policy.Audit(e)
+	}
 }
 
 func (r *Responder) apply(b Block) BlockError {

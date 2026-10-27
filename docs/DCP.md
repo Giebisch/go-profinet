@@ -62,6 +62,25 @@ refused with "option not supported", as p-net refuses a Set of a block it
 only reports. go-profinet has no DHCP client: obtaining an address stays
 with the operating system.
 
+## Restricted modes
+
+`ResponderOptions.Policy` (`device.Config.DCPPolicy`) is off by default.
+`ReadOnly` refuses every Set block that changes the device (name, IP, DHCP,
+ResetToFactory, FactoryReset, unknown blocks) with BlockError 5, "SET not
+possible by local reasons"; Control/Start, Stop and Signal and every
+Identify and Get are answered. `IdentifyLimit` and `SetLimit` are token
+buckets per source MAC address, kept in a table of `Sources` entries (64 by
+default): a new source takes a free entry or one whose bucket has refilled
+completely, otherwise it shares one overflow bucket with the other
+untracked sources. Memory is fixed, and all sources together get at most
+(Sources+1) × Burst at once and (Sources+1) × Rate per second; requests over
+the limit are dropped unanswered. `Audit` receives an `AuditEvent` (time,
+source, service, block, qualifier, outcome, BlockError) for every Set block,
+ResetToFactory included, every unsupported service and the start of each
+rate-limited episode; the responder logs the same events at Info level,
+with fields when the logger is a `profinet.FieldLogger`. None of this
+authenticates a requester: a source address can be forged.
+
 ## Hello
 
 A device can announce itself with a DCP Hello request (FrameID 0xFEFC,
