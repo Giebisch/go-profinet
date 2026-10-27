@@ -12,7 +12,7 @@ and what would lift it.
 | System redundancy (IOCARSR, S2/R1/R2), shared device, shared input, MCR (multicast CRs) | rejected by the device; not requested by the controller |
 | PROFINET security classes 1–3, PROFIsafe | no authentication, integrity protection or safety layer (see [SECURITY.md](SECURITY.md)) |
 | Fast Startup beyond DCP Hello, DHCP | the device sends DCP Hello and the controller connects through it; the rest of Fast Startup (fixed MAU type with autonegotiation off, stored parameters, ARFSUBlock) needs control over the link and persistence that a library on a general-purpose OS does not have |
-| Port and interface parameterization (PDPortDataCheck/Adjust, PDInterfaceAdjust), topology checks by the controller | the device serves PDPortDataReal and PDRealData read-only; the controller writes no PD records |
+| Port checks and adjustments beyond peers and boundaries | the device evaluates CheckPeers and applies PeerToPeerBoundary, DCPBoundary and PDInterfaceAdjust; it refuses CheckMAUType, CheckLinkState, CheckLineDelay (the real MAU type is not known to a library, the line delay is not measured, the link-state diagnosis code is not public) and the domain, multicast, MAU, link-state and preamble adjustments (no frame forwarding with one port; the link belongs to the operating system), with PNIORW "feature not supported" (0xA9), a code PI may define differently |
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
 

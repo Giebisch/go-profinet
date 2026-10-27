@@ -25,7 +25,8 @@ The library provides:
   Connect, Read, Write, Control and Release, the AR state machine (IOCAR
   and IOSAR, several ARs), cyclic input production and output consumption
   with watchdogs, process, diagnosis and plug alarms, diagnosis records,
-  I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology
+  I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology,
+  port checks (CheckPeers) and adjustments (LLDP and DCP boundaries)
 - **DCP** (`dcp`): Identify with filters and response delay, Get, Set
   (station name, IP suite, temporary or permanent), Signal, ResetToFactory,
   Hello (sent by the device, used by the controller to connect without
@@ -92,6 +93,7 @@ is from PI's public pages.
 | ModuleDiffBlock | ✅ both roles | ✅ (plugs expected modules) | — (mismatch rejects Connect) | ✅ read | ✅ |
 | ReadImplicit, WriteMultiple | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ |
 | PDPortDataReal / PDRealData (topology) | ✅ serve and decode | ✅ | — | ✅ read | ✅ |
+| PDPortDataCheck (CheckPeers) / PDPortDataAdjust (boundaries) | ✅ device and controller | ◐ CheckPeers, PeerToPeerBoundary bit 0 | — | — | ✅ |
 | GSDML | ✅ parse, validate (catalog), generate, model conversion | — (static file) | ◐ generate | ◐ parse for cyclic | — |
 | Platforms | Linux, macOS/BSD, Windows (Npcap) | Linux, RTOS ports (not in the public tree) | Linux | Linux | Linux (Raspberry Pi demo) |
 | Runs without privileges in tests | ✅ virtual Ethernet in process | — | — | — | — |

@@ -69,6 +69,10 @@ type DeviceConfig struct {
 	RTATimeoutFactor, RTARetries uint16
 	// Parameters are written after Connect and before PrmEnd.
 	Parameters []Parameter
+	// PeerChecks are the expected neighbors of the device's ports; they
+	// are written (PDPortDataCheck) before Parameters, and the device
+	// reports a remote mismatch diagnosis while a port's neighbor differs.
+	PeerChecks []PeerCheck
 	// RPCTimeout bounds each RPC call; zero means 5 s.
 	RPCTimeout time.Duration
 	// ReconnectMin and ReconnectMax bound the backoff between attempts;
@@ -241,6 +245,11 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if err := cfg.Model.Validate(); err != nil {
 		return nil, err
 	}
+	checks, err := peerCheckParameters(cfg.Model, cfg.PeerChecks)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Parameters = append(checks, cfg.Parameters...)
 	if cfg.SendClockFactor == 0 {
 		cfg.SendClockFactor = 32
 	}

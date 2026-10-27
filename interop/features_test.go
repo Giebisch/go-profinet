@@ -6,16 +6,19 @@ package interop
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-profinet/dcp"
 	"github.com/otfabric/go-profinet/ethernet"
 	"github.com/otfabric/go-profinet/pcap"
+	"github.com/otfabric/go-profinet/pnio"
 )
 
 // countHellos returns the DCP Hellos of a capture in the share, by source
@@ -93,4 +96,61 @@ func TestPnetHello(t *testing.T) {
 		rep["running"] == true && stats != nil && stats["Hellos"].(float64) >= 1 && time.Since(start) < 25*time.Second,
 		"running %v, stats %v, %s after p-net started", rep["running"], stats, time.Since(start))
 	e.oracles(file)
+}
+
+// pnetPortMismatch returns the remote mismatch diagnoses (extended error
+// types) of p-net's first port in a controller report.
+func pnetPortMismatch(rep map[string]any) ([]float64, bool) {
+	diag, ok := rep["diagnosis"].([]any)
+	if !ok {
+		return nil, false
+	}
+	var out []float64
+	for _, d := range diag {
+		m, _ := d.(map[string]any)
+		if m["Subslot"] != float64(0x8001) {
+			continue
+		}
+		items, _ := m["Items"].([]any)
+		for _, it := range items {
+			im, _ := it.(map[string]any)
+			if im["ErrorType"] == float64(0x8001) {
+				out = append(out, im["ExtErrorType"].(float64))
+			}
+		}
+	}
+	return out, true
+}
+
+// TestPnetPortCheck: go-profinet's controller writes PDPortDataCheck
+// (CheckPeers) to p-net's port before PrmEnd; p-net, independent of
+// go-profinet, decodes it (its log echoes the wanted peer) and evaluates it
+// against its LLDP neighbor, with the diagnoses go-profinet's device
+// reports in the same situations. On the Docker bridge p-net hears its own
+// LLDP frames reflected and takes itself for its neighbor (go-profinet's
+// agent drops its own frames): its neighbor is "pnet-dut", whatever else is
+// on the segment.
+func TestPnetPortCheck(t *testing.T) {
+	e := newEnv(t)
+	if !e.forwardLLDP() {
+		e.result.na("PDPortDataCheck evaluated by p-net", "the Docker bridge does not forward LLDP here")
+		t.Skip("bridge does not forward LLDP")
+	}
+	dev := pnet(e, "pnet-dut")
+	time.Sleep(6 * time.Second) // p-net hears LLDP (5 s interval)
+	check := func(station, port string) map[string]any {
+		c := pnio.PDPortDataCheck{Subslot: 0x8001, Peers: []pnio.CheckPeer{{PortID: port, ChassisID: station}}}
+		out := e.otf("ctrl-"+station, 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", "/otfnode-testdata/pnet-model.json",
+			"-param", "0:0x8001:0x802B:"+hex.EncodeToString(c.Append(nil)), "-diag", "-duration", "2s")
+		return report(t, out)
+	}
+	rep := check("pnet-dut", "port-001")
+	got, ok := pnetPortMismatch(rep)
+	e.expect("PDPortDataCheck accepted by p-net (written before PrmEnd)", rep["running"] == true, "running %v error %v", rep["running"], rep["error"])
+	e.expect("CheckPeers, the neighbor p-net sees: no remote mismatch (p-net)", ok && len(got) == 0, "%v", rep["diagnosis"])
+	rep = check("nobody", "port-001")
+	got, ok = pnetPortMismatch(rep)
+	e.expect("CheckPeers, another name of station: remote mismatch 0x8000 (p-net)", ok && len(got) == 1 && got[0] == 0x8000, "%v", rep["diagnosis"])
+	logged := string(e.exec(dev, "sh", "-c", "grep -c 'Wanted first peer station name: nobody Port: port-001' /run/profinet-interop/pn_dev.log || true"))
+	e.expect("CheckPeers decoded by p-net as written (its log)", strings.TrimSpace(logged) != "0" && strings.TrimSpace(logged) != "", "log matches: %q", logged)
 }

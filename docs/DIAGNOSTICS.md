@@ -60,5 +60,35 @@ its neighbors (port ID, chassis ID = station name, line delay, MAC), MAU
 type, link state and media type; PDRealData (0xF841) the PDPortDataReal of
 every port in MultipleBlockHeaders. go-profinet decodes both
 (`pnio.DecodePDPortDataReal`, `pnio.DecodePDRealData`, verified against
-p-net) and the IO-Device serves them from its LLDP agent. profinetctl's
-`topology` reads PDRealData of every device and derives the links.
+p-net) and the IO-Device serves them from its LLDP agent, with its
+interface's PDInterfaceDataReal (name of station, MAC, IP suite) in
+PDRealData. profinetctl's `topology` reads PDRealData of every device and
+derives the links; `Controller.CheckTopology` compares it with an expected
+topology (links between station ports) and reports each link as ok,
+missing, wrong peer, unknown port or unverified, plus the unexpected
+links and the unreachable stations.
+
+## Port checks and adjustments (PDev)
+
+A controller writes what a port should see and how it should behave; the
+device watches it.
+
+| Record (index) | Device | Controller |
+|----------------|--------|------------|
+| PDPortDataCheck (0x802B) with CheckPeers | evaluated against the LLDP neighbor heard last, after the write and whenever the neighbors or the link change | `DeviceConfig.PeerChecks`, written before PrmEnd |
+| PDPortDataAdjust (0x802F): PeerToPeerBoundary bit 0, DCPBoundary bit 1 | LLDP transmission off; DCP Hello off | encode with `pnio.PDPortDataAdjust` |
+| PDInterfaceAdjust (0x8071) | MultipleInterfaceMode bit 0: LLDP port ID "port-001.<name>" (the default) or "port-001" | |
+| PDExpectedData (0xF842) | the written checks and adjustments | |
+
+A port whose neighbor differs from its CheckPeers reports channel diagnosis
+0x8001 "remote mismatch" on channel 0x8000 of the port submodule, with the
+extended type 0x8000 (another name of station), 0x8001 (another port) or
+0x8005 (no neighbor), the codes p-net reports; each appears and disappears
+with an alarm. A neighbor in the standard LLDP mode sends "port-001.<its
+name>", which matches the expected port "port-001". Records the device does
+not implement are refused, never stored: MAU type, link state and line
+delay checks, domain, multicast, MAU, link-state and preamble adjustments,
+with PNIORW 0xA9 "feature not supported" (p-net answers 0xB4; the code PI
+specifies is not public). The checks and adjustments last as long as the
+device runs (no persistence; a controller writes them at every Connect).
+Evidence: [research/EVIDENCE-DCP-PDEV.md](research/EVIDENCE-DCP-PDEV.md).

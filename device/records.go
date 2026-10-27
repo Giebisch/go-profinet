@@ -42,6 +42,9 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 			return nil, rwErr(pnio.RWInvalidSlot)
 		}
 	}
+	if b, ok, err := d.readPDev(q); ok {
+		return b, err
+	}
 	switch q.Index {
 	case pnio.IndexIM0, pnio.IndexIM1, pnio.IndexIM2, pnio.IndexIM3, pnio.IndexIM4:
 		if !isDAP(q.Slot, q.Subslot) {
@@ -95,8 +98,6 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 			}
 		}
 		return nil, errInvalidIndex
-	case pnio.IndexPDRealData:
-		return pnio.AppendPDRealData(nil, model.API, d.portData()), nil
 	case pnio.IndexLogBook:
 		// LogBookData with the local time and no entries.
 		b := []byte{0x00, 0x19, 0, 0, 1, 0}
@@ -174,6 +175,9 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 		return rwErr(pnio.RWAccessDenied)
 	default:
 	}
+	if handled, err := d.writePDev(q, data); handled {
+		return err
+	}
 	if !q.Index.IsUserIndex() {
 		return errInvalidIndex
 	}
@@ -244,8 +248,9 @@ func filterIdent(id pnio.IdentificationData, slot, subslot uint16, bySlot, bySub
 }
 
 // portData returns the PDPortDataReal of the DAP's ports. The device has
-// one Ethernet port: the neighbors its LLDP agent knows are the peers of
-// the first port; the other ports have none.
+// one Ethernet port: its link state is the port's (up when the port does
+// not report it), and the neighbors its LLDP agent knows are its peers;
+// the other ports are down.
 func (d *Device) portData() []pnio.PDPortDataReal {
 	var out []pnio.PDPortDataReal
 	for _, sm := range d.model.DAP.Submodules {
@@ -255,7 +260,7 @@ func (d *Device) portData() []pnio.PDPortDataReal {
 		n := sm.Subslot - model.SubslotPort1 + 1
 		p := pnio.PDPortDataReal{Slot: 0, Subslot: sm.Subslot, OwnPortID: fmt.Sprintf("port-%03d", n),
 			LinkState: pnio.LinkStateDown, MediaType: 1}
-		if n == 1 {
+		if n == 1 && d.linkUp() {
 			p.LinkState = pnio.LinkStateUp
 			p.MAUType = 0x0010 // 100BASE-TX full duplex
 			if d.lldpA != nil {

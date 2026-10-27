@@ -96,7 +96,12 @@ type AgentOptions struct {
 	Local func() LocalInfo
 	// MaxNeighbors bounds the table; zero means 16.
 	MaxNeighbors int
-	Logger       profinet.Logger
+	// OnChange is called after the neighbor table changed: a frame
+	// arrived (new or refreshed information), a neighbor expired or left
+	// (TTL 0), or Clear was called. It runs on the agent's goroutines,
+	// never with the agent's lock held, and must not block.
+	OnChange func()
+	Logger   profinet.Logger
 }
 
 // Agent sends LLDP frames periodically and keeps the neighbor table.
@@ -110,6 +115,8 @@ type Agent struct {
 
 	malformed atomic.Uint64
 	sent      atomic.Uint64
+	// silent stops the transmission (SetTransmit).
+	silent atomic.Bool
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -145,7 +152,81 @@ func NewAgent(mux *l2.Mux, opts AgentOptions) (*Agent, error) {
 		a.wg.Add(1)
 		go a.send(ctx)
 	}
+	if opts.OnChange != nil {
+		a.wg.Add(1)
+		go a.expiry(ctx)
+	}
 	return a, nil
+}
+
+// expiryPoll is how often an agent with OnChange looks for expired
+// neighbors.
+const expiryPoll = 200 * time.Millisecond
+
+// expiry reports neighbors whose information expired without a frame.
+func (a *Agent) expiry(ctx context.Context) {
+	defer a.wg.Done()
+	t := time.NewTicker(expiryPoll)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		a.mu.Lock()
+		n := a.expireLocked(time.Now())
+		a.mu.Unlock()
+		if n > 0 {
+			a.opts.OnChange()
+		}
+	}
+}
+
+func (a *Agent) changed() {
+	if a.opts.OnChange != nil {
+		a.opts.OnChange()
+	}
+}
+
+// Clear forgets every neighbor, for example when the link went down.
+func (a *Agent) Clear() {
+	a.mu.Lock()
+	clear(a.neighbors)
+	a.mu.Unlock()
+	a.changed()
+}
+
+// SetTransmit starts or stops sending LLDP frames (a port's
+// PeerToPeerBoundary); reception goes on. Starting sends a frame at once.
+func (a *Agent) SetTransmit(on bool) {
+	if a.silent.Swap(!on) && on {
+		if err := a.SendNow(context.Background()); err != nil {
+			a.opts.Logger.Debugf("lldp: send: %v", err)
+		}
+	}
+}
+
+// Transmitting reports whether the agent sends LLDP frames.
+func (a *Agent) Transmitting() bool { return !a.silent.Load() }
+
+// Latest returns the neighbor heard from most recently, and false when
+// there is none: on a point-to-point link, the port's peer.
+func (a *Agent) Latest() (Neighbor, bool) {
+	a.mu.Lock()
+	expired := a.expireLocked(time.Now())
+	var best Neighbor
+	found := false
+	for _, n := range a.neighbors {
+		if !found || n.Updated.After(best.Updated) {
+			best, found = *n, true
+		}
+	}
+	a.mu.Unlock()
+	if expired > 0 {
+		a.changed()
+	}
+	return best, found
 }
 
 // Close stops the agent.
@@ -166,7 +247,7 @@ func (a *Agent) Malformed() uint64 { return a.malformed.Load() }
 // SendNow sends one frame at once, for example after the station name
 // changed.
 func (a *Agent) SendNow(ctx context.Context) error {
-	if a.opts.Local == nil {
+	if a.opts.Local == nil || a.silent.Load() {
 		return nil
 	}
 	ttl := uint16(min(int(a.opts.Interval.Seconds())*a.opts.TTLFactor, 65535))
@@ -219,6 +300,7 @@ func (a *Agent) recv(ctx context.Context) {
 			continue
 		}
 		a.update(ef.Src, f, time.Now())
+		a.changed()
 	}
 }
 
@@ -243,23 +325,30 @@ func (a *Agent) update(src ethernet.MAC, f Frame, now time.Time) {
 	n.Expires = now.Add(time.Duration(f.TTL) * time.Second)
 }
 
-func (a *Agent) expireLocked(now time.Time) {
+// expireLocked removes the expired neighbors and returns their number.
+func (a *Agent) expireLocked(now time.Time) int {
+	removed := 0
 	for k, n := range a.neighbors {
 		if now.After(n.Expires) {
 			delete(a.neighbors, k)
+			removed++
 		}
 	}
+	return removed
 }
 
 // Neighbors returns the neighbors whose information has not expired,
 // ordered by chassis and port ID.
 func (a *Agent) Neighbors() []Neighbor {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.expireLocked(time.Now())
+	expired := a.expireLocked(time.Now())
 	out := make([]Neighbor, 0, len(a.neighbors))
 	for _, n := range a.neighbors {
 		out = append(out, *n)
+	}
+	a.mu.Unlock()
+	if expired > 0 {
+		a.changed()
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if c := strings.Compare(string(out[i].Frame.ChassisID), string(out[j].Frame.ChassisID)); c != 0 {

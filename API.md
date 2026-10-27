@@ -27,7 +27,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `New(Config) (*Controller, error)` | start a controller on a `*l2.Mux`; `Config.ListenPacket` opens its UDP sockets (nil: the OS), `RPCPort` its RPC server port (34964), `StationName`, `VendorID`/`DeviceID`/`Instance` (its object UUID), `DCP` options |
 | `(*Controller).AddDevice(DeviceConfig) (*Device, error)` | add a device and start its lifecycle |
 | `(*Controller).Device(name)`, `Devices()`, `DCP()`, `RPC()`, `ObjectUUID()`, `Close()` | access and shutdown |
-| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
+| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `PeerChecks` (the expected neighbor of each port, written before PrmEnd), `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
 | `(*Device).WaitState(ctx, State)`, `State()` | the lifecycle: `StateOffline` … `StateRunning`, `StateStopped` |
 | `(*Device).SetOutput(slot, subslot, data, iops)`, `Input(slot, subslot)`, `ConsumerStatus(slot, subslot)` | cyclic process data |
 | `(*Device).ReadRecord`, `WriteRecord`, `WriteMultiple`, `ReadIM0`, `ReadDiagnosis` | acyclic services within the AR |
@@ -35,7 +35,8 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `(*Device).ModuleDiff()`, `ARUUID()`, `MAC()`, `IP()`, `Stats()`, `Close()` | |
 | `NewRecordClient(*rpc.Client, addr, object) *RecordClient` | the acyclic services of one device without a controller: `Read` (with a nil AR UUID: ReadImplicit), `Write`, `WriteMultiple`, `Control`, `Connect`, `ReadIM0`, `ReadDiagnosis` |
 | `(*RecordClient).OpenSupervisor(ctx, SupervisorConfig) (*SupervisorAR, error)` | a device access AR (IOSAR) for an engineering tool: `Read`, `Write`, `WriteMultiple`, `Release` |
-| `AlarmEvent`, `Record`, `WriteItem`, `Parameter`, `DeviceStats` | |
+| `(*Controller).CheckTopology(ctx, []Link) (TopologyReport, error)` | compare an expected topology (`Link` between `PortRef`s) with the PDRealData of the devices: a verdict per link (`LinkOK`, `LinkMissing`, `LinkWrongPeer`, `LinkUnknownPort`, `LinkUnverified`), unexpected links, unreachable stations |
+| `AlarmEvent`, `Record`, `WriteItem`, `Parameter`, `PeerCheck`, `DeviceStats` | |
 
 ## device — IO-Device
 
@@ -103,7 +104,9 @@ The block codecs (`ConnectRequest`, `ConnectResponse`, `ARBlockReq`,
 `IOCRBlockReq`, `AlarmCRBlockReq`, `ExpectedSubmoduleBlockReq`,
 `ModuleDiffBlock`, `ControlBlock`, `ReadReq`, `WriteReq`, `AlarmNotification`,
 `AlarmAck`, `DiagnosisData`, `IdentificationData`, `IM0`–`IM4`,
-`PDPortDataReal`, …), `ReadBlock`, `SplitBlocks`, NDR (`AppendNDRRequest`,
+`PDPortDataReal`, `PDPortDataCheck`, `PDPortDataAdjust`, `PDInterfaceAdjust`,
+`PDInterfaceDataReal`, `PDRealData` with `AppendPDRealDataRecord` and
+`DecodePDRealDataRecord`, `AppendMultipleBlockHeader`, …), `ReadBlock`, `SplitBlocks`, NDR (`AppendNDRRequest`,
 `DecodeNDRResponse`), `Status` and `StatusError`, `ObjectUUID`, the
 identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`) and the
 interface UUIDs.
