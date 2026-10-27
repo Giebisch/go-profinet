@@ -334,6 +334,7 @@ func generateGo(c *catalog, raw []byte) ([]byte, error) {
 				p("\tfor _, c := range x.%s {\n\t\tc.validate(v)\n\t}\n", plural(cn))
 			}
 		}
+		p("\tv.unknownAttrs(x.Attrs)\n")
 		if e.Text == "" {
 			p("\tv.unknown(x.Unknown)\n")
 		}

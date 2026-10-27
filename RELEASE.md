@@ -36,6 +36,16 @@ versions may change the API. Releases are tagged by the Release workflow
 - Generated GSDML no longer declares SNMP in `SupportedProtocols`: the
   device has no SNMP agent.
 - `docs/research/SOFTWARE-ONLY-ROADMAP.md` and its evidence files.
+- GSDML validation (roadmap 1C): `gsdml.Check` grades every issue as
+  error, warning or unvalidated and names its rule; semantic rules for IO
+  data that does not fit an RT frame (error), slots against PhysicalSlots
+  and AllowedInSlots, record indexes, module ident numbers, interface and
+  port subslots and reduction ratios (warnings, each with its basis);
+  elements and attributes outside the catalog and newer schema versions
+  are reported as unvalidated. `Validate` still fails on errors only.
+- `controller`: `Device.WaitState` returns only after the `OnState`
+  callback of the state it waited for has run, as documented; before, it
+  could return in between.
 
 ## v0.1.2 (2026-10-26)
 

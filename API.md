@@ -64,7 +64,8 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | Symbol | Purpose |
 |--------|---------|
 | `Parse(io.Reader)`, `ParseBytes([]byte) (*Document, error)` | read a document (UTF-8 or ISO-8859-1, at most `MaxDocumentSize`) |
-| `Validate(*Document) error` | structural, lexical and reference checks; a `*ValidationError` lists the `Issue`s |
+| `Validate(*Document) error` | the errors of `Check`: structural, lexical, reference and IO data length; a `*ValidationError` lists the `Issue`s |
+| `Check(*Document) Report` | every issue with its `Severity` (`SeverityError`, `SeverityWarning`, `SeverityUnvalidated`) and `Rule` (`RuleStructure`, `RuleReference`, `RuleIODataLength`, `RuleSlots`, …), the declared `SchemaVersion`; `Report.Count`, `Report.Err` |
 | `Encode(io.Writer, *Document)`, `Marshal(*Document)` | write; unknown elements and attributes are kept |
 | `ToModel(doc, dapID)`, `FromModel(model, GenerateOptions)` | conversion to and from `model.Device` |
 | `FileName(model, version, date)` | the conventional file name |
