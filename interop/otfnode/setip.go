@@ -25,3 +25,11 @@ func setIP(iface string, s dcp.IPSuite) error {
 	}
 	return nil
 }
+
+// setLinkUp sets an interface up.
+func setLinkUp(iface string) error {
+	if out, err := exec.Command("ip", "link", "set", "dev", iface, "up").CombinedOutput(); err != nil {
+		return fmt.Errorf("ip link set up: %v: %s", err, out)
+	}
+	return nil
+}

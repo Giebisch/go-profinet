@@ -163,6 +163,8 @@ type Device struct {
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
 	snmpA  *snmp.Agent
+	// snmpStart is when the SNMP agent started (sysUpTime 0).
+	snmpStart time.Time
 
 	// mu guards the station state and the ARs.
 	mu   sync.Mutex

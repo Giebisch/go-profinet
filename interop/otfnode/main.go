@@ -10,6 +10,7 @@
 //	otfnode device     -i eth0 -station NAME [-model FILE] [-gsdml-out FILE]
 //	otfnode dcp        -i eth0 identify|get|set-name|set-ip|signal|reset ...
 //	otfnode lldp       -i eth0 -wait 12s
+//	otfnode mrp        -role manager|client [-ports ringA,ringB]
 //
 // A model FILE is a model.Device in JSON or a GSDML file.
 package main
@@ -48,7 +49,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fail(errors.New("usage: otfnode controller|device|dcp|lldp [flags]"))
+		fail(errors.New("usage: otfnode controller|device|dcp|lldp|mrp [flags]"))
 	}
 	var err error
 	switch os.Args[1] {
@@ -60,6 +61,8 @@ func main() {
 		err = runDCP(os.Args[2:])
 	case "lldp":
 		err = runLLDP(os.Args[2:])
+	case "mrp":
+		err = runMRP(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
