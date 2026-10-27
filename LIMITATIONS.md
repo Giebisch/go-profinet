@@ -15,7 +15,7 @@ and what would lift it.
 | A DHCP client | DCP's DHCP blocks (option 3) are decoded and encoded, the device reports configured DHCP options and "IP set by DHCP", and passes a DCP Set of them to `Config.SetDHCP` (refused without it). Obtaining an address by DHCP stays with the operating system; no public PI guidance on DHCP use was found |
 | Port checks and adjustments beyond peers and boundaries | the device evaluates CheckPeers and applies PeerToPeerBoundary, DCPBoundary and PDInterfaceAdjust; it refuses CheckMAUType, CheckLinkState, CheckLineDelay (the real MAU type is not known to a library, the line delay is not measured, the link-state diagnosis code is not public) and the domain, multicast, MAU, link-state and preamble adjustments (no frame forwarding with one port; the link belongs to the operating system), with PNIORW "feature not supported" (0xA9), a code PI may define differently |
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | RT_CLASS_UDP has codecs only (`rt.AppendUDPPayload`/`DecodeUDP` for the RT payload on UDP port 34962, the RTClass, LT and AlarmCR transport fields in `pnio`), checked by tshark and scapy; the device refuses an RT_CLASS_UDP Connect (PNIO status DB 81 02 07, IOCRProperties) and the controller refuses to build one. No open implementation has a UDP data path to test against (p-net validates the fields only) |
-| GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
+| GSDX rules and signing, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md). `gsdml/gsdx` inspects the public OPC layer of a GSDX (see below); MRCD is not implemented |
 
 What of this list can be built without PI membership or PROFINET hardware,
 with the protocol evidence for each feature and the order of work, is in
@@ -43,6 +43,21 @@ outside the catalog are kept verbatim and reported as unvalidated by
 `gsdml.Check`; its semantic rules are a small set, each with its basis
 (docs/GSDML.md), several of them local heuristics. Schema versions after 2.45
 (2.46, 2.50) are not in the catalog: their schemas are members-only.
+
+## GSDX containers
+
+`gsdml/gsdx` is a generic Open Packaging Conventions inspector (ISO/IEC
+29500-2 / Ecma-376 Part 2), not a GSDX implementation: PI's container
+specification, signing policy and MRCD are members-only. It applies no
+PI-specific rule and never says that a file is a valid GSDX. Digital
+signatures are reported (references, signature time, signer certificate),
+never verified: there is no XML canonicalization, no SignatureValue check
+and no trust decision, so `Signature.Verified` is always false. Only the
+digest of a part reference without transforms is compared with the part.
+Which parts hold GSDML is guessed from the content type or the
+`GSDML-*.xml` file name. Interleaved part pieces are kept, not reassembled.
+`WriteTo` keeps every entry's name, method, time and content but compresses
+again, so the compressed octets may differ.
 
 ## Timing
 
