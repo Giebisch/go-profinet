@@ -156,12 +156,13 @@ func TestHelloSequence(t *testing.T) {
 		xids[f.Xid] = true
 		times = append(times, at)
 	}
-	if d := times[0].Sub(start); d < 60*time.Millisecond {
-		t.Errorf("first Hello after %s, delay 60ms", d)
-	}
-	for i := 1; i < len(times); i++ {
-		if d := times[i].Sub(times[i-1]); d < 35*time.Millisecond {
-			t.Errorf("Hellos %d and %d %s apart", i, i+1, d)
+	// A Hello is received no earlier than it is sent, and sent no earlier
+	// than its schedule: the delay, then one interval each. (The gaps
+	// between receptions say nothing: a late reception of one Hello
+	// shortens the next gap.)
+	for i, at := range times {
+		if d, want := at.Sub(start), 60*time.Millisecond+time.Duration(i)*40*time.Millisecond; d < want {
+			t.Errorf("Hello %d after %s, scheduled at %s", i+1, d, want)
 		}
 	}
 	if len(xids) != 3 {

@@ -634,10 +634,11 @@ func TestTimeouts(t *testing.T) {
 	}
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortCMITimeout)
 	// No output frames within the data hold time once the AR is
-	// established (before that the startup grace applies).
+	// established (before that the startup grace applies). 10 cycles of
+	// 32 ms: long enough for the AR to reach Data on a stalled runner.
 	req = p.ioCAR()
 	for i := range req.IOCRs {
-		req.IOCRs[i].ReductionRatio, req.IOCRs[i].DataHoldFactor = 4, 3
+		req.IOCRs[i].ReductionRatio, req.IOCRs[i].DataHoldFactor = 32, 10
 	}
 	p.establish(req)
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortConsumerDHT)

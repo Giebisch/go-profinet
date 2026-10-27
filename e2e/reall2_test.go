@@ -57,14 +57,15 @@ func TestRealL2(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = ctrl.Close() }()
-	// A 1 ms cycle with a data hold time of 200 cycles. The test proves
+	// A 1 ms cycle with a data hold time of 1000 cycles. The test proves
 	// cyclic data over the operating system's raw Ethernet backend and
 	// measures its timing; it does not assert hard real time, which a
 	// general-purpose OS does not give: a CI runner under the race
 	// detector stalls for tens of milliseconds now and then (36 ms seen on
-	// a macOS runner, which a 30 ms hold did not survive). See
+	// a macOS runner, which a 30 ms hold did not survive, and over 200 ms
+	// on another). See
 	// docs/CYCLIC.md.
-	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "real-l2-dut", Model: testModel(), ReductionRatio: 1, DataHoldFactor: 200, WatchdogFactor: 200})
+	cd, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "real-l2-dut", Model: testModel(), ReductionRatio: 1, DataHoldFactor: 1000, WatchdogFactor: 1000})
 	if err != nil {
 		t.Fatal(err)
 	}
