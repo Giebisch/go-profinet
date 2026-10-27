@@ -135,6 +135,22 @@ func (t BlockType) String() string {
 		return "AdjustPreambleLength"
 	case BlockPDInterfaceAdjust:
 		return "PDInterfaceAdjust"
+	case BlockPDInterfaceMrpDataAdjust:
+		return "PDInterfaceMrpDataAdjust"
+	case BlockPDInterfaceMrpDataReal:
+		return "PDInterfaceMrpDataReal"
+	case BlockPDInterfaceMrpDataCheck:
+		return "PDInterfaceMrpDataCheck"
+	case BlockPDPortMrpDataAdjust:
+		return "PDPortMrpDataAdjust"
+	case BlockPDPortMrpDataReal:
+		return "PDPortMrpDataReal"
+	case BlockMrpManagerParams:
+		return "MrpManagerParams"
+	case BlockMrpClientParams:
+		return "MrpClientParams"
+	case BlockMrpRingStateData:
+		return "MrpRingStateData"
 	case BlockMultipleBlockHeader:
 		return "MultipleBlockHeader"
 	case BlockIM0:

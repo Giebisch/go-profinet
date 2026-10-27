@@ -6,7 +6,7 @@ on real Layer 2 networks.
 | Tier | What | How to run |
 |------|------|------------|
 | Unit | every codec with golden vectors written from the standard, every state machine, every option and error path | `make test` (race detector) |
-| Fuzz | every decoder of network input and of documents (24 targets): no panic, and what decodes re-encodes to the same value | `make fuzz` (`FUZZTIME`, 30 s each; 10 s in CI) |
+| Fuzz | every decoder of network input and of documents (25 targets): no panic, and what decodes re-encodes to the same value | `make fuzz` (`FUZZTIME`, 30 s each; 10 s in CI) |
 | End to end | controller and devices on the virtual network: startup modes, records, alarms, diagnosis, ModuleDiff, IP assignment and rename, many devices, recovery, activity timeouts, a second controller, reset, topology | `make test-e2e` |
 | Chaos | the same with seeded loss, duplication, corruption, reordering, delay and jitter, a reconnect storm, malformed input of every kind | part of `make test-e2e` (seeds are logged; `vnet.New(seed)` reproduces) |
 | Chaos monkey | a controller with three devices under a seeded random sequence of disruptions (fault profiles, link flaps, device restarts, renames, devices removed and re-added, diagnosis storms, record and output traffic); afterwards every AR must be Running with fresh data both ways and working records, and no goroutine may be left (`TestChaosMonkey`; 40 steps, 400 in the extended workflow; `PROFINET_CHAOS_SEED` and `PROFINET_MONKEY_STEPS` reproduce a run). Verified with seeds 7, 42, 99 (200 steps), 1000–1002 | part of `make test-e2e` |

@@ -130,12 +130,18 @@ interface UUIDs. RT_CLASS_UDP fields (codecs only): `LTIP`, `UDPRTPort`,
 `IOCRPropRTClassMask`, `AlarmCRPropTransportUDP`,
 `AlarmCRBlockReq.TransportUDP`, `ConnectRequest.UsesUDP`.
 
-## mrp and ptcp — codecs
+## mrp and ptcp
 
 `mrp`: `Frame` (`Test`, `TopologyChange`, `LinkChange`, `Common`, `Option`, other
 TLVs), `AppendTo`, `Decode`, `EtherType`, the destination addresses, `PortRole`,
-`RingState`, `DefaultDomain`. `ptcp`: `Delay` (`AppendTo`, `Decode`), the delay
-FrameIDs. Codecs only: no ring manager or client, no line delay measurement.
+`RingState`, `DefaultDomain`; the ring entity `New(Config)` (`RoleClient`,
+`RoleManager`, two ring ports of a `Switch` such as `l2/bridge`, `Profile200`,
+`Profile500`), `Entity.Status`, `Close`. `device.Config.MRP` (`MRPConfig`) runs it on
+a multiport device, `Device.MRPStatus` reports it, and the records
+PDInterfaceMrpDataAdjust/Real/Check and PDPortMrpDataAdjust/Real (`pnio`) configure
+and report it; `controller.DeviceConfig.MRP` (`MRPSetting`) writes them.
+`ptcp`: `Delay` (`AppendTo`, `Decode`), the delay FrameIDs; no line delay
+measurement.
 
 ## snmp — read-only SNMPv1/v2c agent
 

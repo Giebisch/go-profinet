@@ -279,6 +279,16 @@ and experiments only, **—** deferred.
   switchdev (INFERRED from the code, to be tested).
 - **Claims**: no industrial reconvergence time is claimed from virtual
   rings; recovery times are measured. MRPD is deferred.
+- **Status (2026-10-27)**: MRC and MRM done (`mrp.New`, on `l2/bridge`),
+  with the PROFINET MRP records 0x8050–0x8054 (version 1.0 blocks, decoded
+  field by field by tshark) and `controller.DeviceConfig.MRP`. Rings of
+  three bridges and of three devices on vnet: closed with the manager's
+  secondary port blocked, no loop (one broadcast is delivered once), a
+  cable break opens the ring and the far device is reached the other way
+  round (about 20–35 ms on vnet with the 200 ms profile), the cable back
+  closes it. Not done: an independent MRP peer (microchip-ung/mrp needs a
+  kernel with CONFIG_BRIDGE_MRP and a container network that carries a
+  ring), MRA, interconnection, MRP diagnoses.
 
 ### 5. Optional extensions
 

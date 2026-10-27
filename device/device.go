@@ -59,6 +59,9 @@ type Config struct {
 	// and link state. nil: the device has one port, Mux's. The caller
 	// owns the bridge and closes it after the device.
 	Bridge *bridge.Bridge
+	// MRP runs media redundancy on two ports of a multiport device (a
+	// Bridge is required); nil: none, and the MRP records are refused.
+	MRP *MRPConfig
 	// StationName and IP are the initial station name and IP suite.
 	StationName string
 	IP          dcp.IPSuite
@@ -153,6 +156,7 @@ type Device struct {
 	disp   *rt.Dispatcher
 	sched  *rt.Scheduler
 	ports  []*port
+	mrpSt  *mrpState
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
 	snmpA  *snmp.Agent
@@ -324,6 +328,11 @@ func (d *Device) start() error {
 			return err
 		}
 	}
+	if d.cfg.MRP != nil {
+		if err := d.startMRP(); err != nil {
+			return err
+		}
+	}
 	cconn, err := d.cfg.ListenPacket(d.ctx, "udp4", ":0")
 	if err != nil {
 		return fmt.Errorf("device: RPC client socket: %w", err)
@@ -406,6 +415,7 @@ func (d *Device) Close() error {
 	if d.rpcCli != nil {
 		_ = d.rpcCli.Close()
 	}
+	d.stopMRP()
 	if d.snmpA != nil {
 		_ = d.snmpA.Close()
 	}
