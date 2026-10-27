@@ -44,18 +44,17 @@ func (s station) SetDHCP(p dcp.DHCPParameter, permanent bool) dcp.BlockError {
 	if d.cfg.SetDHCP == nil {
 		return dcp.BlockErrorOptionUnsupported
 	}
+	if permanent {
+		if err := d.persist(func(st *persisted) { st.DHCP = setDHCP(st.DHCP, p) }); err != nil {
+			return dcp.BlockErrorResource
+		}
+	}
 	if code := d.cfg.SetDHCP(p, permanent); code != dcp.BlockErrorNone {
 		return code
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for i := range d.dhcp {
-		if d.dhcp[i].Code == p.Code {
-			d.dhcp[i] = p
-			return dcp.BlockErrorNone
-		}
-	}
-	d.dhcp = append(d.dhcp, p)
+	d.dhcp = setDHCP(d.dhcp, p)
 	return dcp.BlockErrorNone
 }
 

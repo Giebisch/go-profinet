@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic fixture written for go-profinet (MIT). Vendor ID 0xF000 (PI's
+     range for examples); no vendor data. A modular device with two device
+     access points: DAP_1P (one port) and DAP_2P (two ports, shared device,
+     device access AR); modules with inputs, outputs and both; parameter
+     records with enumerations and ranges; process alarms and channel
+     diagnoses. -->
+<ISO15745Profile xmlns="http://www.profibus.com/GSDML/2003/11/DeviceProfile" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.profibus.com/GSDML/2003/11/DeviceProfile ..\xsd\GSDML-DeviceProfile-V2.43.xsd">
+  <ProfileHeader>
+    <ProfileIdentification>PROFINET Device Profile</ProfileIdentification>
+    <ProfileRevision>1.00</ProfileRevision>
+    <ProfileName>Device Profile for PROFINET Devices</ProfileName>
+    <ProfileSource>PROFIBUS Nutzerorganisation e. V. (PNO)</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>4</ISO15745Part>
+      <ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>GSDML</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity VendorID="0xF000" DeviceID="0x00A1">
+      <InfoText TextId="T_Info"/>
+      <VendorName Value="OT Fabric"/>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <Family MainFamily="I/O" ProductFamily="OTF Modular Fixture"/>
+    </DeviceFunction>
+    <ApplicationProcess>
+      <DeviceAccessPointList>
+        <DeviceAccessPointItem ID="DAP_1P" PNIO_Version="V2.43" PhysicalSlots="0..8" ModuleIdentNumber="0x00000101" MinDeviceInterval="32" DNS_CompatibleName="otf-modular" FixedInSlots="0" ObjectUUID_LocalIndex="1" MultipleWriteSupported="true" DeviceAccessSupported="false" CheckDeviceID_Allowed="true" NameOfStationNotTransferable="false" LLDP_NoD_Supported="true" ResetToFactoryModes="2">
+          <ModuleInfo CategoryRef="CAT_HEAD">
+            <Name TextId="T_DAP1"/>
+            <InfoText TextId="T_DAP1_Info"/>
+            <VendorName Value="OT Fabric"/>
+            <OrderNumber Value="OTF-MOD-1P"/>
+            <HardwareRelease Value="1"/>
+            <SoftwareRelease Value="V1.0.0"/>
+          </ModuleInfo>
+          <CertificationInfo ConformanceClass="A" ApplicationClass="" NetloadClass="I"/>
+          <IOConfigData MaxInputLength="128" MaxOutputLength="128"/>
+          <UseableModules>
+            <ModuleItemRef ModuleItemTarget="MOD_DI16" AllowedInSlots="1..8" UsedInSlots="1"/>
+            <ModuleItemRef ModuleItemTarget="MOD_DO16" AllowedInSlots="1..8" UsedInSlots="2"/>
+            <ModuleItemRef ModuleItemTarget="MOD_DIO8" AllowedInSlots="1..8"/>
+            <ModuleItemRef ModuleItemTarget="MOD_AI4" AllowedInSlots="1..8" UsedInSlots="3"/>
+          </UseableModules>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="DAP_1P_SM" SubmoduleIdentNumber="0x00000001" MayIssueProcessAlarm="false" Writeable_IM_Records="1 2 3">
+              <IOData/>
+              <ModuleInfo>
+                <Name TextId="T_DAP1"/>
+                <InfoText TextId="T_DAP1_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+          <SystemDefinedSubmoduleList>
+            <InterfaceSubmoduleItem ID="IF_1P" SubslotNumber="32768" TextId="T_IF" SubmoduleIdentNumber="0x00008000" SupportedRT_Classes="RT_CLASS_1" SupportedProtocols="LLDP">
+              <ApplicationRelations StartupMode="Advanced" NumberOfAR="1">
+                <TimingProperties SendClock="32" ReductionRatio="1 2 4 8 16 32 64 128 256 512"/>
+              </ApplicationRelations>
+            </InterfaceSubmoduleItem>
+            <PortSubmoduleItem ID="P1_1P" SubslotNumber="32769" TextId="T_P1" SubmoduleIdentNumber="0x00008001">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+          </SystemDefinedSubmoduleList>
+        </DeviceAccessPointItem>
+        <DeviceAccessPointItem ID="DAP_2P" PNIO_Version="V2.43" PhysicalSlots="0..16" ModuleIdentNumber="0x00000102" MinDeviceInterval="32" DNS_CompatibleName="otf-modular" FixedInSlots="0" ObjectUUID_LocalIndex="1" MultipleWriteSupported="true" DeviceAccessSupported="true" NumberOfDeviceAccessAR="1" CheckDeviceID_Allowed="true" NameOfStationNotTransferable="false" LLDP_NoD_Supported="true" SharedDeviceSupported="true" ResetToFactoryModes="2">
+          <ModuleInfo CategoryRef="CAT_HEAD">
+            <Name TextId="T_DAP2"/>
+            <InfoText TextId="T_DAP2_Info"/>
+            <VendorName Value="OT Fabric"/>
+            <OrderNumber Value="OTF-MOD-2P"/>
+            <HardwareRelease Value="1"/>
+            <SoftwareRelease Value="V1.0.0"/>
+          </ModuleInfo>
+          <CertificationInfo ConformanceClass="B" ApplicationClass="" NetloadClass="I"/>
+          <IOConfigData MaxInputLength="256" MaxOutputLength="256"/>
+          <UseableModules>
+            <ModuleItemRef ModuleItemTarget="MOD_DI16" AllowedInSlots="1..16" UsedInSlots="1"/>
+            <ModuleItemRef ModuleItemTarget="MOD_DO16" AllowedInSlots="1..16" UsedInSlots="2"/>
+            <ModuleItemRef ModuleItemTarget="MOD_DIO8" AllowedInSlots="1..16" UsedInSlots="4"/>
+            <ModuleItemRef ModuleItemTarget="MOD_AI4" AllowedInSlots="1..16" UsedInSlots="3"/>
+          </UseableModules>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="DAP_2P_SM" SubmoduleIdentNumber="0x00000002" MayIssueProcessAlarm="false" Writeable_IM_Records="1 2 3 4">
+              <IOData/>
+              <ModuleInfo>
+                <Name TextId="T_DAP2"/>
+                <InfoText TextId="T_DAP2_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+          <SystemDefinedSubmoduleList>
+            <InterfaceSubmoduleItem ID="IF_2P" SubslotNumber="32768" TextId="T_IF" SubmoduleIdentNumber="0x00008000" SupportedRT_Classes="RT_CLASS_1;RT_CLASS_2" SupportedProtocols="SNMP;LLDP">
+              <ApplicationRelations StartupMode="Advanced" NumberOfAR="2">
+                <TimingProperties SendClock="32" ReductionRatio="1 2 4 8 16 32 64 128 256 512"/>
+              </ApplicationRelations>
+            </InterfaceSubmoduleItem>
+            <PortSubmoduleItem ID="P1_2P" SubslotNumber="32769" TextId="T_P1" SubmoduleIdentNumber="0x00008001">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+            <PortSubmoduleItem ID="P2_2P" SubslotNumber="32770" TextId="T_P2" SubmoduleIdentNumber="0x00008002">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+          </SystemDefinedSubmoduleList>
+        </DeviceAccessPointItem>
+      </DeviceAccessPointList>
+      <ModuleList>
+        <ModuleItem ID="MOD_DI16" ModuleIdentNumber="0x00000010">
+          <ModuleInfo CategoryRef="CAT_DIG">
+            <Name TextId="T_DI16"/>
+            <InfoText TextId="T_DI16_Info"/>
+            <OrderNumber Value="OTF-DI16"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_DI16" SubmoduleIdentNumber="0x00000011" MayIssueProcessAlarm="true">
+              <IOData>
+                <Input Consistency="Item consistency">
+                  <DataItem DataType="Unsigned16" UseAsBits="true" TextId="T_DI16_In">
+                    <BitDataItem BitOffset="0" TextId="T_Ch0"/>
+                    <BitDataItem BitOffset="1" TextId="T_Ch1"/>
+                  </DataItem>
+                </Input>
+              </IOData>
+              <RecordDataList>
+                <ParameterRecordDataItem Index="100" Length="2">
+                  <Name TextId="T_DI_Par"/>
+                  <Ref ByteOffset="0" DataType="Unsigned8" DefaultValue="3" AllowedValues="1..20" TextId="T_Filter"/>
+                  <Ref ByteOffset="1" BitOffset="0" DataType="Bit" DefaultValue="1" TextId="T_DiagWire" ValueItemTarget="V_ONOFF"/>
+                </ParameterRecordDataItem>
+              </RecordDataList>
+              <ModuleInfo>
+                <Name TextId="T_DI16"/>
+                <InfoText TextId="T_DI16_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_DO16" ModuleIdentNumber="0x00000020">
+          <ModuleInfo CategoryRef="CAT_DIG">
+            <Name TextId="T_DO16"/>
+            <InfoText TextId="T_DO16_Info"/>
+            <OrderNumber Value="OTF-DO16"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_DO16" SubmoduleIdentNumber="0x00000021" MayIssueProcessAlarm="false">
+              <IOData>
+                <Output Consistency="Item consistency">
+                  <DataItem DataType="Unsigned16" TextId="T_DO16_Out"/>
+                </Output>
+              </IOData>
+              <RecordDataList>
+                <ParameterRecordDataItem Index="101" Length="1">
+                  <Name TextId="T_DO_Par"/>
+                  <Ref ByteOffset="0" BitOffset="0" BitLength="2" DataType="BitArea" DefaultValue="0" TextId="T_Substitute" ValueItemTarget="V_SUBST"/>
+                </ParameterRecordDataItem>
+              </RecordDataList>
+              <ModuleInfo>
+                <Name TextId="T_DO16"/>
+                <InfoText TextId="T_DO16_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_DIO8" ModuleIdentNumber="0x00000030">
+          <ModuleInfo CategoryRef="CAT_DIG">
+            <Name TextId="T_DIO8"/>
+            <InfoText TextId="T_DIO8_Info"/>
+            <OrderNumber Value="OTF-DIO8"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_DIO8" SubmoduleIdentNumber="0x00000031" MayIssueProcessAlarm="true">
+              <IOData>
+                <Input>
+                  <DataItem DataType="Unsigned8" TextId="T_DIO8_In"/>
+                </Input>
+                <Output>
+                  <DataItem DataType="Unsigned8" TextId="T_DIO8_Out"/>
+                </Output>
+              </IOData>
+              <ModuleInfo>
+                <Name TextId="T_DIO8"/>
+                <InfoText TextId="T_DIO8_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_AI4" ModuleIdentNumber="0x00000040">
+          <ModuleInfo CategoryRef="CAT_ANA">
+            <Name TextId="T_AI4"/>
+            <InfoText TextId="T_AI4_Info"/>
+            <OrderNumber Value="OTF-AI4"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_AI4" SubmoduleIdentNumber="0x00000041" MayIssueProcessAlarm="true">
+              <IOData>
+                <Input Consistency="All items consistency">
+                  <DataItem DataType="Integer16" TextId="T_AI_Ch0"/>
+                  <DataItem DataType="Integer16" TextId="T_AI_Ch1"/>
+                  <DataItem DataType="Integer16" TextId="T_AI_Ch2"/>
+                  <DataItem DataType="Integer16" TextId="T_AI_Ch3"/>
+                </Input>
+              </IOData>
+              <RecordDataList>
+                <ParameterRecordDataItem Index="102" Length="6">
+                  <Name TextId="T_AI_Par"/>
+                  <Const Data="0x01"/>
+                  <Ref ByteOffset="1" DataType="Unsigned8" DefaultValue="2" TextId="T_Range" ValueItemTarget="V_RANGE"/>
+                  <Ref ByteOffset="2" DataType="Unsigned16" DefaultValue="50" AllowedValues="10..1000" TextId="T_Filter"/>
+                  <Ref ByteOffset="4" DataType="Integer16" DefaultValue="0" AllowedValues="-1000..1000" TextId="T_Offset"/>
+                </ParameterRecordDataItem>
+              </RecordDataList>
+              <ModuleInfo>
+                <Name TextId="T_AI4"/>
+                <InfoText TextId="T_AI4_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+      </ModuleList>
+      <ValueList>
+        <ValueItem ID="V_ONOFF">
+          <Assignments>
+            <Assign Content="0" TextId="T_Off"/>
+            <Assign Content="1" TextId="T_On"/>
+          </Assignments>
+        </ValueItem>
+        <ValueItem ID="V_SUBST">
+          <Assignments>
+            <Assign Content="0" TextId="T_Subst0"/>
+            <Assign Content="1" TextId="T_SubstLast"/>
+            <Assign Content="2" TextId="T_Subst1"/>
+          </Assignments>
+        </ValueItem>
+        <ValueItem ID="V_RANGE">
+          <Assignments>
+            <Assign Content="1" TextId="T_R10V"/>
+            <Assign Content="2" TextId="T_R420"/>
+          </Assignments>
+        </ValueItem>
+      </ValueList>
+      <ChannelDiagList>
+        <ChannelDiagItem ErrorType="256">
+          <Name TextId="T_DiagSensor"/>
+          <Help TextId="T_DiagSensor_Help"/>
+          <ExtChannelDiagList>
+            <ExtChannelDiagItem ErrorType="1">
+              <Name TextId="T_DiagSensorLow"/>
+            </ExtChannelDiagItem>
+            <ExtChannelDiagItem ErrorType="2">
+              <Name TextId="T_DiagSensorHigh"/>
+            </ExtChannelDiagItem>
+          </ExtChannelDiagList>
+        </ChannelDiagItem>
+      </ChannelDiagList>
+      <CategoryList>
+        <CategoryItem ID="CAT_HEAD" TextId="T_CatHead"/>
+        <CategoryItem ID="CAT_DIG" TextId="T_CatDig"/>
+        <CategoryItem ID="CAT_ANA" TextId="T_CatAna"/>
+      </CategoryList>
+      <ExternalTextList>
+        <PrimaryLanguage>
+          <Text TextId="T_Info" Value="OT Fabric modular fixture: synthetic device for interoperability tests"/>
+          <Text TextId="T_DAP1" Value="Head, 1 port"/>
+          <Text TextId="T_DAP1_Info" Value="Interface with one port, one IO controller"/>
+          <Text TextId="T_DAP2" Value="Head, 2 ports"/>
+          <Text TextId="T_DAP2_Info" Value="Interface with two ports, shared device, device access"/>
+          <Text TextId="T_IF" Value="X1"/>
+          <Text TextId="T_P1" Value="X1 P1"/>
+          <Text TextId="T_P2" Value="X1 P2"/>
+          <Text TextId="T_DI16" Value="DI 16"/>
+          <Text TextId="T_DI16_Info" Value="16 digital inputs"/>
+          <Text TextId="T_DI16_In" Value="Inputs"/>
+          <Text TextId="T_Ch0" Value="Channel 0"/>
+          <Text TextId="T_Ch1" Value="Channel 1"/>
+          <Text TextId="T_DI_Par" Value="Input parameters"/>
+          <Text TextId="T_Filter" Value="Filter"/>
+          <Text TextId="T_DiagWire" Value="Wire break diagnosis"/>
+          <Text TextId="T_DO16" Value="DO 16"/>
+          <Text TextId="T_DO16_Info" Value="16 digital outputs"/>
+          <Text TextId="T_DO16_Out" Value="Outputs"/>
+          <Text TextId="T_DO_Par" Value="Output parameters"/>
+          <Text TextId="T_Substitute" Value="Substitute value"/>
+          <Text TextId="T_DIO8" Value="DIO 8"/>
+          <Text TextId="T_DIO8_Info" Value="8 digital inputs and 8 digital outputs"/>
+          <Text TextId="T_DIO8_In" Value="Inputs"/>
+          <Text TextId="T_DIO8_Out" Value="Outputs"/>
+          <Text TextId="T_AI4" Value="AI 4"/>
+          <Text TextId="T_AI4_Info" Value="4 analog inputs"/>
+          <Text TextId="T_AI_Ch0" Value="Channel 0"/>
+          <Text TextId="T_AI_Ch1" Value="Channel 1"/>
+          <Text TextId="T_AI_Ch2" Value="Channel 2"/>
+          <Text TextId="T_AI_Ch3" Value="Channel 3"/>
+          <Text TextId="T_AI_Par" Value="Analog parameters"/>
+          <Text TextId="T_Range" Value="Measuring range"/>
+          <Text TextId="T_Offset" Value="Offset"/>
+          <Text TextId="T_Off" Value="Off"/>
+          <Text TextId="T_On" Value="On"/>
+          <Text TextId="T_Subst0" Value="0"/>
+          <Text TextId="T_SubstLast" Value="Keep last value"/>
+          <Text TextId="T_Subst1" Value="1"/>
+          <Text TextId="T_R10V" Value="0 to 10 V"/>
+          <Text TextId="T_R420" Value="4 to 20 mA"/>
+          <Text TextId="T_DiagSensor" Value="Sensor fault"/>
+          <Text TextId="T_DiagSensor_Help" Value="Check the sensor wiring"/>
+          <Text TextId="T_DiagSensorLow" Value="Below range"/>
+          <Text TextId="T_DiagSensorHigh" Value="Above range"/>
+          <Text TextId="T_CatHead" Value="Head modules"/>
+          <Text TextId="T_CatDig" Value="Digital"/>
+          <Text TextId="T_CatAna" Value="Analog"/>
+        </PrimaryLanguage>
+      </ExternalTextList>
+    </ApplicationProcess>
+  </ProfileBody>
+</ISO15745Profile>

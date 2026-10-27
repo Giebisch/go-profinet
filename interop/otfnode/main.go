@@ -550,16 +550,19 @@ func runDevice(args []string) error {
 	iface := fs.String("i", "eth0", "interface")
 	station := fs.String("station", "otf-device", "station name")
 	modelFile := fs.String("model", "", "device model (model JSON or GSDML); default: the built-in interop device")
+	devDAP := fs.String("dap", "", "the GSDML device access point ID of -model (default: the first)")
 	gsdmlOut := fs.String("gsdml-out", "", "write the device's GSDML to this file and continue")
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	alarmAfter := fs.Duration("alarm-after", 0, "raise a diagnosis on slot 1 this long after the AR reaches Data")
 	acceptIP := fs.Bool("apply-ip", true, "apply DCP Set IP to the interface (needs CAP_NET_ADMIN)")
 	hello := fs.Uint("hello", 0, "DCP Hello mode: 0 off, 1 on link up, 2 on link up after a delay")
+	community := fs.String("snmp", "", "serve SNMP (v1/v2c, UDP 161) with this read community")
+	lldpEvery := fs.Duration("lldp-interval", 0, "LLDP transmit interval (0: the default, 5 s)")
 	_ = fs.Parse(args)
 	m := defaultModel()
 	if *modelFile != "" {
 		var err error
-		if m, err = loadModel(*modelFile, ""); err != nil {
+		if m, err = loadModel(*modelFile, *devDAP); err != nil {
 			return err
 		}
 	}
@@ -583,7 +586,10 @@ func runDevice(args []string) error {
 	}
 	defer closePort()
 	cfg := device.Config{Model: m, Mux: mux, StationName: *station, IP: ifaceSuite(*iface), Handler: otfHandler{}, Logger: profinet.NopLogger(),
-		Hello: dcp.HelloMode(*hello)}
+		Hello: dcp.HelloMode(*hello), LLDPInterval: *lldpEvery}
+	if *community != "" {
+		cfg.SNMP = &device.SNMPConfig{Community: *community, Contact: "otfabric interop", Location: "profinet-interop"}
+	}
 	if *acceptIP {
 		cfg.ApplyIP = func(s dcp.IPSuite, _ bool) error { return setIP(*iface, s) }
 	}

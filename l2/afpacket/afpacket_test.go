@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -156,5 +157,119 @@ func TestInsertTag(t *testing.T) {
 	}
 	if _, _, ok := vlanFromAux([]byte{1, 2}); ok {
 		t.Fatal("garbage aux data")
+	}
+}
+
+// TestNoAllocations: once warmed up, a write and a read of a frame
+// allocate nothing (race builds instrument allocations: skipped there).
+func TestNoAllocations(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates")
+	}
+	a, b := pair(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := ethernet.Frame{Dst: b.HardwareAddr(), Src: a.HardwareAddr(), EtherType: 0x88B5, Payload: make([]byte, 46)}
+	frame := f.Encode()
+	buf := make([]byte, 1600)
+	roundTrip := func() {
+		if err := a.WriteFrame(ctx, frame); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			n, err := b.ReadFrame(ctx, buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n >= 14 && buf[12] == 0x88 && buf[13] == 0xB5 {
+				return
+			}
+		}
+	}
+	roundTrip()
+	if n := testing.AllocsPerRun(200, roundTrip); n != 0 {
+		t.Fatalf("%v allocations per write and read", n)
+	}
+	if n := testing.AllocsPerRun(100, func() { _ = a.LinkUp() }); n != 0 {
+		t.Fatalf("%v allocations per LinkUp", n)
+	}
+}
+
+// TestContextChanges: a read whose context ended leaves nothing behind for
+// the next read with another context; a cancelled context interrupts a
+// read that blocks.
+func TestContextChanges(t *testing.T) {
+	a, b := pair(t)
+	buf := make([]byte, 2000)
+	// A cancelled context ends the read at once.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := b.ReadFrame(ctx, buf); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled: %v", err)
+	}
+	// A context cancelled while the read blocks interrupts it.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel2() }()
+	start := time.Now()
+	for {
+		if _, err := b.ReadFrame(ctx2, buf); err != nil {
+			if !errors.Is(err, context.Canceled) || time.Since(start) > 2*time.Second {
+				t.Fatalf("interrupted read: %v after %s", err, time.Since(start))
+			}
+			break
+		}
+	}
+	// The next read, without a deadline, still receives.
+	f := ethernet.Frame{Dst: b.HardwareAddr(), Src: a.HardwareAddr(), EtherType: 0x88B5, Payload: []byte{7}}
+	go func() { time.Sleep(50 * time.Millisecond); _ = a.WriteFrame(context.Background(), f.Encode()) }()
+	got := recv(t, b, 0x88B5)
+	if got.Payload[0] != 7 {
+		t.Fatalf("after cancellation: %+v", got)
+	}
+	// A context with a deadline, then one without.
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel3()
+	for {
+		if _, err := b.ReadFrame(ctx3, buf); err != nil {
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("deadline: %v", err)
+			}
+			break
+		}
+	}
+	go func() { time.Sleep(50 * time.Millisecond); _ = a.WriteFrame(context.Background(), f.Encode()) }()
+	if got := recv(t, b, 0x88B5); got.Payload[0] != 7 {
+		t.Fatalf("after a deadline: %+v", got)
+	}
+}
+
+// TestLinkDown: taking the peer down clears the link (IFF_RUNNING).
+func TestLinkDown(t *testing.T) {
+	a, b := pair(t)
+	if !a.LinkUp() {
+		t.Fatal("link down at start")
+	}
+	if out, err := exec.Command("ip", "link", "set", b.Name(), "down").CombinedOutput(); err != nil {
+		t.Skipf("cannot set the link down: %v %s", err, out)
+	}
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "set", b.Name(), "up").Run() })
+	deadline := time.Now().Add(2 * time.Second)
+	for a.LinkUp() {
+		if time.Now().After(deadline) {
+			t.Fatal("link still up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if b.LinkUp() {
+		t.Fatal("the downed end reports its link up")
+	}
+	if err := exec.Command("ip", "link", "set", b.Name(), "up").Run(); err != nil {
+		t.Fatal(err)
+	}
+	for !a.LinkUp() {
+		if time.Now().After(deadline.Add(2 * time.Second)) {
+			t.Fatal("link not back")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

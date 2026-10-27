@@ -734,10 +734,8 @@ func TestServerConnAndErrors(t *testing.T) {
 	sc.setWriteErr(nil)
 	// Malformed packets are counted and logged.
 	_, _ = peer.WriteTo(make([]byte, 10), s.LocalAddr())
-	waitFor(t, "malformed", func() bool { return s.Stats().Malformed == 1 })
-	if !log.has("DEBUG rpc: drop packet from p") {
-		t.Fatalf("log %v", log.msgs)
-	}
+	// The server counts the packet before it logs it: wait for both.
+	waitFor(t, "malformed", func() bool { return s.Stats().Malformed == 1 && log.has("DEBUG rpc: drop packet from p") })
 	// The socket is not closed by a server that does not own it.
 	if err := s.Close(); err != nil {
 		t.Fatal(err)

@@ -63,7 +63,33 @@ The `Handler` decides what the device leaves to the application:
 | `ReadRecord`, `WriteRecord` | user records without a `model.Record`, unknown indices; return `device.RecordError(code1, code2)` to refuse. Writes of model records are validated and stored by the device and then reported |
 | `PrmEnd` | the end of parameterization; return nil when the application is ready (the device then sends ApplicationReady), an error to abort |
 | `StateChanged`, `AlarmAck` | AR transitions, alarm acknowledgements |
-| `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` | DCP requests; persist the name and address here if they must survive a restart |
+| `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` | DCP requests (with `Config.Store` the device persists the name, address and I&M records itself) |
+
+## Persistence
+
+```go
+st, err := store.OpenDir("/var/lib/my-device", store.DirOptions{})
+dev, err := device.New(device.Config{Model: m, Mux: mux, StationName: "", Store: st})
+```
+
+With a `Store` the device keeps across restarts what IEC 61158-6-10
+calls remanent: the station name and IP suite of a **permanent** DCP Set,
+permanent DHCP options, and every I&M1–I&M4 write. A **temporary** Set
+changes the device until it restarts and clears the stored value, so it
+restarts without a name or address (as p-net does, after the standard's
+CMINA state table). ResetToFactory stores what it resets. At start a stored
+value replaces its `Config` value (`Config` is the factory state).
+
+The device saves before it applies a change: when the store fails, a DCP
+Set is refused with block error 4 ("resource error") and an I&M write with
+PNIORW 0xA1 ("application write error"), and nothing changes. A stored state
+that cannot be read or decoded is logged and reported by `StoreError()`;
+the device then starts from `Config`. `store.Dir` writes each value to a
+temporary file, syncs it and renames it over the current one, keeping the
+previous version; a value with a bad CRC-32C or a crash between the renames
+falls back on the previous version. Parameters an IO controller writes at
+every startup (port, interface and MRP adjustments, user records) are not
+stored.
 
 ## Alarms and diagnosis
 

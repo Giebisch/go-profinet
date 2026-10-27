@@ -43,11 +43,11 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 | Symbol | Purpose |
 |--------|---------|
-| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `DHCP`/`IPFromDHCP`/`SetDHCP` (the DHCP options DCP reports and a handler for their Set), `DCPPolicy` (read-only DCP, rate limits, audit events), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`, `SNMP` (an opt-in read-only SNMP agent), `SystemRedundancy` (experimental S2 AR sets; `Device.SystemRedundancy` reports them); `Bridge` makes it a multiport device (one port submodule, MAC, LLDP agent and link state per bridge port; `Mux` on the bridge's CPU port) |
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `DHCP`/`IPFromDHCP`/`SetDHCP` (the DHCP options DCP reports and a handler for their Set), `DCPPolicy` (read-only DCP, rate limits, audit events), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`, `SNMP` (an opt-in read-only SNMP agent), `Store`/`StoreKey` (persistence of the permanent name and IP suite, DHCP options and I&M records across restarts), `SystemRedundancy` (experimental S2 AR sets; `Device.SystemRedundancy` reports them); `Bridge` makes it a multiport device (one port submodule, MAC, LLDP agent and link state per bridge port; `Mux` on the bridge's CPU port) |
 | `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
 | `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
 | `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
-| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `DHCP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
+| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `DHCP()`, `ObjectUUID()`, `RPCAddr()`, `StoreError()`, `Close()` | |
 | `Handler`, `NopHandler` | what the application decides: user records (`ReadRecord`, `WriteRecord`), `PrmEnd`, `StateChanged`, `AlarmAck`, `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` |
 | `RecordError(code1, code2) error` | a PNIORW error for a Handler to return |
 | `ARState`, `CanTransition`, `RecordRequest`, `IMData`, `Alarm` | |
@@ -143,6 +143,18 @@ PDInterfaceMrpDataAdjust/Real/Check and PDPortMrpDataAdjust/Real (`pnio`) config
 and report it; `controller.DeviceConfig.MRP` (`MRPSetting`) writes them.
 `ptcp`: `Delay` (`AppendTo`, `Decode`), the delay FrameIDs; no line delay
 measurement.
+
+## store — persistence
+
+| Symbol | Purpose |
+|--------|---------|
+| `Store` | `Load`, `Save` (atomic replace), `Delete` of opaque values under a key; `ErrNotFound`, `ErrCorrupt`, `ValidKey` |
+| `NewMemory() *Memory` | a store in memory (tests; applications that persist elsewhere) |
+| `OpenDir(path, DirOptions) (*Dir, error)` | a directory: CRC-32C-checked files written to a temporary file, synced and renamed, with the previous version kept and used when the current one is corrupt or missing (`OnRecover`); `MaxValueSize`, `NoSync` |
+
+`device.Config.Store` keeps a device's permanent DCP name and IP suite (a
+temporary Set clears the stored value), permanent DHCP options, its I&M
+records and a ResetToFactory across restarts; nil keeps them in memory.
 
 ## snmp — read-only SNMPv1/v2c agent
 

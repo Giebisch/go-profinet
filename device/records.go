@@ -159,35 +159,36 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 		if err != nil || len(rest) != 0 {
 			return rwErr(pnio.RWWriteLength)
 		}
-		d.mu.Lock()
-		defer d.mu.Unlock()
+		var set func(m *IMData)
 		switch q.Index {
 		case pnio.IndexIM1:
 			m, err := pnio.DecodeIM1(blk)
 			if err != nil {
 				return rwErr(pnio.RWInvalidParameter)
 			}
-			d.im.IM1 = m
+			set = func(im *IMData) { im.IM1 = m }
 		case pnio.IndexIM2:
 			m, err := pnio.DecodeIM2(blk)
 			if err != nil || !pnio.ValidIMDate(m.Date) {
 				return rwErr(pnio.RWInvalidParameter)
 			}
-			d.im.IM2 = m
+			set = func(im *IMData) { im.IM2 = m }
 		case pnio.IndexIM3:
 			m, err := pnio.DecodeIM3(blk)
 			if err != nil {
 				return rwErr(pnio.RWInvalidParameter)
 			}
-			d.im.IM3 = m
+			set = func(im *IMData) { im.IM3 = m }
 		default:
 			m, err := pnio.DecodeIM4(blk)
 			if err != nil {
 				return rwErr(pnio.RWInvalidParameter)
 			}
-			d.im.IM4 = m
+			set = func(im *IMData) { im.IM4 = m }
 		}
-		return nil
+		// The I&M records are saved before they change; concurrent writes
+		// are serialized by the save.
+		return d.writeIM(set)
 	case pnio.IndexIM0:
 		return rwErr(pnio.RWAccessDenied)
 	default:

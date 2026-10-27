@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "comment": "Engineering-tool imports of the synthetic GSDML fixtures. Each entry is one import by one tool version on one date: outcome imported, imported-with-warnings, rejected or not-run, with the tool's messages verbatim. Entries are added by hand after a manual run (docs/research/GSDML-TOOLS.md); none is inferred.",
+  "fixtures": [
+    {"file": "GSDML-V2.43-OTFabric-ModularFixture-20261027.xml", "daps": ["DAP_1P", "DAP_2P"]},
+    {"file": "GSDML-V2.35-OTFabric-CompactFixture-20261027.xml", "daps": ["DAP_C"]}
+  ],
+  "imports": [
+    {"tool": "CODESYS Development System", "version": "", "date": "", "fixture": "*", "outcome": "not-run", "messages": [],
+     "note": "needs Windows; recipe in docs/research/INDEPENDENT-CONTROLLER.md step 5"},
+    {"tool": "Siemens TIA Portal (trial)", "version": "", "date": "", "fixture": "*", "outcome": "not-run", "messages": [],
+     "note": "needs Windows and a trial licence; the trial is not for production use"}
+  ]
+}
