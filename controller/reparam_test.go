@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-profinet"
 	"github.com/otfabric/go-profinet/device"
 	"github.com/otfabric/go-profinet/pnio"
+	"github.com/otfabric/go-profinet/rpc"
 )
 
 // prmHandler counts PrmEnds; from the second on it refuses (fail) or
@@ -108,7 +109,8 @@ func TestReparameterizeRefused(t *testing.T) {
 func TestReparameterizeTimeout(t *testing.T) {
 	cd, _ := runningWith(t, &prmHandler{delay: 5 * time.Second}, DeviceConfig{ActivityTimeout: 300 * time.Millisecond, ReconnectMin: time.Hour})
 	start := time.Now()
-	if err := cd.Reparameterize(context.Background(), nil); !errors.Is(err, profinet.ErrTimeout) || time.Since(start) > 3*time.Second {
+	err := cd.Reparameterize(context.Background(), nil)
+	if !errors.Is(err, profinet.ErrTimeout) && !errors.Is(err, profinet.ErrAborted) || time.Since(start) > 3*time.Second {
 		t.Fatalf("no ApplicationReady: %v after %s", err, time.Since(start))
 	}
 }
@@ -132,5 +134,70 @@ func TestMergeParameters(t *testing.T) {
 	upd[0].Data[0] = 0
 	if got[1].Data[0] != 9 || old[1].Data[0] != 2 {
 		t.Fatal("merge shares data")
+	}
+}
+
+// TestReparameterizeRetry: a device still completing its startup refuses
+// PrmBegin for its state; the controller sends it again. Another refusal
+// is not retried.
+func TestReparameterizeRetry(t *testing.T) {
+	n := newNet(t)
+	c, _ := n.controller()
+	f := n.fake("fake")
+	var begins, conflicts atomic.Int32
+	other := atomic.Bool{}
+	f.set(func(f *fakeDev) {
+		f.control = func(cb pnio.ControlBlock) pnio.Status {
+			if cb.Type != pnio.BlockPrmBeginReq {
+				return pnio.Status{}
+			}
+			begins.Add(1)
+			if other.Load() {
+				return pnio.ServiceStatus(pnio.CodeControl, pnio.Code1CMDEV, 3)
+			}
+			if conflicts.Add(1) <= 2 {
+				return pnio.ServiceStatus(pnio.CodeControl, pnio.Code1CMDEV, 0)
+			}
+			return pnio.Status{}
+		}
+	})
+	cd, err := c.AddDevice(DeviceConfig{StationName: "fake", Model: testModel(), ReconnectMin: time.Hour, ReductionRatio: 512, DataHoldFactor: 0x1E00})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cd.Close() }()
+	waitState(t, cd, StateWaitAppReady, 5*time.Second)
+	req := <-f.requests
+	appReady := func() {
+		cb := pnio.ControlBlock{Type: pnio.BlockAppReadyReq, ARUUID: req.AR.ARUUID, SessionKey: req.AR.SessionKey, Command: pnio.CmdApplicationReady}
+		if st, _, err := f.appReady(c, rpc.Port, cb); err != nil || !st.OK() {
+			t.Errorf("ApplicationReady %s %v", st, err)
+		}
+	}
+	appReady()
+	waitState(t, cd, StateRunning, 5*time.Second)
+	// The fake answers PrmEnd at once; its ApplicationReady follows.
+	done := make(chan error, 1)
+	go func() { done <- cd.Reparameterize(context.Background(), nil) }()
+	deadline := time.After(5 * time.Second)
+	for begins.Load() < 3 {
+		select {
+		case <-deadline:
+			t.Fatalf("%d PrmBegins", begins.Load())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	time.Sleep(50 * time.Millisecond)
+	appReady()
+	if err := <-done; err != nil {
+		t.Fatalf("after two conflicts: %v", err)
+	}
+	// A refusal other than the state conflict ends it at once.
+	other.Store(true)
+	before := begins.Load()
+	err = cd.Reparameterize(context.Background(), nil)
+	var se *pnio.StatusError
+	if !errors.As(err, &se) || se.Status.Code2 != 3 || begins.Load() != before+1 {
+		t.Fatalf("other refusal: %v (%d PrmBegins)", err, begins.Load()-before)
 	}
 }

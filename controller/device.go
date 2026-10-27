@@ -1220,11 +1220,14 @@ func (d *Device) applicationReady(cb pnio.ControlBlock) bool {
 // a reconnect writes them again. Only one re-parameterization of a device
 // runs at a time.
 //
-// It returns profinet.ErrInvalidState unless the device is running. When
+// It returns profinet.ErrInvalidState unless the device is running. A
+// PrmBegin refused for the device's state (it is completing the
+// ApplicationReady of its startup) is sent again for up to a second. When
 // a step fails the AR is left as the device keeps it (a device that
 // refused PrmBegin still runs with its old parameters); a device that
 // sends no ApplicationReady makes it fail with profinet.ErrTimeout and
-// aborts the AR, which then reconnects.
+// aborts the AR (profinet.ErrAborted when the AR ends first), which then
+// reconnects.
 func (d *Device) Reparameterize(ctx context.Context, params []Parameter) error {
 	d.reparam.Lock()
 	defer d.reparam.Unlock()
@@ -1255,8 +1258,24 @@ func (d *Device) Reparameterize(ctx context.Context, params []Parameter) error {
 		}
 		return nil
 	}
+	// A device that is still completing its ApplicationReady (the
+	// controller runs a moment before the device enters Data) answers a
+	// state conflict: PrmBegin is sent again, for up to a second.
 	if err := call("PrmBegin", func(ctx context.Context) error {
-		return a.records.Control(ctx, pnio.ControlBlock{Type: pnio.BlockPrmBeginReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdPrmBegin})
+		deadline := time.Now().Add(time.Second)
+		for {
+			err := a.records.Control(ctx, pnio.ControlBlock{Type: pnio.BlockPrmBeginReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdPrmBegin})
+			if err == nil || !errors.Is(err, profinet.ErrInvalidState) || time.Now().After(deadline) {
+				return err
+			}
+			select {
+			case <-time.After(20 * time.Millisecond):
+			case <-a.dead:
+				return err
+			case <-ctx.Done():
+				return err
+			}
+		}
 	}); err != nil {
 		return err
 	}
