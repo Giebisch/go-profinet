@@ -52,7 +52,7 @@ func peerSupported(peer string) (bool, string) {
 	}
 	_, err := docker(context.Background(), "run", "--rm", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW", image(peer), "kernel-mrp")
 	if err != nil {
-		return false, "the Docker host's kernel has no bridge MRP support (CONFIG_BRIDGE_MRP); microchip-ung/mrp needs it"
+		return false, "the Docker host's kernel has no bridge MRP support (CONFIG_BRIDGE_MRP); microchip-ung/mrp needs it: " + err.Error()
 	}
 	return true, ""
 }
@@ -356,9 +356,12 @@ func testOtfClient(t *testing.T, peer string) {
 	e := r.e
 	pcap := "mrp-otf-client-" + peer + ".pcap"
 	stop := e.captureOn(r.n1, "ringB", "ether proto 0x88e3", pcap)
+	// Closed: CHK_RC with one ring port blocked, usually the secondary;
+	// a manager may swap its port roles after a link change of its
+	// primary port (umrp does).
 	closed := until(15*time.Second, func() bool {
 		s := e.peerStatus(r.n2)
-		return s.Ring == "CHK_RC" && len(s.Ports) == 2 && s.Ports[1].State == "blocked"
+		return s.Ring == "CHK_RC" && len(s.Ports) == 2 && (s.Ports[0].State == "blocked") != (s.Ports[1].State == "blocked")
 	})
 	e.expect("MRP ring closed: "+peer+" MRM, go-profinet MRC", closed, "n2 %+v, otfnode %+v", e.peerStatus(r.n2), e.otfRing(r.n1))
 	if !closed {
