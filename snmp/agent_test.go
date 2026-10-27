@@ -55,7 +55,7 @@ func testMIB(t testing.TB, stats func() Stats) *MIB {
 			Ports: []LLDPLocalPort{{Num: 1, IDSubtype: LLDPPortIDLocal, ID: []byte("port-001.dut")}, {Num: 0}, {Num: 5000}}}
 	}, func() []LLDPRemote {
 		return []LLDPRemote{
-			{LocalPortNum: 1, Index: 1, ChassisIDSubtype: LLDPChassisIDLocal, ChassisID: []byte("plc"), PortIDSubtype: LLDPPortIDLocal, PortID: []byte("port-002.plc"), SysName: "plc"},
+			{TimeMark: 500, LocalPortNum: 1, Index: 1, ChassisIDSubtype: LLDPChassisIDLocal, ChassisID: []byte("plc"), PortIDSubtype: LLDPPortIDLocal, PortID: []byte("port-002.plc"), SysName: "plc"},
 			{LocalPortNum: 1, Index: 2, ChassisIDSubtype: LLDPChassisIDMACAddress, ChassisID: []byte{2, 0, 0, 0, 0, 9}, PortIDSubtype: LLDPPortIDMACAddress, PortID: []byte{2, 0, 0, 0, 0, 9}},
 			{LocalPortNum: 0, Index: 3},
 		}
@@ -264,6 +264,59 @@ func TestGet(t *testing.T) {
 	}
 	if s := a.Stats(); s.InGetRequests != 3 || s.OutNoSuchNames != 1 || s.OutGetResponses != 3 || s.InPkts != 3 {
 		t.Fatalf("stats %+v", s)
+	}
+}
+
+// TestLLDPTimeFilter: lldpRemTimeMark is a TimeFilter. Walks list each
+// row once, at filter 0; a Get of filter t finds the rows changed at or
+// after t.
+func TestLLDPTimeFilter(t *testing.T) {
+	a := newTestAgent(t, Config{})
+	sysName := func(filter, port, idx uint32) OID { return OIDLLDPRemTable.Append(1, 9, filter, port, idx) }
+	// Walk: rows 1 and 2 of port 1 at filter 0 only.
+	var rows []OID
+	for _, vb := range walk(t, a, Version2c) {
+		if vb.Name.HasPrefix(OIDLLDPRemTable.Append(1, 9)) {
+			rows = append(rows, vb.Name)
+		}
+	}
+	if len(rows) != 2 || !rows[0].Equal(sysName(0, 1, 1)) || !rows[1].Equal(sysName(0, 1, 2)) {
+		t.Fatalf("walked rows %v", rows)
+	}
+	for _, c := range []struct {
+		name OID
+		want Value
+	}{
+		{sysName(0, 1, 1), OctetString([]byte("plc"))},
+		{sysName(1, 1, 1), OctetString([]byte("plc"))},
+		{sysName(500, 1, 1), OctetString([]byte("plc"))},
+		{sysName(501, 1, 1), Value{Type: TypeNoSuchInstance}},
+		// Row 2 changed at 0 (unknown): only filter 0 shows it.
+		{sysName(0, 1, 2), OctetString(nil)},
+		{sysName(1, 1, 2), Value{Type: TypeNoSuchInstance}},
+		// Wrong port, index, column, or not a full instance name.
+		{sysName(1, 2, 1), Value{Type: TypeNoSuchInstance}},
+		{sysName(1, 1, 3), Value{Type: TypeNoSuchInstance}},
+		{OIDLLDPRemTable.Append(1, 11, 1, 1, 1), Value{Type: TypeNoSuchInstance}},
+		{OIDLLDPRemTable.Append(1, 9, 1, 1), Value{Type: TypeNoSuchInstance}},
+	} {
+		r, ok := exchange(t, a, req(Version2c, PDUGetRequest, c.name))
+		if !ok || len(r.PDU.VarBinds) != 1 {
+			t.Fatalf("%s: %+v", c.name, r)
+		}
+		got := r.PDU.VarBinds[0].Value
+		if got.Type != c.want.Type || string(got.Bytes) != string(c.want.Bytes) {
+			t.Errorf("Get %s = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+	// SNMPv1 reports the missing instance as noSuchName.
+	r, _ := exchange(t, a, req(Version1, PDUGetRequest, sysName(501, 1, 1)))
+	if r.PDU.ErrorStatus != NoSuchName {
+		t.Fatalf("v1 Get of a filtered row: %+v", r.PDU)
+	}
+	r, _ = exchange(t, a, req(Version1, PDUGetRequest, sysName(100, 1, 1)))
+	if r.PDU.ErrorStatus != NoError {
+		t.Fatalf("v1 Get of a row: %+v", r.PDU)
 	}
 }
 

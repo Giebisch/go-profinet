@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"reflect"
 	"strings"
@@ -435,6 +436,73 @@ func TestAgentExpiry(t *testing.T) {
 	a.mu.Unlock()
 	if l != 1 {
 		t.Fatalf("%d entries", l)
+	}
+}
+
+// TestAgentIndex: each new neighbor gets the next index, kept while the
+// neighbor lives whatever comes and goes around it, never reused; Changed
+// moves only when the neighbor's identity changes.
+func TestAgentIndex(t *testing.T) {
+	n := vnet.New(7)
+	defer func() { _ = n.Close() }()
+	a := newAgent(t, newNode(t, n, 1), AgentOptions{})
+	now := time.Now()
+	mac := ethernet.MAC{2, 0, 0, 0, 0, 3}
+	mk := func(c, p string) Frame {
+		return Frame{ChassisID: []byte(c), PortID: []byte(p), TTL: 120, SystemName: "s"}
+	}
+	byChassis := func() map[string]Neighbor {
+		out := map[string]Neighbor{}
+		for _, nb := range a.Neighbors() {
+			out[string(nb.Frame.ChassisID)] = nb
+		}
+		return out
+	}
+	a.update(mac, mk("m", "p"), now)
+	a.update(mac, mk("z", "p"), now)
+	// "b" sorts before both: the others keep their indexes.
+	a.update(mac, mk("b", "p"), now)
+	ns := byChassis()
+	if ns["m"].Index != 1 || ns["z"].Index != 2 || ns["b"].Index != 3 {
+		t.Fatalf("indexes %+v", ns)
+	}
+	// A refresh with another TTL and another delay TLV: same index, same
+	// Changed.
+	f := mk("m", "p")
+	f.TTL = 60
+	f.Delay = &Delay{Cable: 7}
+	a.update(mac, f, now.Add(time.Second))
+	if nb := byChassis()["m"]; nb.Index != 1 || !nb.Changed.Equal(now) || !nb.Updated.Equal(now.Add(time.Second)) {
+		t.Fatalf("refresh changed %+v", nb)
+	}
+	// A new system name changes Changed, not the index.
+	f.SystemName = "s2"
+	a.update(mac, f, now.Add(2*time.Second))
+	if nb := byChassis()["m"]; nb.Index != 1 || !nb.Changed.Equal(now.Add(2*time.Second)) {
+		t.Fatalf("change %+v", nb)
+	}
+	// So does a new source address.
+	a.update(ethernet.MAC{2, 0, 0, 0, 0, 4}, f, now.Add(3*time.Second))
+	if nb := byChassis()["m"]; nb.Index != 1 || !nb.Changed.Equal(now.Add(3*time.Second)) {
+		t.Fatalf("new address %+v", nb)
+	}
+	// "z" leaves (TTL 0) and comes back: a new index; the others keep
+	// theirs.
+	gone := mk("z", "p")
+	gone.TTL = 0
+	a.update(mac, gone, now.Add(4*time.Second))
+	a.update(mac, mk("z", "p"), now.Add(5*time.Second))
+	ns = byChassis()
+	if ns["z"].Index != 4 || ns["m"].Index != 1 || ns["b"].Index != 3 || !ns["z"].Changed.Equal(now.Add(5*time.Second)) {
+		t.Fatalf("after leave and return %+v", ns)
+	}
+	// The index wraps past zero and skips the indexes in use (1).
+	a.mu.Lock()
+	a.lastIndex = math.MaxInt32
+	a.mu.Unlock()
+	a.update(mac, mk("y", "p"), now.Add(6*time.Second))
+	if nb := byChassis()["y"]; nb.Index != 2 {
+		t.Fatalf("wrapped index %d", nb.Index)
 	}
 }
 

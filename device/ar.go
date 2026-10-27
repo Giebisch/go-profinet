@@ -440,12 +440,21 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	d.arSeq++
 	seq := d.arSeq
 	d.mu.Unlock()
+	// The reservation ends when the AR enters d.ars (it then counts
+	// itself), or when the Connect fails.
+	reservedHeld := true
+	unreserve := func() {
+		if reservedHeld {
+			reservedHeld = false
+			d.reserved--
+			if !iosar {
+				d.reservedIO--
+			}
+		}
+	}
 	defer func() {
 		d.mu.Lock()
-		d.reserved--
-		if !iosar {
-			d.reservedIO--
-		}
+		unreserve()
 		if rerun != nil {
 			delete(d.replacing, rerun)
 		}
@@ -534,6 +543,7 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 
 	d.mu.Lock()
 	d.ars[a.uuid] = a
+	unreserve()
 	d.mu.Unlock()
 	established = true
 	if iosar {

@@ -173,6 +173,8 @@ type Device struct {
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
 	snmpA  *snmp.Agent
+	// snmpStart is when the SNMP agent started (sysUpTime 0).
+	snmpStart time.Time
 	// The persistent state (persist.go): storeMu serializes the saves,
 	// stored is what the store holds, storeErr why it was not used.
 	storeKey string
