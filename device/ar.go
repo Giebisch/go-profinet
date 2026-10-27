@@ -73,6 +73,9 @@ type ar struct {
 	plugs      []key
 	plugBusy   bool
 	prmEndPlug chan uint16
+	// heir is the AR of the same controller that replaces this one; it
+	// takes over its submodules (guarded by the device's imgMu).
+	heir *ar
 }
 
 func (a *ar) info() ARInfo {
@@ -425,10 +428,6 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		}
 		d.mu.Unlock()
 	}()
-	if rerun != nil {
-		d.abort(rerun, pnio.AbortRerun, true)
-	}
-
 	a := &ar{
 		d:            d,
 		uuid:         arb.ARUUID,
@@ -453,6 +452,12 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		a.ctrlPort = int(req.ARRPC.InitiatorRPCServerPort)
 	}
 	_, a.match = d.moduleDiff(req.Expected, false, nil)
+	if rerun != nil {
+		// The submodules of the replaced AR go to the new one, not to
+		// another controller's.
+		d.setHeir(rerun, a)
+		d.abort(rerun, pnio.AbortRerun, true)
+	}
 	var locked map[key]bool
 	if !iosar {
 		locked = d.claimOwnership(a)

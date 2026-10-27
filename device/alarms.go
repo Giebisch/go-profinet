@@ -74,16 +74,16 @@ func (d *Device) SendAlarm(ctx context.Context, al Alarm) error {
 	}
 	// The alarm goes to the AR that owns the submodule (several IO
 	// controllers may share the device).
+	// An AR owns its submodules from its Connect on, but its alarm
+	// endpoints are only set up later: the state, read under the AR's lock,
+	// orders the read of the endpoint after its write.
 	var targets []*ar
-	if a := d.ownerOf(al.Slot, al.Subslot); a != nil && a.alarmLow != nil {
+	if a := d.ownerOf(al.Slot, al.Subslot); a != nil && a.currentState() == ARStateData && a.alarmLow != nil {
 		targets = append(targets, a)
 	}
 	var sent int
 	var errs []error
 	for _, a := range targets {
-		if a.currentState() != ARStateData {
-			continue
-		}
 		sent++
 		if err := d.sendAlarm(ctx, a, al, m.IdentNumber, sm.IdentNumber); err != nil {
 			errs = append(errs, err)
