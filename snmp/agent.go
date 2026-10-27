@@ -45,8 +45,8 @@ const (
 	MinMessageSize      = 484
 	DefaultRepetitions  = 32
 	DefaultBulkVarBinds = 256
-	DefaultRate         = 200
-	DefaultBurst        = 50
+	DefaultRate         = 1000
+	DefaultBurst        = 200
 )
 
 // Config configures an [Agent].
