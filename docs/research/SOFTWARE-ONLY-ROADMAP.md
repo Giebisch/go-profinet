@@ -250,6 +250,12 @@ and experiments only, **—** deferred.
   two-port device can sit in a line or a ring.
 - **Acceptance**: PDRealData and LLDP report each port's own neighbor;
   link events per port; existing single-port behaviour unchanged.
+- **Status (2026-10-27)**: done. `l2/bridge` (learning switch, CPU port,
+  per-port local ports for LLDP and MRP, forwarding/blocked states, DCP
+  boundaries, bounded FDB) and `device.Config.Bridge`; vnet segments carry
+  lines and rings. e2e `TestMultiportLine`: B reached through A's bridge,
+  each port's own neighbor in PDRealData, a peer check per port,
+  `CheckTopology`, a pulled cable takes B offline and A runs on.
 
 ### 4B. MRP — P2
 

@@ -89,7 +89,7 @@ func TestPDevRecords(t *testing.T) {
 	wantStatus(t, x.write(port, pnio.IndexPDPortDataReal, c), pnio.RWAccessDenied, 0)
 
 	// Adjustments: no LLDP, no DCP Hello.
-	if !d.lldpA.Transmitting() {
+	if !d.ports[0].lldpA.Transmitting() {
 		t.Fatal("LLDP off before any adjustment")
 	}
 	a := pnio.PDPortDataAdjust{Subslot: port, PeerToPeerBoundary: pnio.PeerToPeerNoLLDP, HasPeerToPeerBoundary: true,
@@ -97,7 +97,7 @@ func TestPDevRecords(t *testing.T) {
 	if err := x.write(port, pnio.IndexPDPortDataAdjust, a.Append(nil)); err != nil {
 		t.Fatal(err)
 	}
-	if d.lldpA.Transmitting() {
+	if d.ports[0].lldpA.Transmitting() {
 		t.Fatal("LLDP still sent")
 	}
 	d.startHello()
@@ -129,7 +129,7 @@ func TestPDevRecords(t *testing.T) {
 	if err := x.write(port, pnio.IndexPDPortDataAdjust, (&pnio.PDPortDataAdjust{Subslot: port}).Append(nil)); err != nil {
 		t.Fatal(err)
 	}
-	if !d.lldpA.Transmitting() {
+	if !d.ports[0].lldpA.Transmitting() {
 		t.Fatal("LLDP not sent again")
 	}
 	d.startHello()
@@ -239,7 +239,7 @@ func TestPDevPeerCheck(t *testing.T) {
 	x := newPDevPeer(t, n, d)
 	const port = model.SubslotPort1
 	sw := lldpPeer(t, n, "sw", "port-003")
-	eventually(t, 5*time.Second, "neighbor", func() bool { _, ok := d.lldpA.Latest(); return ok })
+	eventually(t, 5*time.Second, "neighbor", func() bool { _, ok := d.ports[0].lldpA.Latest(); return ok })
 
 	write := func(peer pnio.CheckPeer) {
 		t.Helper()
