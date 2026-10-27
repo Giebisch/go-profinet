@@ -16,6 +16,10 @@ and what would lift it.
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
 
+What of this list can be built without PI membership or PROFINET hardware,
+with the protocol evidence for each feature and the order of work, is in
+[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md).
+
 ## Without PI membership
 
 Several artefacts are published by PROFIBUS & PROFINET International to
