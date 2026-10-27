@@ -25,6 +25,9 @@ type MIB struct {
 type reg struct {
 	prefix OID
 	fn     func() []VarBind
+	// get, when set, answers a Get of an instance below prefix that fn
+	// does not list (the virtual rows of a TimeFilter index).
+	get func(name OID) (Value, bool)
 }
 
 // NewMIB returns an empty MIB.
@@ -50,6 +53,12 @@ func (m *MIB) AddScalar(object OID, fn func() Value) error {
 // prefix (other names, duplicates and values that cannot be encoded are
 // ignored).
 func (m *MIB) AddSubtree(prefix OID, fn func() []VarBind) error {
+	return m.addSubtree(prefix, fn, nil)
+}
+
+// addSubtree adds a subtree whose instances fn lists for GetNext and
+// whose other instances get answers for Get (nil: none).
+func (m *MIB) addSubtree(prefix OID, fn func() []VarBind, get func(OID) (Value, bool)) error {
 	if err := prefix.validate(); err != nil {
 		return err
 	}
@@ -63,7 +72,7 @@ func (m *MIB) AddSubtree(prefix OID, fn func() []VarBind) error {
 			return fmt.Errorf("snmp: %w: %s overlaps %s", profinet.ErrInvalidConfig, prefix, r.prefix)
 		}
 	}
-	regs := append(slices.Clip(m.regs), reg{prefix: append(OID(nil), prefix...), fn: fn})
+	regs := append(slices.Clip(m.regs), reg{prefix: append(OID(nil), prefix...), fn: fn, get: get})
 	slices.SortFunc(regs, func(a, b reg) int { return a.prefix.Compare(b.prefix) })
 	m.regs = regs
 	return nil
@@ -122,6 +131,11 @@ func (v *view) get(name OID) Value {
 		j, found := slices.BinarySearchFunc(rows, name, func(vb VarBind, n OID) int { return vb.Name.Compare(n) })
 		if found {
 			return rows[j].Value
+		}
+		if r.get != nil {
+			if val, ok := r.get(name); ok && val.valid() == nil && !val.Type.IsException() && !(v.v1 && val.Type == TypeCounter64) {
+				return val
+			}
 		}
 		return Value{Type: TypeNoSuchInstance}
 	}
