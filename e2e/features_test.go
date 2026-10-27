@@ -321,7 +321,8 @@ func TestManyDevices(t *testing.T) {
 		name := fmt.Sprintf("dev-%02d", i)
 		devs[i], _ = e.device(name, fmt.Sprintf("192.168.0.%d", 10+i), testModel(), nil)
 		var err error
-		cds[i], err = ctrl.AddDevice(controller.DeviceConfig{StationName: name, Model: testModel()})
+		cds[i], err = ctrl.AddDevice(controller.DeviceConfig{StationName: name, Model: testModel(),
+			DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -395,7 +396,9 @@ func TestRecovery(t *testing.T) {
 	}
 	defer func() { _ = dev2.Close() }()
 	waitState(t, cd, controller.StateRunning, 10*time.Second)
-	if states.Load() < 3 || cd.Stats().Connects < 3 || cd.Stats().Aborts < 2 {
+	// OnState may run just after WaitState returns.
+	eventually(t, 5*time.Second, "three times running", func() bool { return states.Load() >= 3 })
+	if cd.Stats().Connects < 3 || cd.Stats().Aborts < 2 {
 		t.Fatalf("running %d times, stats %+v", states.Load(), cd.Stats())
 	}
 	// Controller restart: the device aborts the old AR and accepts a new
@@ -432,13 +435,39 @@ func TestActivityTimeout(t *testing.T) {
 	eventually(t, 3*time.Second, "device abort", func() bool { return len(dev.ARs()) == 0 })
 }
 
-func TestSecondControllerRejected(t *testing.T) {
+// TestSecondControllerLocked: a second controller that expects the same
+// submodules connects (shared device) but finds them all locked: it
+// exchanges no data. A third exceeds MaxARs.
+func TestSecondControllerLocked(t *testing.T) {
 	e := newEnv(t, 10)
-	_, _, _ = running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{})
+	dev, _, _ := running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 	ctrl2, _ := e.controller("192.168.0.2")
-	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
-	eventually(t, 5*time.Second, "connect failure", func() bool { _, err := cd2.State(); return err != nil })
-	_, last := cd2.State()
+	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour,
+		DataHoldFactor: stallHold, WatchdogFactor: stallHold})
+	waitState(t, cd2, controller.StateRunning, 10*time.Second)
+	diff := cd2.ModuleDiff()
+	if diff == nil {
+		t.Fatal("no ModuleDiff")
+	}
+	for _, api := range diff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) != pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d state %#x", m.Slot, sm.Subslot, sm.State)
+				}
+			}
+		}
+	}
+	_ = dev.SetInput(1, 1, []byte{1, 2, 3, 4, 5, 6, 7, 8}, pnio.IOxSGood)
+	time.Sleep(200 * time.Millisecond)
+	if in, iops, _ := cd2.Input(1, 1); iops == pnio.IOxSGood || in[0] != 0 {
+		t.Fatalf("a locked input reaches the second controller: % x %#x", in, iops)
+	}
+	ctrl3, _ := e.controller("192.168.0.3")
+	cd3, _ := ctrl3.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour,
+		DataHoldFactor: stallHold, WatchdogFactor: stallHold})
+	eventually(t, 5*time.Second, "connect failure", func() bool { _, err := cd3.State(); return err != nil })
+	_, last := cd3.State()
 	var se *pnio.StatusError
 	if !errors.As(last, &se) || se.Status.Code1 != pnio.Code1CMRPC || se.Status.Code2 != pnio.CMRPCOutOfARs || !errors.Is(last, profinet.ErrResourceExhausted) {
 		t.Fatalf("last error %v", last)

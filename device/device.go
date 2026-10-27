@@ -130,10 +130,11 @@ type Device struct {
 	name string
 	ip   dcp.IPSuite
 	ars  map[rpc.UUID]*ar
-	// reserved counts the Connects in progress; reservedIO is set while
-	// one of them is an IOCAR.
+	// reserved counts the Connects in progress, reservedIO those of
+	// IOCARs; arSeq numbers the Connects.
 	reserved   int
-	reservedIO bool
+	reservedIO int
+	arSeq      uint64
 	frameIDs   map[uint16]bool
 	records    map[recKey][]byte
 	im         IMData
@@ -149,6 +150,10 @@ type Device struct {
 	imgMu   sync.RWMutex
 	inputs  map[key]*ioData
 	outputs map[key]*ioData
+	// owner is the IOCAR that owns each submodule and claimers the IOCARs
+	// that may (shared device, owner.go).
+	owner    map[key]*ar
+	claimers map[*ar]bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -229,6 +234,8 @@ func New(cfg Config) (*Device, error) {
 		pd:       pdevState{checks: map[uint16]*pnio.PDPortDataCheck{}, adjusts: map[uint16]*pnio.PDPortDataAdjust{}, active: map[uint16][]uint16{}},
 		pdPoke:   make(chan struct{}, 1),
 		inputs:   map[key]*ioData{},
+		owner:    map[key]*ar{},
+		claimers: map[*ar]bool{},
 		outputs:  map[key]*ioData{},
 		ctx:      ctx,
 		cancel:   cancel,
@@ -331,7 +338,7 @@ func (d *Device) startHello() {
 		return
 	}
 	d.mu.Lock()
-	busy := d.hasIOAR() || d.reservedIO || d.closed || d.pd.helloBlocked()
+	busy := d.hasIOAR() || d.reservedIO > 0 || d.closed || d.pd.helloBlocked()
 	d.mu.Unlock()
 	if busy {
 		return

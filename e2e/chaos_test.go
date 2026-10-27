@@ -148,7 +148,9 @@ func TestMalformedInput(t *testing.T) {
 		e := newEnv(t, 42)
 		dev, dn := e.device("dut", "192.168.0.10", testModel(), nil)
 		ctrl, cn := e.controller("192.168.0.1")
-		cd, _ := ctrl.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), DataHoldFactor: 20})
+		// The hold rides out runner stalls; that the cyclic data still flows
+		// after the flood is checked below.
+		cd, _ := ctrl.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 		waitState(t, cd, controller.StateRunning, 10*time.Second)
 		ar := cd.ARUUID()
 		attacker := e.node("192.168.0.66")
@@ -204,6 +206,10 @@ func TestMalformedInput(t *testing.T) {
 		if len(dev.ARs()) != 1 {
 			t.Fatal("device lost its AR")
 		}
+		_ = dev.SetInput(1, 1, []byte{4, 3, 2, 1, 4, 3, 2, 1}, pnio.IOxSGood)
+		_ = cd.SetOutput(2, 1, []byte{7, 7, 7, 7}, pnio.IOxSGood)
+		waitInput(t, cd, 1, []byte{4, 3, 2, 1, 4, 3, 2, 1})
+		waitOutput(t, dev, 2, []byte{7, 7, 7, 7})
 		_ = e.net.Close()
 		_ = ctrl.Close()
 		_ = dev.Close()

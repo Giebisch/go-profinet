@@ -263,7 +263,8 @@ func TestImages(t *testing.T) {
 	subs := subIO(testModel())
 	inL, _ := rt.ComputeLayout(pnio.IOCRInput, subs)
 	outL, _ := rt.ComputeLayout(pnio.IOCROutput, subs)
-	a := &ar{d: d, inLayout: inL, outLayout: outL, iocs: map[key]uint8{}, proper: map[key]bool{{1, 1}: true, {2, 1}: true}}
+	a := &ar{d: d, inLayout: inL, outLayout: outL, iocs: map[key]uint8{}, match: map[key]bool{{1, 1}: true, {2, 1}: true}}
+	d.claimOwnership(a)
 	if err := d.SetInput(1, 1, []byte{1, 1, 1, 1, 1, 1, 1, 1}, pnio.IOxSGood); err != nil {
 		t.Fatal(err)
 	}

@@ -53,7 +53,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 ## model — device model
 
-`Device` (`Identity`, `Capabilities`, `DAP`, `Slots`, `Catalog`), `Module`,
+`Device` (`Identity`, `Capabilities`, `DAP`, `Slots`, `Catalog`; `WithSlots` for a shared device), `Module`,
 `Submodule` (`InputLen`, `OutputLen`, `Records`), `Record`, `Slot`;
 `StandardDAP(name, ident, ports)`; methods `Validate`, `Each`, `Module`,
 `Submodule`, `ModuleTypes`, `Expected` (ExpectedSubmoduleBlockReqs),

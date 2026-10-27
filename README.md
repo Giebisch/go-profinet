@@ -88,7 +88,8 @@ is from PI's public pages.
 | Alarms | ✅ both priorities, all types | ✅ | ◐ low priority, diagnosis only | ✅ receive and acknowledge | ✅ |
 | Diagnosis records | ✅ serve and read | ✅ | — (invalid index) | ✅ read | ✅ |
 | I&M | ✅ I&M0–4 | ✅ I&M0–4 (device only) | ◐ I&M0–3 | ✅ read I&M0–15, write I&M1–3 | ✅ |
-| Several ARs on a device | ✅ IOCAR + IOSAR | ◐ 2 IOCARs | — single AR | n/a | ✅ |
+| Several ARs on a device | ✅ IOCARs + IOSAR | ◐ 2 IOCARs | — single AR | n/a | ✅ |
+| Shared device (one owner per submodule, hand-over) | ✅ device and controller | ✅ | — | — | ✅ |
 | Device access AR (IOSAR) | ✅ both roles | — | — | ✅ | not documented |
 | ModuleDiffBlock | ✅ both roles | ✅ (plugs expected modules) | — (mismatch rejects Connect) | ✅ read | ✅ |
 | ReadImplicit, WriteMultiple | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ |
@@ -231,11 +232,11 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 ## Limitations
 
 The features of conformance class A as controller and device (RT_CLASS_1
-and RT_CLASS_2 without synchronization); class B also requires SNMP, which
-is missing. This is feature coverage, not conformance: go-profinet is not
-certified for any class. No IRT, MRP, shared device, system redundancy, PROFIsafe or
-PROFINET security classes. What can still be built without PI membership or
-hardware, and in which order, is in
+and RT_CLASS_2 without synchronization), and shared device; class B also
+requires SNMP, which is missing. This is feature coverage, not
+conformance: go-profinet is not certified for any class. No IRT, MRP,
+system redundancy, PROFIsafe or PROFINET security classes. What can still
+be built without PI membership or hardware, and in which order, is in
 [docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md). OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).

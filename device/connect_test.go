@@ -209,11 +209,33 @@ func TestConnectARLimits(t *testing.T) {
 	}
 	eventually(t, 5*time.Second, "no ARs", func() bool { return len(d.ARs()) == 0 })
 
-	// One IOCAR at a time; a second controller's is refused.
+	// A second controller's IOCAR is accepted (shared device), with
+	// every submodule locked: the first owns them. A third exceeds MaxARs.
 	c1 := p.ioCAR()
 	p.establish(c1)
-	_, err = p.connect(p.ioCAR())
+	c2 := p.ioCAR()
+	c2.AR.InitiatorObject[11] ^= 0xFF // another controller: the same one would replace c1
+	resp, err := p.connect(c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, api := range resp.ModuleDiff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) != pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d state %#x, want locked by IO controller", m.Slot, sm.Subslot, sm.State)
+				}
+			}
+		}
+	}
+	c3 := p.ioCAR()
+	c3.AR.InitiatorObject[11] ^= 0x0F
+	_, err = p.connect(c3)
 	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
+	if err := p.release(c2); err != nil {
+		t.Fatal(err)
+	}
+	waitAR(t, d, c2.AR.ARUUID, ARStateClosed)
 	// A rerun of the IOCAR aborts the old one.
 	if _, err := p.connect(c1); err != nil {
 		t.Fatal(err)
@@ -612,10 +634,11 @@ func TestTimeouts(t *testing.T) {
 	}
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortCMITimeout)
 	// No output frames within the data hold time once the AR is
-	// established (before that the startup grace applies).
+	// established (before that the startup grace applies). 10 cycles of
+	// 32 ms: long enough for the AR to reach Data on a stalled runner.
 	req = p.ioCAR()
 	for i := range req.IOCRs {
-		req.IOCRs[i].ReductionRatio, req.IOCRs[i].DataHoldFactor = 4, 3
+		req.IOCRs[i].ReductionRatio, req.IOCRs[i].DataHoldFactor = 32, 10
 	}
 	p.establish(req)
 	h.waitReason(t, req.AR.ARUUID, pnio.AbortConsumerDHT)
@@ -703,14 +726,15 @@ func TestConnectModuleDiff(t *testing.T) {
 	d.mu.Lock()
 	a := d.ars[req.AR.ARUUID]
 	d.mu.Unlock()
-	if a.proper[key{2, 1}] || !a.proper[key{1, 1}] {
-		t.Fatalf("proper %v", a.proper)
+	if d.ownerOf(2, 1) == a || d.ownerOf(1, 1) != a {
+		t.Fatalf("owners: 2/1 %v, 1/1 %v", d.ownerOf(2, 1), d.ownerOf(1, 1))
 	}
 }
 
 // TestConcurrentConnects: of several IOCAR Connects that arrive at the
-// same time, exactly one is accepted; the reservation keeps the others
-// from slipping between the check and the insertion.
+// same time, MaxARs (2) are accepted; the reservation keeps the others
+// from slipping between the check and the insertion, and every submodule
+// has exactly one owner.
 func TestConcurrentConnects(t *testing.T) {
 	n := newNet(t)
 	d, _ := n.device(nil)
@@ -735,10 +759,54 @@ func TestConcurrentConnects(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
-	if accepted.Load() != 1 {
+	if accepted.Load() != 2 {
 		t.Fatalf("%d IOCARs accepted", accepted.Load())
 	}
-	if ars := d.ARs(); len(ars) != 1 {
+	ars := d.ARs()
+	if len(ars) != 2 {
 		t.Fatalf("ARs %+v", ars)
+	}
+	d.mu.Lock()
+	a1, a2 := d.ars[ars[0].UUID], d.ars[ars[1].UUID]
+	d.mu.Unlock()
+	for k := range a1.match {
+		if o := d.ownerOf(k.slot, k.subslot); o != a1 && o != a2 {
+			t.Fatalf("submodule %v without an owner", k)
+		}
+	}
+}
+
+func TestConnectSameControllerReplaces(t *testing.T) {
+	n := newNet(t)
+	h := newRecHandler()
+	d, _ := n.device(h)
+	p := n.peer(d, "192.168.0.2", true)
+	// A controller that lost its AR connects anew before the device saw the
+	// old one end: the new AR replaces the old one and owns the submodules,
+	// though another controller's AR expects them too.
+	c1 := p.ioCAR()
+	p.establish(c1)
+	other := p.ioCAR()
+	other.AR.InitiatorObject[11] ^= 0xFF
+	if _, err := p.connect(other); err != nil {
+		t.Fatal(err)
+	}
+	c2 := p.ioCAR()
+	resp, err := p.connect(c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, api := range resp.ModuleDiff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) == pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d locked", m.Slot, sm.Subslot)
+				}
+			}
+		}
+	}
+	h.waitReason(t, c1.AR.ARUUID, pnio.AbortRerun)
+	if _, ok := arState(d, c1.AR.ARUUID); ok {
+		t.Fatal("old AR still there")
 	}
 }

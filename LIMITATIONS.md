@@ -9,7 +9,7 @@ and what would lift it.
 |-----------------|-------|
 | IRT (RT_CLASS_3), PTCP time synchronization, isochronous mode | needs hardware timestamping and scheduling a general-purpose OS cannot give; out of scope for a pure Go library |
 | MRP (media redundancy), MRPD | no ring support; a device with two ports is not modelled (one Ethernet port) |
-| System redundancy (IOCARSR, S2/R1/R2), shared device, shared input, MCR (multicast CRs) | rejected by the device; not requested by the controller |
+| System redundancy (IOCARSR, S2/R1/R2), shared input, MCR (multicast CRs) | rejected by the device; not requested by the controller. Shared device (several controllers, one owner per submodule) is implemented; shared input is not: what a non-owner receives is not public |
 | PROFINET security classes 1–3, PROFIsafe | no authentication, integrity protection or safety layer (see [SECURITY.md](SECURITY.md)) |
 | Fast Startup beyond DCP Hello, DHCP | the device sends DCP Hello and the controller connects through it; the rest of Fast Startup (fixed MAU type with autonegotiation off, stored parameters, ARFSUBlock) needs control over the link and persistence that a library on a general-purpose OS does not have |
 | Port checks and adjustments beyond peers and boundaries | the device evaluates CheckPeers and applies PeerToPeerBoundary, DCPBoundary and PDInterfaceAdjust; it refuses CheckMAUType, CheckLinkState, CheckLineDelay (the real MAU type is not known to a library, the line delay is not measured, the link-state diagnosis code is not public) and the domain, multicast, MAU, link-state and preamble adjustments (no frame forwarding with one port; the link belongs to the operating system), with PNIORW "feature not supported" (0xA9), a code PI may define differently |
@@ -68,7 +68,8 @@ data (PACKET_AUXDATA).
 
 ## Devices
 
-- One controller AR per submodule; several ARs per device up to `MaxARs`.
+- One owner AR per submodule (shared device); several ARs per device up to
+  `MaxARs`.
 - One Ethernet port: port data reports the LLDP neighbors of the interface
   as the peers of the first port.
 - No persistence: I&M records, the station name and the IP address set with

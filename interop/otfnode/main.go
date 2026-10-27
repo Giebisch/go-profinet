@@ -223,6 +223,7 @@ func runController(args []string) error {
 	dur := fs.Duration("duration", 3*time.Second, "how long to run the AR")
 	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for Running")
 	reconnectMin := fs.Duration("reconnect-min", 0, "shortest wait between connection attempts (0: the library's default)")
+	slots := fs.String("slots", "", "comma-separated slots to expect besides the DAP (shared device); default: all")
 	im0 := fs.Bool("im0", false, "read I&M0")
 	diag := fs.Bool("diag", false, "read the device diagnosis")
 	alarms := fs.Int("wait-alarms", 0, "wait for this many alarms")
@@ -239,6 +240,17 @@ func runController(args []string) error {
 	m, err := loadModel(*modelFile, *dap)
 	if err != nil {
 		return fmt.Errorf("model: %w", err)
+	}
+	if *slots != "" {
+		var nums []uint16
+		for _, s := range strings.Split(*slots, ",") {
+			n, err := strconv.ParseUint(strings.TrimSpace(s), 0, 16)
+			if err != nil {
+				return fmt.Errorf("slots: %w", err)
+			}
+			nums = append(nums, uint16(n))
+		}
+		m = m.WithSlots(nums...)
 	}
 	mux, closePort, err := openPort(*iface, *pcapFile)
 	if err != nil {

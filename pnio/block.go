@@ -165,6 +165,10 @@ func (t BlockType) String() string {
 		return "ReleaseBlockReq"
 	case BlockPrmBeginReq:
 		return "IODControlReq(PrmBegin)"
+	case BlockPrmEndPlugReq:
+		return "IODControlReq(PrmEnd, plug)"
+	case BlockAppReadyPlugReq:
+		return "IOXControlReq(ApplicationReady, plug)"
 	case BlockAlarmAckHigh:
 		return "AlarmAck-High"
 	case BlockAlarmAckLow:

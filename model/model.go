@@ -337,6 +337,25 @@ func (d *Device) Validate() error {
 	return nil
 }
 
+// WithSlots returns a copy of the device with the DAP and only the given
+// slots: the expected configuration of an IO controller that shares the
+// device with others and owns only these modules. Slots the device does
+// not have are ignored.
+func (d *Device) WithSlots(slots ...uint16) *Device {
+	keep := map[uint16]bool{}
+	for _, s := range slots {
+		keep[s] = true
+	}
+	c := *d
+	c.Slots = nil
+	for _, s := range d.Slots {
+		if keep[s.Number] {
+			c.Slots = append(c.Slots, s)
+		}
+	}
+	return &c
+}
+
 // Expected returns the ExpectedSubmoduleBlockReq blocks (one per slot)
 // that describe the plugged configuration, as a controller sends them.
 func (d *Device) Expected() []pnio.ExpectedSubmoduleBlockReq {

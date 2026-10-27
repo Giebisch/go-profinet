@@ -76,10 +76,34 @@ See [DIAGNOSTICS.md](DIAGNOSTICS.md).
 
 ## ARs
 
-The device accepts IOCARs (one per controller, one owner per submodule) and
-IOSARs (device access, unless `RejectSupervisorAR`), up to `MaxARs`. It
+The device accepts IOCARs, from one or several IO controllers (shared
+device), and IOSARs (device access, unless `RejectSupervisorAR`), up to
+`MaxARs`. It
 validates a Connect block by block and answers faults with the PNIO status of
 the faulty field; it reports differences from its model in the
 ModuleDiffBlock and sends their IO data with IOPS bad. `dev.ARs()` describes
 the ARs. A watchdog or data hold expiry, a Release, an abort by the
 controller, a CM activity timeout or a DCP reset closes an AR.
+
+### Shared device
+
+Each submodule belongs to one IOCAR: the first whose Connect expects it
+with the right identification. Another controller that expects it too is
+accepted; its ModuleDiff reports the submodule as "locked by IO controller"
+(SubmoduleState ARInfo 3), its IOCR carries the submodule with IOPS bad and
+no data, its output data are ignored, and its writes to the submodule's
+records are refused with "access denied" (a device access AR may write
+anything). Alarms and diagnosis alarms of a submodule go to its owner only.
+
+When the owner's AR ends (Release, abort, watchdog, activity timeout) its
+outputs become invalid and each of its submodules goes to the earliest
+other AR that expects it. That AR receives a "Released" alarm for the
+submodule; its controller parameterizes it and sends PrmEnd (plug) with the
+alarm's sequence number; the device answers with ApplicationReady (plug).
+The submodules are handed over one at a time, as p-net does. A controller
+that does not answer within its activity timeout keeps the submodule.
+
+Of concurrent Connects for one submodule, exactly one wins (the owner table
+is claimed in one critical section). Shared input (several ARs reading one
+submodule's inputs, SubmoduleProperties bit 2) is not implemented: its
+semantics for the non-owners are not public.

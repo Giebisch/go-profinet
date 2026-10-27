@@ -160,14 +160,18 @@ type Device struct {
 	c   *Controller
 	cfg DeviceConfig
 
-	mu       sync.Mutex
-	state    State
-	lastErr  error
-	mac      ethernet.MAC
-	ip       dcp.IPSuite
-	ar       *arState
-	diff     *pnio.ModuleDiffBlock
-	waiters  []chan struct{}
+	mu      sync.Mutex
+	state   State
+	lastErr error
+	mac     ethernet.MAC
+	ip      dcp.IPSuite
+	ar      *arState
+	diff    *pnio.ModuleDiffBlock
+	waiters []chan struct{}
+	// notified is the last state whose OnState callback has run: WaitState
+	// waits for it. setMu orders the transitions and their callbacks.
+	notified State
+	setMu    sync.Mutex
 	outputs  map[subKey]*ioData
 	inputs   map[subKey]*ioData
 	iocs     map[subKey]uint8
@@ -219,9 +223,13 @@ type arState struct {
 	alarmLow   *alarm.Endpoint
 	appReady   chan struct{}
 	appOnce    sync.Once
-	failed     chan error
-	failOnce   sync.Once
-	failErr    error // set once by fail, before the send on failed
+	// plugPending are the submodules handed over by a Released alarm
+	// whose ApplicationReady (plug) is awaited, by alarm sequence number
+	// (guarded by Device.mu).
+	plugPending map[uint16]subKey
+	failed      chan error
+	failOnce    sync.Once
+	failErr     error // set once by fail, before the send on failed
 }
 
 func (a *arState) fail(err error) {
@@ -371,7 +379,7 @@ func (d *Device) inputFrameID() uint16 {
 func (d *Device) WaitState(ctx context.Context, s State) error {
 	for {
 		d.mu.Lock()
-		if d.state == s {
+		if d.notified == s {
 			d.mu.Unlock()
 			return nil
 		}
@@ -387,6 +395,8 @@ func (d *Device) WaitState(ctx context.Context, s State) error {
 }
 
 func (d *Device) setState(to State, err error) {
+	d.setMu.Lock()
+	defer d.setMu.Unlock()
 	d.mu.Lock()
 	from := d.state
 	if from == to || !CanTransition(from, to) {
@@ -397,8 +407,6 @@ func (d *Device) setState(to State, err error) {
 	if err != nil {
 		d.lastErr = err
 	}
-	ws := d.waiters
-	d.waiters = nil
 	d.mu.Unlock()
 	d.c.log.Debugf("controller: %s: %s → %s", d.cfg.StationName, from, to)
 	// OnState runs before WaitState returns, so that a caller of WaitState
@@ -406,6 +414,11 @@ func (d *Device) setState(to State, err error) {
 	if d.cfg.OnState != nil {
 		d.cfg.OnState(from, to, err)
 	}
+	d.mu.Lock()
+	d.notified = to
+	ws := d.waiters
+	d.waiters = nil
+	d.mu.Unlock()
 	for _, w := range ws {
 		close(w)
 	}
@@ -785,15 +798,16 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 	localRef := d.c.alarms.AllocRef()
 	timeoutFactor := uint16(min(max(cfg.ActivityTimeout/(100*time.Millisecond), 1), 1000))
 	a := &arState{
-		uuid:       rpc.NewRandomUUID(),
-		sessionKey: uint16(sessionKeys.Add(1)),
-		inFrameID:  inID,
-		inLayout:   inL,
-		outLayout:  outL,
-		class:      cls,
-		localRef:   localRef,
-		appReady:   make(chan struct{}),
-		failed:     make(chan error, 1),
+		plugPending: map[uint16]subKey{},
+		uuid:        rpc.NewRandomUUID(),
+		sessionKey:  uint16(sessionKeys.Add(1)),
+		inFrameID:   inID,
+		inLayout:    inL,
+		outLayout:   outL,
+		class:       cls,
+		localRef:    localRef,
+		appReady:    make(chan struct{}),
+		failed:      make(chan error, 1),
 	}
 	addr := &net.UDPAddr{IP: id.IP.Addr.AsSlice(), Port: rpc.Port}
 	a.addr = addr
@@ -868,7 +882,8 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 }
 
 // properSubmodules returns the submodules the ModuleDiffBlock does not
-// report as wrong or missing.
+// report as wrong, missing or locked (owned by another IO controller's or
+// a supervisor's AR on a shared device).
 func (d *Device) properSubmodules(diff *pnio.ModuleDiffBlock) map[subKey]bool {
 	proper := map[subKey]bool{}
 	d.cfg.Model.Each(func(p model.PluggedSubmodule) {
@@ -889,6 +904,12 @@ func (d *Device) properSubmodules(diff *pnio.ModuleDiffBlock) map[subKey]bool {
 			}
 			for _, s := range m.Submodules {
 				ident := s.State & (0xF << 11)
+				switch s.State & (0xF << 7) {
+				case pnio.SubmStateARInfoSuperLock, pnio.SubmStateARInfoCtrlLock, pnio.SubmStateARInfoSupvLock:
+					delete(proper, subKey{m.Slot, s.Subslot})
+					continue
+				default:
+				}
 				if ident != pnio.SubmStateIdentOK {
 					delete(proper, subKey{m.Slot, s.Subslot})
 				}
@@ -945,6 +966,43 @@ func (d *Device) alarmData(a *arState, high bool, b []byte) {
 		if errors.Is(err, profinet.ErrTimeout) {
 			a.fail(fmt.Errorf("controller: %s: alarm ack: %w", d.cfg.StationName, err))
 		}
+		return
+	}
+	if n.Type == pnio.AlarmReleased {
+		go d.takeReleased(a, n)
+	}
+}
+
+// takeReleased takes over a submodule a shared device handed to this AR
+// with a Released alarm: its parameters are written, then PrmEnd (plug)
+// with the alarm's sequence number; the device answers with
+// ApplicationReady (plug), from which on the submodule's data count.
+func (d *Device) takeReleased(a *arState, n pnio.AlarmNotification) {
+	k := subKey{n.Slot, n.Subslot}
+	if _, ok := d.cfg.Model.Submodule(n.Slot, n.Subslot); !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(d.c.ctx, d.cfg.RPCTimeout)
+	defer cancel()
+	for _, p := range d.cfg.Parameters {
+		if p.Slot != n.Slot || p.Subslot != n.Subslot {
+			continue
+		}
+		if err := a.records.Write(ctx, a.uuid, Record{API: model.API, Slot: p.Slot, Subslot: p.Subslot, Index: p.Index}, p.Data); err != nil {
+			d.c.log.Warnf("controller: %s: parameter %d/%d %s of a released submodule: %v", d.cfg.StationName, p.Slot, p.Subslot, p.Index, err)
+			return
+		}
+	}
+	d.mu.Lock()
+	a.plugPending[n.Sequence()] = k
+	d.mu.Unlock()
+	err := a.records.Control(ctx, pnio.ControlBlock{Type: pnio.BlockPrmEndPlugReq, ARUUID: a.uuid, SessionKey: a.sessionKey,
+		Command: pnio.CmdPrmEnd, AlarmSequence: n.Sequence()})
+	if err != nil {
+		d.mu.Lock()
+		delete(a.plugPending, n.Sequence())
+		d.mu.Unlock()
+		d.c.log.Warnf("controller: %s: PrmEnd (plug) of submodule %d/%d: %v", d.cfg.StationName, n.Slot, n.Subslot, err)
 	}
 }
 
@@ -1022,6 +1080,14 @@ func (d *Device) storeInputs(a *arState, c []byte, s rt.DataStatus) {
 // parameterize writes the parameters and ends the parameterization.
 func (d *Device) parameterize(ctx context.Context, a *arState) error {
 	for _, p := range d.cfg.Parameters {
+		// A submodule another controller owns (shared device) is not
+		// this one's to parameterize; its parameters are written when it
+		// is handed over (takeReleased).
+		if _, own := a.proper[subKey{p.Slot, p.Subslot}]; !own {
+			if _, inModel := d.cfg.Model.Submodule(p.Slot, p.Subslot); inModel {
+				continue
+			}
+		}
 		cctx, cancel := context.WithTimeout(ctx, d.cfg.RPCTimeout)
 		err := a.records.Write(cctx, a.uuid, Record{API: model.API, Slot: p.Slot, Subslot: p.Subslot, Index: p.Index}, p.Data)
 		cancel()
@@ -1046,6 +1112,22 @@ func (d *Device) applicationReady(cb pnio.ControlBlock) bool {
 	d.mu.Unlock()
 	if a == nil || a.uuid != cb.ARUUID || a.sessionKey != cb.SessionKey {
 		return false
+	}
+	if cb.Type == pnio.BlockAppReadyPlugReq {
+		// A submodule handed over (takeReleased) is now this AR's.
+		d.mu.Lock()
+		k, ok := a.plugPending[cb.AlarmSequence]
+		if ok {
+			delete(a.plugPending, cb.AlarmSequence)
+			a.proper[k] = true
+		}
+		d.mu.Unlock()
+		if ok {
+			d.c.log.Infof("controller: %s: submodule %d/%d taken over", d.cfg.StationName, k.slot, k.subslot)
+			return true
+		}
+		// Otherwise it stands for the AR's ApplicationReady, as some
+		// devices send it.
 	}
 	a.appOnce.Do(func() { close(a.appReady) })
 	return true
