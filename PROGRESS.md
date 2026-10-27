@@ -42,29 +42,24 @@ Resume from here after an interruption.
 | IO-Device, IO-Controller, supervisor (device access) AR, AR info | done, tested |
 | GSDML parse/validate/encode/model conversion, codegen | done |
 | OS L2 backends | AF_PACKET tested in Docker (`make l2-test`), BPF opened on macOS, Npcap cross-compiled |
-| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 126 pass, 0 fail, 2 n/a, 4 attributed peer deviations; CI, contract check, release and upstream-candidate workflows |
+| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, umrp, microchip-ung/mrp (n/a: kernel), Net-SNMP, scapy, tshark: 193 pass, 0 fail, 8 n/a, 8 attributed deviations (v0.3.0); CI, contract check, release and upstream-candidate workflows |
 | go-profinet interop suite + `make interop` + Interop workflow | done; 10/10 tests pass |
 | profinetctl | done: every command family, 93 % coverage, race-free, verified against p-net |
 | Documentation | complete: reference documents in the root, guides in docs/ |
-| Releases (2026-10-27) | go-profinet v0.1.0–v0.3.0 (v0.3.0: the whole software-only roadmap, see docs/research/FEATURE-COMPLETION-REPORT.md; interop pinned to profinet-interop v0.2.1; soaked 25× green), profinet-interop v0.1.0–v0.2.1 (release and upstream-candidate workflows), profinetctl v0.1.0–v0.2.0 |
+| Releases | go-profinet v0.1.0–v0.4.0 (v0.4.0, 2026-10-28: independent interoperability and production readiness, docs/research/NEXT-PROGRAM-REPORT.md; interop pinned to profinet-interop v0.3.0; soaked 25×), profinet-interop v0.1.0–v0.3.0, profinetctl v0.1.0–v0.3.0 |
 | Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (38 passed incl. 21 chaos runs, chaos monkey, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 11/11, profinetctl make check-equivalents and pnet-smoke |
 
 ## Blockers
 
 - B0 PI membership postponed by the owner (2026-10-26); impact in
-  docs/PI-MEMBERSHIP.md.
-
-- B1 GSDML XSD, GSDX and MRCD: PROFIBUS & PROFINET International membership
-  and licence needed (D3). Human decision: does OT Fabric hold PI
-  membership?
-- B2 Publishing: nothing is pushed. Pushing the three branches, opening pull
-  requests and tagging go-profinet (which profinetctl needs to drop its
-  replace) are the owner's call.
+  docs/PI-MEMBERSHIP.md (XSDs, GSDX, MRCD, test specifications).
+- B1 Kernel MRP (microchip-ung/mrp) needs a kernel without switchdev: not
+  on Docker Desktop or the hosted runners (NEXT-PROGRAM-REPORT.md).
+- B2 No second independent IO-Controller in CI: CODESYS only by hand
+  (research/INDEPENDENT-CONTROLLER.md).
 
 ## Next actions
 
-1. The owner decides on B1 (PI membership) and B2 (push the three branches,
-   open pull requests, tag go-profinet, then drop profinetctl's replace).
-2. After pushing: watch CI (the L2 macOS job and the Interop workflow have
-   never run on GitHub).
-3. Hardware tier: test against a commercial PLC and a commercial device.
+The evidence-based roadmap of docs/research/NEXT-PROGRAM-REPORT.md: run the
+CODESYS recipe, a micro-VM ring for kernel MRP, MRA against umrp,
+engineering-tool imports of the GSDML fixtures, measurements on bare metal.
