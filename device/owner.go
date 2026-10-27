@@ -46,9 +46,17 @@ func (d *Device) claimOwnership(a *ar) map[key]bool {
 	return locked
 }
 
+// setHeir makes an AR the heir of the one it replaces.
+func (d *Device) setHeir(old, heir *ar) {
+	d.imgMu.Lock()
+	old.heir = heir
+	d.imgMu.Unlock()
+}
+
 // releaseOwnership takes an AR's submodules from it: their outputs become
-// invalid and each goes to the earliest other AR that expects it, which is
-// told with a "Released" alarm.
+// invalid and each goes to the AR replacing it (which claims them on its
+// Connect) or else to the earliest other AR that expects it, which is told
+// with a "Released" alarm.
 func (d *Device) releaseOwnership(a *ar) {
 	var handed []handover
 	d.imgMu.Lock()
@@ -65,6 +73,10 @@ func (d *Device) releaseOwnership(a *ar) {
 		delete(d.owner, k)
 		if out := d.outputs[k]; out != nil {
 			out.iops = pnio.IOxSBad
+		}
+		if h := a.heir; h != nil && h.match[k] {
+			d.owner[k] = h
+			continue
 		}
 		for _, c := range others {
 			if c.match[k] {

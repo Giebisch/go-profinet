@@ -781,9 +781,15 @@ func TestConnectSameControllerReplaces(t *testing.T) {
 	d, _ := n.device(h)
 	p := n.peer(d, "192.168.0.2", true)
 	// A controller that lost its AR connects anew before the device saw the
-	// old one end: the new AR replaces the old one and owns the submodules.
+	// old one end: the new AR replaces the old one and owns the submodules,
+	// though another controller's AR expects them too.
 	c1 := p.ioCAR()
 	p.establish(c1)
+	other := p.ioCAR()
+	other.AR.InitiatorObject[11] ^= 0xFF
+	if _, err := p.connect(other); err != nil {
+		t.Fatal(err)
+	}
 	c2 := p.ioCAR()
 	resp, err := p.connect(c2)
 	if err != nil {
