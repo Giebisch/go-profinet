@@ -16,7 +16,8 @@ issues within 7 days.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x | Yes |
+| 0.4.x | Yes |
+| < 0.4 | No |
 
 ## Security considerations
 

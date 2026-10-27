@@ -54,7 +54,7 @@ against (see [the matrix](#interop-matrix)).
 | Hand-over: Released alarm, PrmEnd (plug), ApplicationReady (plug), one submodule at a time | ✅ | ✅ | p-net (`TestPnetSharedDevice`) |
 | Shared input | — | — | not public; p-net does not implement it |
 | IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
-| MRP: client and manager on a multiport device (test frames, ring open/closed, blocked secondary, TopologyChange, link change frames) | — | ✅ (`Config.MRP`) | no behavioural peer (microchip-ung/mrp needs CONFIG_BRIDGE_MRP and a ring of containers); tshark and scapy decode the frames (`TestCodecDecoders`); own rings on vnet (`TestRing`, `TestMRPRing`) |
+| MRP: client and manager on a multiport device (test frames, ring open/closed, blocked secondary, TopologyChange, link change frames) | — | ✅ (`Config.MRP`) | umrp as manager and as clients in rings of veth cables with go-profinet: closed, opened, FDB flushed, no loop or hole, seeded faults (`TestMRPOtfManager`, `TestMRPOtfClient`, `TestMRPRingFaults`); microchip-ung/mrp not applicable (the kernel refuses MRP on a software bridge with switchdev built in); tshark decodes every frame, scapy has no MRP dissector |
 | PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
 | RT_CLASS_UDP: RT payload on UDP port 34962, RTClass 4 / LT 0x0800 / RTA_CLASS_UDP in Connect (codecs only) | ✅ encode, refused by `AddDevice` | ✅ decode, Connect refused (DB 81 02 07) | tshark and scapy decode both (`TestUDPRTDecoders`); no open implementation of the data path |
 | IOCARSR (system redundancy S2): AR sets of two IOCARSRs, primary by DataStatus request, outputs held for RDHT, abort reason 38 (EXPERIMENT, off by default) | ✅ (`SystemRedundancy`, `SetPrimary`) | ✅ (`Config.SystemRedundancy`) | none: no open S2 implementation exists (p-net and pnio-rs refuse IOCARSR); own e2e only (`TestSystemRedundancy*`) |
@@ -73,14 +73,14 @@ against (see [the matrix](#interop-matrix)).
 | ModuleDiff (0xE002) | ✅ | n/a | profinet-py |
 | Diagnosis: channel, all, maintenance and qualified (0x800A–0x800C, 0xC00A–0xC00C, 0xE00A–0xE00C, 0xF00A–0xF00C, 0xF80C) | ✅ | n/a | p-net |
 | PDPortDataReal (0x802A), PDRealData (0xF841) | ✅ | n/a | p-net (decoded) |
-| RecordInputData (0x8028), LogBook (0xF830, without entries) | ✅ | n/a | |
+| RecordInputData (0x8028), LogBook (0xF830, without entries: Wireshark and p-net disagree on its time stamps) | ✅ | n/a | |
 | PDPortDataCheck with CheckPeers (0x802B): written before PrmEnd and in Data; remote mismatch diagnoses 0x8001 with 0x8000 (name of station), 0x8001 (port), 0x8005 (no peer) | ✅ (`PeerChecks`) | ✅ | p-net (decodes our record, evaluates it, reports the same diagnoses: `TestPnetPortCheck`) |
 | PDPortDataAdjust (0x802F): PeerToPeerBoundary, DCPBoundary | ✅ (encode) | ✅ (applies LLDP off, Hello off) | |
 | PDInterfaceAdjust (0x8071), PDInterfaceDataReal (0x8080, in PDRealData), PDExpectedData (0xF842) | ✅ (decode) | ✅ | |
 | Topology verification from PDRealData (`CheckTopology`) | ✅ | n/a | |
 | MRP records: PDInterfaceMrpDataAdjust/Real (0x8052/0x8050), PDPortMrpDataAdjust/Real (0x8053/0x8054); PDInterfaceMrpDataCheck refused | ✅ (`DeviceConfig.MRP`) | ✅ (multiport devices) | tshark decodes every field we encode (`TestCodecDecoders`) |
 | Multiport devices: port data, LLDP and peer checks per port (`l2/bridge`) | ✅ (`CheckTopology` over a line) | ✅ (`Config.Bridge`) | own e2e only (`TestMultiportLine`); no open multiport PROFINET device |
-| SNMP (read-only v1/v2c agent: MIB-II system, interfaces, snmp group, LLDP-MIB) | — | ✅ (`Config.SNMP`, opt-in) | tshark and scapy decode every datagram of a walk (`TestSNMPDecoders`); no SNMP manager run against it yet |
+| SNMP (read-only v1/v2c agent: MIB-II system, interfaces, snmp group, LLDP-MIB with stable lldpRemIndex and TimeFilter time marks) | — | ✅ (`Config.SNMP`, opt-in) | Net-SNMP: walks (GetNext, GetBulk, v1, v2c agree), errors, limits, malformed datagrams, a flood, changing LLDP neighbors (`TestNetSNMP*`); tshark and scapy decode every datagram of a walk (`TestSNMPDecoders`) |
 | Other checks and adjustments (MAU type, link state, line delay, domain/multicast boundaries), PDIRData | — | refused (0xA9) | |
 
 ### Alarms (RTA)
@@ -125,22 +125,29 @@ is an attributed deviation of the peer.
 
 | Peer | Version | go-profinet as | pass | fail | n/a | peer deviation |
 |------|---------|----------------|-----:|-----:|----:|---------------:|
-| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 55 | 0 | 0 | 0 |
-| pnio-rs | v0.1.0 | IO-Controller, DCP requester | 12 | 0 | 2 | 0 |
-| profinet-py | 0.6.6 | IO-Device, DCP responder | 22 | 0 | 0 | 2 |
+| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 55 | 0 | 2 | 0 |
+| pnio-rs | v0.1.0 | IO-Controller, DCP requester | 13 | 0 | 3 | 0 |
+| profinet-py | 0.6.6 | IO-Device, DCP responder | 29 | 0 | 0 | 3 |
 | pnio-dcp | 1.2.0 | DCP responder | 8 | 0 | 0 | 0 |
-| scapy | 2.6.1 | (decoder of every capture) | 11 | 0 | 0 | 0 |
-| tshark | 4.0.17 | (decoder of every capture) | 10 | 0 | 0 | 0 |
+| umrp | v4.0 | MRP manager and client | 20 | 0 | 0 | 0 |
+| microchip-ung/mrp | `177717e` | MRP manager and client | 0 | 0 | 3 | 0 |
+| Net-SNMP | 5.9.3 | SNMP agent of the IO-Device | 29 | 0 | 0 | 0 |
+| scapy | 2.6.1 | (decoder of every capture) | 16 | 0 | 0 | 3 |
+| tshark | 4.0.17 | (decoder of every capture) | 15 | 0 | 0 | 0 |
 | tshark and scapy | | (decoders of our Hello, SNMP, UDP-RT and DHCP frames) | 8 | 0 | 0 | 2 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.2.1/docs/MATRIX.md);
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.3.0/docs/MATRIX.md)
+(193 pass, 0 fail, 8 n/a, 8 deviations; run on Docker Desktop, arm64);
 the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.2.1/docs/INTEROPERABILITY.md).
-The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set). Of
-the four deviations, two are profinet-py's I&M1 write with BlockLength 58 and
-two are decoder limits: scapy has no DCP DHCP block class, and Wireshark
-decodes the data of DHCP options 61 and 255 only.
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.3.0/docs/INTEROPERABILITY.md).
+The "n/a" are peer limits: pnio-rs has no diagnosis records and no DCP Set,
+p-net and pnio-rs refuse PrmBegin in Data, and microchip-ung/mrp needs a
+kernel that accepts MRP on a software bridge. The deviations are
+profinet-py's I&M1 write with BlockLength 58 and decoder limits: scapy has
+no MRP and no DCP DHCP block class, and Wireshark decodes the data of DHCP
+options 61 and 255 only. Tests added since (profinet-py with the GSDML
+fixtures) enter the matrix at its next regeneration.
 
 ### Run it
 
@@ -196,5 +203,8 @@ Recorded, not worked around in go-profinet:
 
 There is no second independent IO-Controller with an open licence:
 go-profinet's IO-Device is tested by profinet-py (and by go-profinet's own
-controller). No commercial PLC or device has been tested; that is the
-hardware tier of [docs/TESTING.md](docs/TESTING.md).
+controller). CODESYS Control for Linux SL in its demo mode is the one
+candidate an engineer can run by hand; the recipe, with what its licence
+allows, is [docs/research/INDEPENDENT-CONTROLLER.md](docs/research/INDEPENDENT-CONTROLLER.md)
+(not run yet). No commercial PLC or device and no engineering tool has
+been tested; that is the hardware tier of [docs/TESTING.md](docs/TESTING.md).

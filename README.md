@@ -53,11 +53,17 @@ The library provides:
   Ethernet** (`vnet`) with seeded faults, plus a small ARP/IPv4/UDP stack
   (`netstack`), so that a controller and devices run in one process without
   privileges
-- **Verified against independent stacks**: rt-labs p-net, pnio-rs,
-  profinet-py and pnio-dcp, with every capture decoded by scapy and
-  Wireshark, in the containers of
+- **Verified against independent implementations**: rt-labs p-net,
+  pnio-rs, profinet-py and pnio-dcp (PROFINET), umrp (MRP rings), Net-SNMP
+  (the SNMP agent), with every capture decoded by Wireshark and scapy, in
+  the containers of
   [otfabric/profinet-interop](https://github.com/otfabric/profinet-interop)
-  (see [INTEROPERABILITY.md](INTEROPERABILITY.md))
+  (see [INTEROPERABILITY.md](INTEROPERABILITY.md) and, feature by feature,
+  [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md))
+- **Persistence and re-parameterization**: an optional store keeps a
+  device's permanent name, address and I&M records across restarts
+  (`store`, `device.Config.Store`); a controller re-parameterizes a running
+  device (`Reparameterize`)
 
 A command-line tool on top of it is
 [otfabric/profinetctl](https://github.com/otfabric/profinetctl).
@@ -249,8 +255,10 @@ coverage, not conformance: go-profinet is not certified for any class, and
 no time measured on the virtual network is a real-time claim. No IRT,
 PROFIsafe or PROFINET security classes. What was built without PI
 membership or hardware, how it was verified and what it does not do is in
-[docs/research/FEATURE-COMPLETION-REPORT.md](docs/research/FEATURE-COMPLETION-REPORT.md)
-(the plan: [docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md)). OT Fabric is not a PI
+[docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md),
+[docs/research/NEXT-PROGRAM-REPORT.md](docs/research/NEXT-PROGRAM-REPORT.md)
+and, for the previous round,
+[docs/research/FEATURE-COMPLETION-REPORT.md](docs/research/FEATURE-COMPLETION-REPORT.md). OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
 GSDML validation follows
