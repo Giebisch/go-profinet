@@ -5,7 +5,6 @@ package device
 import (
 	"bytes"
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -281,17 +280,7 @@ func TestPDevPeerCheck(t *testing.T) {
 	// Contradictory neighbors: the check follows the neighbor heard most
 	// recently and settles when the other one is gone.
 	other := lldpPeer(t, n, "intruder", "port-001")
-	var flips atomic.Int32
-	stop := time.Now().Add(time.Second)
-	for time.Now().Before(stop) {
-		if len(mismatch(d)) > 0 {
-			flips.Add(1)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if flips.Load() == 0 {
-		t.Fatal("a second neighbor never showed as a mismatch")
-	}
+	eventually(t, 5*time.Second, "a second neighbor shown as a mismatch", func() bool { return len(mismatch(d)) > 0 })
 	other.Close()
 	waitMismatch(t, d)
 	// Removing the check clears its diagnosis.
