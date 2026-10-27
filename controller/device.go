@@ -592,6 +592,17 @@ func (d *Device) run() {
 		if err != nil {
 			d.c.log.Warnf("controller: %s: %v (retry in %s)", d.cfg.StationName, err, backoff)
 		}
+		// A Hello that arrived while the device was connecting or
+		// running left a wake-up behind: it counts only while the Hello
+		// is fresh enough to stand in for an Identify.
+		if d.freshHello() {
+			d.c.log.Debugf("controller: %s: Hello: reconnecting now", d.cfg.StationName)
+			continue
+		}
+		select {
+		case <-d.helloWake:
+		default:
+		}
 		t := time.NewTimer(backoff)
 		select {
 		case <-t.C:
@@ -674,6 +685,14 @@ func (d *Device) offerHello(id dcp.Identity) {
 	case d.helloWake <- struct{}{}:
 	default:
 	}
+}
+
+// freshHello reports whether a recent Hello with an IP address waits to
+// be used.
+func (d *Device) freshHello() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.hello != nil && time.Since(d.helloAt) <= helloFresh && !d.hello.IP.IsZero()
 }
 
 // takeHello returns the identity of a recent Hello with an IP address and
