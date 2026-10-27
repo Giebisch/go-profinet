@@ -33,6 +33,11 @@ versions may change the API. Releases are tagged by the Release workflow
   takes over released ones, and `model.Device.WithSlots` builds the
   model of a controller that owns only some modules. A closed AR now
   invalidates only its own outputs.
+- Codecs of features without an open implementation to test behaviour
+  against (roadmap 3, 4B, 5): `mrp` (MRP frames), `ptcp` (PTCP delay
+  frames), `pnio.SRInfoBlock`, `pnio.ARSetID`, `pnio.MCRBlockReq`, the
+  IOCARSR DataStatus codes in `rt`; golden vectors, fuzz targets, tshark
+  and scapy decode them without a warning.
 - Generated GSDML no longer declares SNMP in `SupportedProtocols`: the
   device has no SNMP agent.
 - `docs/research/SOFTWARE-ONLY-ROADMAP.md` and its evidence files.

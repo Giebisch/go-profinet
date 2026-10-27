@@ -112,6 +112,13 @@ The block codecs (`ConnectRequest`, `ConnectResponse`, `ARBlockReq`,
 identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`) and the
 interface UUIDs.
 
+## mrp and ptcp — codecs
+
+`mrp`: `Frame` (`Test`, `TopologyChange`, `LinkChange`, `Common`, `Option`, other
+TLVs), `AppendTo`, `Decode`, `EtherType`, the destination addresses, `PortRole`,
+`RingState`, `DefaultDomain`. `ptcp`: `Delay` (`AppendTo`, `Decode`), the delay
+FrameIDs. Codecs only: no ring manager or client, no line delay measurement.
+
 ## rt and alarm — real-time transports
 
 `rt`: `Frame`, `AppendEthernet`, `Layout`/`ComputeLayout`/`LayoutFromIOCR`,

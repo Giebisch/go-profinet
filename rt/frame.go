@@ -39,6 +39,23 @@ const (
 // problem (0x35).
 const DefaultDataStatus = StatePrimary | DataValid | ProviderRun | StationOK
 
+// The DataStatus bits State, Redundancy and DataValid (mask 0x07) of an
+// IOCARSR's frames: on the output CR the controller's request, on the
+// input CR the device's acknowledgement (Wireshark's PNIO RT dissector).
+const (
+	RedundancyMask DataStatus = 0x07
+	// Output CR (controller to device).
+	PrimaryRequest DataStatus = 0x05
+	BackupRequest  DataStatus = 0x04
+	// Input CR (device to controller).
+	PrimaryAck           DataStatus = 0x05
+	BackupAckWithData    DataStatus = 0x04
+	BackupAckWithoutData DataStatus = 0x00
+	PrimaryMissingData   DataStatus = 0x06
+	PrimaryMissingNoData DataStatus = 0x02
+	PrimaryFault         DataStatus = 0x07
+)
+
 // Valid reports whether the data is valid.
 func (s DataStatus) Valid() bool { return s&DataValid != 0 }
 
