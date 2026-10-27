@@ -184,20 +184,6 @@ func (e *env) otfRing(container string) otfRing {
 	return r
 }
 
-// until polls cond until it holds or the timeout expires.
-func until(timeout time.Duration, cond func() bool) bool {
-	deadline := time.Now().Add(timeout)
-	for {
-		if cond() {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
-
 // ring is a ring of otfnode (n1) and two peer nodes (n2, n3).
 type ring struct {
 	e          *env

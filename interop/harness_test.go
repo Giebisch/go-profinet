@@ -318,6 +318,20 @@ func (e *env) eventually(container string, timeout time.Duration, match func(map
 	}
 }
 
+// until polls cond until it holds or the timeout expires.
+func until(timeout time.Duration, cond func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if cond() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 // named matches an event by name.
 func named(names ...string) func(map[string]any) bool {
 	return func(m map[string]any) bool {
