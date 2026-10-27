@@ -765,9 +765,23 @@ func TestConcurrentConnects(t *testing.T) {
 			defer wg.Done()
 			req := p.ioCAR()
 			<-start
-			if _, err := p.connect(req); err == nil {
-				accepted.Add(1)
+			// A Connect is accepted or refused out of ARs; one that got no
+			// answer (an RPC timeout on a loaded runner) is sent again.
+			for try := 0; try < 3; try++ {
+				_, err := p.connect(req)
+				if err == nil {
+					accepted.Add(1)
+					return
+				}
+				var se *pnio.StatusError
+				if errors.As(err, &se) {
+					if se.Status.Code2 != pnio.CMRPCOutOfARs {
+						t.Errorf("refused with %v", err)
+					}
+					return
+				}
 			}
+			t.Errorf("no answer to a Connect")
 		}(ps[i])
 	}
 	close(start)
@@ -822,4 +836,34 @@ func TestConnectSameControllerReplaces(t *testing.T) {
 	if _, ok := arState(d, c1.AR.ARUUID); ok {
 		t.Fatal("old AR still there")
 	}
+}
+
+// TestRerunCountsOnce: while a Connect replaces an AR (a rerun), the AR
+// and its replacement count once against MaxARs (2): another controller
+// is accepted.
+func TestRerunCountsOnce(t *testing.T) {
+	n := newNet(t)
+	d, _ := n.device(nil)
+	p1 := n.peer(d, "192.168.0.2", true)
+	p2 := n.peer(d, "192.168.0.3", true)
+	c1 := p1.ioCAR()
+	p1.establish(c1)
+	// The rerun of c1 in progress: a reservation that replaces it.
+	d.mu.Lock()
+	old := d.ars[c1.AR.ARUUID]
+	d.reserved++
+	d.replacing[old] = true
+	d.mu.Unlock()
+	if _, err := p2.connect(p2.ioCAR()); err != nil {
+		t.Fatalf("another controller during a rerun: %v", err)
+	}
+	d.mu.Lock()
+	d.reserved--
+	delete(d.replacing, old)
+	d.mu.Unlock()
+	// Without the rerun the device is full.
+	c3 := p2.ioCAR()
+	c3.AR.InitiatorObject[11] ^= 0xFF
+	_, err := p2.connect(c3)
+	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
 }

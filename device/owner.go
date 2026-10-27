@@ -5,6 +5,7 @@ package device
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/otfabric/go-profinet/pnio"
 )
@@ -38,12 +39,20 @@ func (d *Device) claimOwnership(a *ar) map[key]bool {
 	d.claimers[a] = true
 	for k := range a.match {
 		if o := d.owner[k]; o != nil && o != a {
-			locked[k] = true
+			if !sameSet(o, a) {
+				locked[k] = true
+			}
 			continue
 		}
 		d.owner[k] = a
 	}
 	return locked
+}
+
+// owns reports whether the owner o of a submodule lets a use it: o is a,
+// or both are ARs of one AR set (system redundancy).
+func owns(o, a *ar) bool {
+	return o == a || sameSet(o, a)
 }
 
 // setHeir makes an AR the heir of the one it replaces.
@@ -59,7 +68,12 @@ func (d *Device) setHeir(old, heir *ar) {
 // with a "Released" alarm.
 func (d *Device) releaseOwnership(a *ar) {
 	var handed []handover
+	// The other AR of a set takes the submodules over silently.
+	heir := d.srOther(a)
 	d.imgMu.Lock()
+	if a.heir == nil && heir != nil {
+		a.heir = heir
+	}
 	delete(d.claimers, a)
 	var others []*ar
 	for o := range d.claimers {
@@ -71,7 +85,9 @@ func (d *Device) releaseOwnership(a *ar) {
 			continue
 		}
 		delete(d.owner, k)
-		if out := d.outputs[k]; out != nil {
+		if out := d.outputs[k]; out != nil && !sameSet(a, a.heir) {
+			// The other AR of a set inherits the outputs as they are:
+			// they are held for the redundancy data hold time.
 			out.iops = pnio.IOxSBad
 		}
 		if h := a.heir; h != nil && h.match[k] {
@@ -130,7 +146,21 @@ func (d *Device) runPlugs(a *ar) {
 // (plug). A controller that does not answer within the AR's activity
 // timeout keeps the submodule; the next one is worked off.
 func (d *Device) plug(a *ar, k key) {
-	if a.currentState() != ARStateData || a.alarmLow == nil {
+	// A submodule handed to an AR that is still starting up (released in
+	// the same instant) waits for it to reach Data.
+	deadline := time.Now().Add(a.cmiTimeout)
+	for a.currentState() != ARStateData {
+		if st := a.currentState(); st == ARStateClosed || time.Now().After(deadline) {
+			d.log.Debugf("device: AR %s: submodule %d/%d handed over in state %s: not announced", a.uuid, k.slot, k.subslot, st)
+			return
+		}
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if a.alarmLow == nil {
 		return
 	}
 	m, ok := d.model.Module(k.slot)
@@ -182,7 +212,7 @@ func (d *Device) lockedFor(a *ar) map[key]bool {
 	d.imgMu.RLock()
 	defer d.imgMu.RUnlock()
 	for k := range a.match {
-		if o := d.owner[k]; o != nil && o != a {
+		if o := d.owner[k]; o != nil && !owns(o, a) {
 			locked[k] = true
 		}
 	}

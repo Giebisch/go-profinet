@@ -62,6 +62,9 @@ type Config struct {
 	// MRP runs media redundancy on two ports of a multiport device (a
 	// Bridge is required); nil: none, and the MRP records are refused.
 	MRP *MRPConfig
+	// SystemRedundancy accepts the IOCARSRs of S2 AR sets: EXPERIMENTAL,
+	// not interoperable (sr.go). nil refuses IOCARSR, as before.
+	SystemRedundancy *SRConfig
 	// StationName and IP are the initial station name and IP suite.
 	StationName string
 	IP          dcp.IPSuite
@@ -170,13 +173,15 @@ type Device struct {
 	// IOCARs; arSeq numbers the Connects.
 	reserved   int
 	reservedIO int
-	arSeq      uint64
-	frameIDs   map[uint16]bool
-	records    map[recKey][]byte
-	im         IMData
-	diags      map[key][]pnio.DiagnosisItem
-	closed     bool
-	pd         pdevState
+	// replacing are the ARs Connects in progress replace (reruns).
+	replacing map[*ar]bool
+	arSeq     uint64
+	frameIDs  map[uint16]bool
+	records   map[recKey][]byte
+	im        IMData
+	diags     map[key][]pnio.DiagnosisItem
+	closed    bool
+	pd        pdevState
 
 	// pdPoke wakes the PDev check evaluator.
 	pdPoke chan struct{}
@@ -195,6 +200,8 @@ type Device struct {
 	// that may (shared device, owner.go).
 	owner    map[key]*ar
 	claimers map[*ar]bool
+	// srSets are the AR sets of system redundancy, guarded by mu.
+	srSets map[[14]byte]*srSet
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -262,29 +269,31 @@ func New(cfg Config) (*Device, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Device{
-		cfg:      cfg,
-		log:      log,
-		model:    cfg.Model,
-		handler:  h,
-		object:   pnio.ObjectUUID(max(cfg.Model.Identity.Instance, 1), cfg.Model.Identity.DeviceID, cfg.Model.Identity.VendorID),
-		mux:      cfg.Mux,
-		name:     cfg.StationName,
-		ip:       cfg.IP,
-		dhcp:     cloneDHCP(cfg.DHCP),
-		ipDHCP:   cfg.IPFromDHCP,
-		ars:      map[rpc.UUID]*ar{},
-		frameIDs: map[uint16]bool{},
-		records:  map[recKey][]byte{},
-		im:       cfg.IM,
-		diags:    map[key][]pnio.DiagnosisItem{},
-		pd:       pdevState{checks: map[uint16]*pnio.PDPortDataCheck{}, adjusts: map[uint16]*pnio.PDPortDataAdjust{}, active: map[uint16][]uint16{}},
-		pdPoke:   make(chan struct{}, 1),
-		inputs:   map[key]*ioData{},
-		owner:    map[key]*ar{},
-		claimers: map[*ar]bool{},
-		outputs:  map[key]*ioData{},
-		ctx:      ctx,
-		cancel:   cancel,
+		cfg:       cfg,
+		log:       log,
+		model:     cfg.Model,
+		handler:   h,
+		object:    pnio.ObjectUUID(max(cfg.Model.Identity.Instance, 1), cfg.Model.Identity.DeviceID, cfg.Model.Identity.VendorID),
+		mux:       cfg.Mux,
+		name:      cfg.StationName,
+		ip:        cfg.IP,
+		dhcp:      cloneDHCP(cfg.DHCP),
+		ipDHCP:    cfg.IPFromDHCP,
+		ars:       map[rpc.UUID]*ar{},
+		frameIDs:  map[uint16]bool{},
+		records:   map[recKey][]byte{},
+		im:        cfg.IM,
+		diags:     map[key][]pnio.DiagnosisItem{},
+		pd:        pdevState{checks: map[uint16]*pnio.PDPortDataCheck{}, adjusts: map[uint16]*pnio.PDPortDataAdjust{}, active: map[uint16][]uint16{}},
+		pdPoke:    make(chan struct{}, 1),
+		inputs:    map[key]*ioData{},
+		owner:     map[key]*ar{},
+		claimers:  map[*ar]bool{},
+		srSets:    map[[14]byte]*srSet{},
+		replacing: map[*ar]bool{},
+		outputs:   map[key]*ioData{},
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 	d.model.Each(func(p model.PluggedSubmodule) {
 		k := key{p.Slot, p.Submodule.Subslot}

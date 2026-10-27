@@ -142,8 +142,11 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 	// A submodule another IO controller owns is not this one's to write
 	// (a device access AR may write anything).
 	if a.typ != pnio.ARTypeIOSAR {
-		if o := d.ownerOf(q.Slot, q.Subslot); o != nil && o != a {
+		if o := d.ownerOf(q.Slot, q.Subslot); o != nil && !owns(o, a) {
 			return rwErr(pnio.RWAccessDenied)
+		}
+		if !srPrimary(a) {
+			return errNotPrimary
 		}
 	}
 	req := RecordRequest{AR: a.info(), API: q.API, Slot: q.Slot, Subslot: q.Subslot, Index: q.Index, Length: q.Length}

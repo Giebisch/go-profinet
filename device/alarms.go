@@ -78,7 +78,12 @@ func (d *Device) SendAlarm(ctx context.Context, al Alarm) error {
 	// endpoints are only set up later: the state, read under the AR's lock,
 	// orders the read of the endpoint after its write.
 	var targets []*ar
-	if a := d.ownerOf(al.Slot, al.Subslot); a != nil && a.currentState() == ARStateData && a.alarmLow != nil {
+	a := d.ownerOf(al.Slot, al.Subslot)
+	if a != nil && a.sr != nil {
+		// Of an AR set, the primary takes the alarms.
+		a = d.srPrimaryOf(a)
+	}
+	if a != nil && a.currentState() == ARStateData && a.alarmLow != nil {
 		targets = append(targets, a)
 	}
 	var sent int

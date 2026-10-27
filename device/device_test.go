@@ -247,9 +247,11 @@ func TestCyclicWithController(t *testing.T) {
 	// Closing the controller releases the AR.
 	_ = ctrl.Close()
 	waitAR(t, d, ars[0].UUID, ARStateClosed)
-	if _, iops, _ := d.Output(2, 1); iops != pnio.IOxSBad {
-		t.Fatalf("output IOPS after release %02X", iops)
-	}
+	// The outputs are invalidated as the AR's teardown ends.
+	eventually(t, 2*time.Second, "output IOPS bad after the release", func() bool {
+		_, iops, _ := d.Output(2, 1)
+		return iops == pnio.IOxSBad
+	})
 	// Aborting a closed AR does nothing.
 	d.abort(a, pnio.AbortUser, true)
 	if r := a.info().CloseReason; r != 0 {
