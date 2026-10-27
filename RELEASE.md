@@ -4,7 +4,16 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## Unreleased
+## v0.2.0 (2026-10-27)
+
+The first features of the software-only roadmap
+([docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md)):
+DCP Hello, port checks and adjustments, GSDML validation, shared device,
+and codecs of MRP, PTCP and system redundancy. No incompatible API change
+(apidiff against v0.1.2); two behaviour changes: the IO-Device now
+accepts the IOCARs of several IO controllers (shared device) instead of
+refusing a second one, and generated GSDML no longer declares SNMP.
+Feature coverage is not conformance: go-profinet is not certified.
 
 - DCP Hello (roadmap 1A): `dcp.HelloFrame`, `Responder.StartHello` and
   `StopHello` (bounded sequences, rate-limited across restarts, ended by a
@@ -51,6 +60,16 @@ versions may change the API. Releases are tagged by the Release workflow
 - `controller`: `Device.WaitState` returns only after the `OnState`
   callback of the state it waited for has run, as documented; before, it
   could return in between.
+- `device`: a controller that connects anew before the device saw its old
+  AR end replaces that AR, which hands its submodules to the new one
+  (before, they were locked until the old AR timed out, or went to
+  another controller); `SendAlarm` no longer reads the alarm endpoint of
+  an AR that is still being set up (data race).
+- Tests: a failed e2e test prints the logs of its devices and
+  controllers; tests that are not about the watchdog ride out CI runner
+  stalls of seconds. Soaked: every CI job 25 times in parallel, green.
+- Interop: pinned to profinet-interop v0.1.3, whose matrix covers the new
+  features (p-net 55 checks pass, 0 fail).
 
 ## v0.1.2 (2026-10-26)
 
