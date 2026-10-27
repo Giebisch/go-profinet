@@ -42,7 +42,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 | Symbol | Purpose |
 |--------|---------|
-| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout` |
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`, `SNMP` (an opt-in read-only SNMP agent) |
 | `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
 | `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
 | `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
@@ -118,6 +118,20 @@ interface UUIDs.
 TLVs), `AppendTo`, `Decode`, `EtherType`, the destination addresses, `PortRole`,
 `RingState`, `DefaultDomain`. `ptcp`: `Delay` (`AppendTo`, `Decode`), the delay
 FrameIDs. Codecs only: no ring manager or client, no line delay measurement.
+
+## snmp — read-only SNMPv1/v2c agent
+
+| Symbol | Purpose |
+|--------|---------|
+| `NewAgent(net.PacketConn, owned, Config) (*Agent, error)` | an agent on a socket the caller opens (UDP `Port` 161): `Community` (required, compared in constant time), `MIB`, `MaxMessageSize`, `MaxRepetitions`, `MaxBulkVarBinds`, `Rate`/`Burst` |
+| `(*Agent).Serve(ctx)`, `Close()`, `Handle([]byte) []byte`, `Stats()`, `LocalAddr()` | serve until ctx is done or Close; answer one datagram; the counters of the snmp group |
+| `NewMIB()`, `(*MIB).AddScalar`, `AddSubtree` | the tree of objects: non-overlapping subtrees whose providers return their instances per request |
+| `(*MIB).AddSystem(func() System)`, `AddInterfaces(func() []Interface)`, `AddSNMPGroup(func() Stats)`, `AddLLDP(func() LLDPLocal, func() []LLDPRemote)` | MIB-II system, interfaces (ifNumber, ifTable) and snmp groups; the LLDP-MIB local data, lldpLocPortTable and lldpRemTable |
+| `Message`, `PDU`, `VarBind`, `Value`, `OID`, `Decode`, `(*Message).AppendTo` | the BER codec of v1/v2c messages, for a manager as well (`Integer`, `String`, `Counter32`, `Counter64`, `TimeTicks`, `IPAddress`, … build values) |
+
+`device.Config.SNMP` (`device.SNMPConfig`: `Community`, `Contact`,
+`Location`, `Description`, `ObjectID`, `Port`, `Rate`) starts the agent in a
+device; nil (the default) runs none.
 
 ## rt and alarm — real-time transports
 

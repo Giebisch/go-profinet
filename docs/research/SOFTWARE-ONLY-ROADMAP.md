@@ -77,8 +77,10 @@ MRP are optional features of B. It also states that certification against a
 class checks the minimum properties and the optional functions a device
 declares. Supporting the features of a class is therefore not the same as
 being certified for it. go-profinet describes which **features** it covers;
-it does not claim conformance to any class. Until an SNMP agent exists, it
-does not even cover the features of class B.
+it does not claim conformance to any class. Its SNMP agent (package
+`snmp`, read-only v1/v2c with MIB-II and the LLDP-MIB) covers the SNMP
+feature of class B as far as public texts describe it; the PNO's LLDP
+extension MIB is not public and not implemented.
 
 GSDML 2.50 changes how security is described: it removes SecurityClass 2
 and 3 and describes the secure application classes SecureAccess and
@@ -280,7 +282,7 @@ and experiments only, **—** deferred.
 | MCR (multicast CRs) | P3 | MCRBlockReq 0x0106 layout VERIFIED in Wireshark; AddressResolutionProperties bits, multicast MAC allocation and the resolution procedure UNVERIFIED; p-net parses but does not implement | codec only until the procedure is substantiated |
 | PTCP | P3 | Delay PDUs and TLVs VERIFIED in Wireshark; the meaning of 0xFF41–0xFF43 and the destination MAC need a capture | decoder; line delay stays "not measured" (p-net does the same) |
 | DHCP | P3 | DCP option 3 suboptions are DHCP option codes (61 client ID, 255 control) and IP BlockInfo bit 1 "set by DHCP" VERIFIED; no PI guidance on DHCP use found; p-net has none | decode the DCP DHCP blocks; addressing stays with the operating system (`ApplyIP`), no DHCP client in the library |
-| SNMP (CC-B features) | P2 | CC-B needs SNMP with MIB-II and the LLDP-MIB (VERIFIED, PI guideline); p-net uses net-snmp; the PNO LLDP extension MIB's text is not public (only its OIDs) | a read-only SNMPv1/v2c agent with MIB-II system/interfaces and the LLDP-MIB, standard library only |
+| SNMP (CC-B features) | P2 | CC-B needs SNMP with MIB-II and the LLDP-MIB (VERIFIED, PI guideline); p-net uses net-snmp; the PNO LLDP extension MIB's text is not public (only its OIDs) | **implemented** (package `snmp`, opt-in `device.Config.SNMP`): a read-only SNMPv1/v2c agent with the MIB-II system, interfaces and snmp groups and the LLDP-MIB local data and lldpRemTable, standard library only; **independently verified**: tshark and Scapy decode a v1/v2c walk without a warning (`interop/snmp_test.go`). No SNMPv3, no traps, no PNO extension MIB |
 | DCP restricted modes, hardening | P2 | DCPBoundary and the device's own policies | configurable read-only DCP (no Set), rate limits, audit events; never called Security Class 1 |
 | GSDX/MRCD | P3 | GSDX is an Open Packaging Conventions container (ISO/IEC 29500-2, Ecma-376 Part 2, public); its PI rules, signing and MRCD are members-only | a generic container inspector (parts, content types, relationships, signature metadata), unknown parts preserved; no PI-specific validation |
 | GSDML 2.46/2.50 | — | XSDs members-only | unknown elements preserved and reported as unvalidated |
