@@ -47,6 +47,40 @@ answers over the requested delay, answers Get with the requested blocks,
 applies Set blocks in order (with Control/Start and Control/Stop around
 them), and refuses other requesters for 3 s after a Get or Set.
 
+## DHCP blocks
+
+DCP option 3 carries DHCP options: the suboption is the DHCP option code
+(61 client identifier, 255 "control DHCP for address resolution", 12, 43,
+54, 55, 60, 81, 97) and the value is the option itself, code, length and
+data (`dcp.DHCPParameter`). The IP block's BlockInfo says whether the
+address was set by DHCP (0x0002) or is in conflict (bit 7);
+`Identity.IPSetByDHCP` and `IPConflict` read it. The device reports the
+options of `device.Config.DHCP` in Identify and Get, `Config.IPFromDHCP`
+marks its initial address as set by DHCP until a DCP Set of the IP, and a
+DCP Set of a DHCP option reaches `Config.SetDHCP`; without it the Set is
+refused with "option not supported", as p-net refuses a Set of a block it
+only reports. go-profinet has no DHCP client: obtaining an address stays
+with the operating system.
+
+## Restricted modes
+
+`ResponderOptions.Policy` (`device.Config.DCPPolicy`) is off by default.
+`ReadOnly` refuses every Set block that changes the device (name, IP, DHCP,
+ResetToFactory, FactoryReset, unknown blocks) with BlockError 5, "SET not
+possible by local reasons"; Control/Start, Stop and Signal and every
+Identify and Get are answered. `IdentifyLimit` and `SetLimit` are token
+buckets per source MAC address, kept in a table of `Sources` entries (64 by
+default): a new source takes a free entry or one whose bucket has refilled
+completely, otherwise it shares one overflow bucket with the other
+untracked sources. Memory is fixed, and all sources together get at most
+(Sources+1) × Burst at once and (Sources+1) × Rate per second; requests over
+the limit are dropped unanswered. `Audit` receives an `AuditEvent` (time,
+source, service, block, qualifier, outcome, BlockError) for every Set block,
+ResetToFactory included, every unsupported service and the start of each
+rate-limited episode; the responder logs the same events at Info level,
+with fields when the logger is a `profinet.FieldLogger`. None of this
+authenticates a requester: a source address can be forged.
+
 ## Hello
 
 A device can announce itself with a DCP Hello request (FrameID 0xFEFC,

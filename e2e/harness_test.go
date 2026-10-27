@@ -186,7 +186,7 @@ func suite(ip string) dcp.IPSuite {
 	return dcp.IPSuite{Addr: netip.MustParseAddr(ip), Mask: mask, Gateway: netip.MustParseAddr("0.0.0.0")}
 }
 
-func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*device.Device, *node) {
+func (e *env) device(name, ip string, m *model.Device, h device.Handler, opts ...func(*device.Config)) (*device.Device, *node) {
 	e.t.Helper()
 	n := e.node(ip)
 	cfg := device.Config{
@@ -199,6 +199,9 @@ func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*devic
 	}
 	if ip != "" {
 		cfg.IP = suite(ip)
+	}
+	for _, o := range opts {
+		o(&cfg)
 	}
 	d, err := device.New(cfg)
 	if err != nil {

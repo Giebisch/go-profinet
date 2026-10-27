@@ -17,6 +17,7 @@ addresses and timings differ from run to run).
 | [chaos](chaos/main.go) | an AR under loss, duplication, reordering, corruption and jitter; a pulled cable; reconnection and counters | self-contained |
 | [gsdml](gsdml/main.go) | generating the GSDML file of a device model | self-contained |
 | [gsdmlimport](gsdmlimport/main.go) | reading and validating a GSDML file, converting it to the expected configuration | self-contained |
+| [gsdx](gsdx/main.go) | inspecting an OPC (GSDX) container and checking the GSDML part in it | self-contained |
 | [device](device/main.go) | an IO-Device on a real interface | needs raw Ethernet access |
 | [controller](controller/main.go) | an IO-Controller on a real interface, connecting the example device | needs raw Ethernet access |
 
@@ -132,6 +133,16 @@ slot 2: "in2" (0x00000102) subslot 1: 4 octets in, 0 out, 0 record(s)
 slot 3: "out3" (0x00000103) subslot 1: 0 octets in, 64 out, 0 record(s)
 slot 4: "out4" (0x00000104) subslot 1: 0 octets in, 4 out, 0 record(s)
 4 module type(s) usable
+```
+
+## gsdx
+
+```console
+$ go run ./examples/gsdx
+part /_rels/.rels (application/vnd.openxmlformats-package.relationships+xml, 187 octets)
+part /GSDML/GSDML-V2.35-Example.xml (application/xml, 7235 octets)
+0 OPC issue(s), 0 signature(s)
+GSDML /GSDML/GSDML-V2.35-Example.xml: 0 error(s), 0 warning(s) (go-profinet's catalog, not PI's checker)
 ```
 
 ## device and controller on a real network
