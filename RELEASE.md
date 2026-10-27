@@ -68,7 +68,7 @@ Feature coverage is not conformance: go-profinet is not certified.
 - Tests: a failed e2e test prints the logs of its devices and
   controllers; tests that are not about the watchdog ride out CI runner
   stalls of seconds. Soaked: every CI job 25 times in parallel, green.
-- Interop: pinned to profinet-interop v0.1.2, whose matrix covers the new
+- Interop: pinned to profinet-interop v0.1.3, whose matrix covers the new
   features (p-net 55 checks pass, 0 fail).
 
 ## v0.1.2 (2026-10-26)

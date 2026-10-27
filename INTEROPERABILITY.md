@@ -126,9 +126,9 @@ is an attributed deviation of the peer.
 | tshark and scapy | | (decoders of our Hello frames, one check each) | 2 | 0 | 0 | 0 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.2/docs/MATRIX.md);
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.3/docs/MATRIX.md);
 the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.2/docs/INTEROPERABILITY.md).
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.3/docs/INTEROPERABILITY.md).
 The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set); the
 two deviations are profinet-py's I&M1 write with BlockLength 58.
 
