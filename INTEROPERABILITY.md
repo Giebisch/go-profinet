@@ -54,9 +54,11 @@ against (see [the matrix](#interop-matrix)).
 | Hand-over: Released alarm, PrmEnd (plug), ApplicationReady (plug), one submodule at a time | ✅ | ✅ | p-net (`TestPnetSharedDevice`) |
 | Shared input | — | — | not public; p-net does not implement it |
 | IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
-| MRP frames (Test, TopologyChange, LinkDown/Up), PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
+| MRP: client and manager on a multiport device (test frames, ring open/closed, blocked secondary, TopologyChange, link change frames) | — | ✅ (`Config.MRP`) | no behavioural peer (microchip-ung/mrp needs CONFIG_BRIDGE_MRP and a ring of containers); tshark and scapy decode the frames (`TestCodecDecoders`); own rings on vnet (`TestRing`, `TestMRPRing`) |
+| PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
 | RT_CLASS_UDP: RT payload on UDP port 34962, RTClass 4 / LT 0x0800 / RTA_CLASS_UDP in Connect (codecs only) | ✅ encode, refused by `AddDevice` | ✅ decode, Connect refused (DB 81 02 07) | tshark and scapy decode both (`TestUDPRTDecoders`); no open implementation of the data path |
-| IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
+| IOCARSR (system redundancy S2): AR sets of two IOCARSRs, primary by DataStatus request, outputs held for RDHT, abort reason 38 (EXPERIMENT, off by default) | ✅ (`SystemRedundancy`, `SetPrimary`) | ✅ (`Config.SystemRedundancy`) | none: no open S2 implementation exists (p-net and pnio-rs refuse IOCARSR); own e2e only (`TestSystemRedundancy*`) |
+| MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
 | DCE/RPC: fragmentation, retransmission, at-most-once, idempotent calls, ping/working, big- and little-endian NDR | ✅ | ✅ | all |
 
 ### Records
@@ -76,7 +78,10 @@ against (see [the matrix](#interop-matrix)).
 | PDPortDataAdjust (0x802F): PeerToPeerBoundary, DCPBoundary | ✅ (encode) | ✅ (applies LLDP off, Hello off) | |
 | PDInterfaceAdjust (0x8071), PDInterfaceDataReal (0x8080, in PDRealData), PDExpectedData (0xF842) | ✅ (decode) | ✅ | |
 | Topology verification from PDRealData (`CheckTopology`) | ✅ | n/a | |
-| Other checks and adjustments (MAU type, link state, line delay, boundaries), PDIRData, MRP records | — | refused (0xA9) | |
+| MRP records: PDInterfaceMrpDataAdjust/Real (0x8052/0x8050), PDPortMrpDataAdjust/Real (0x8053/0x8054); PDInterfaceMrpDataCheck refused | ✅ (`DeviceConfig.MRP`) | ✅ (multiport devices) | tshark decodes every field we encode (`TestCodecDecoders`) |
+| Multiport devices: port data, LLDP and peer checks per port (`l2/bridge`) | ✅ (`CheckTopology` over a line) | ✅ (`Config.Bridge`) | own e2e only (`TestMultiportLine`); no open multiport PROFINET device |
+| SNMP (read-only v1/v2c agent: MIB-II system, interfaces, snmp group, LLDP-MIB) | — | ✅ (`Config.SNMP`, opt-in) | tshark and scapy decode every datagram of a walk (`TestSNMPDecoders`); no SNMP manager run against it yet |
+| Other checks and adjustments (MAU type, link state, line delay, domain/multicast boundaries), PDIRData | — | refused (0xA9) | |
 
 ### Alarms (RTA)
 
@@ -105,7 +110,8 @@ against (see [the matrix](#interop-matrix)).
 | Validate against the catalog (structure, types, references) | ✅ (not PI's checker; see [docs/GSDML.md](docs/GSDML.md)) | |
 | Model from GSDML (DAP, modules, submodules, IO data, records) | ✅ | pnio-rs (its GSDML drives the controller) |
 | GSDML from a model | ✅ | profinet-py (parses it and connects with it) |
-| GSDX, MRCD | — (formats not public) | |
+| Check: errors, warnings and unvalidated content with their rules (`gsdml.Check`) | ✅ (not PI's checker) | |
+| GSDX: the public OPC container (parts, relationships, signature metadata, GSDML parts), `gsdml/gsdx` | ✅ inspector (signatures not verified; PI's rules and MRCD are members only) | |
 
 ## Interop matrix
 
@@ -123,16 +129,18 @@ is an attributed deviation of the peer.
 | pnio-rs | v0.1.0 | IO-Controller, DCP requester | 12 | 0 | 2 | 0 |
 | profinet-py | 0.6.6 | IO-Device, DCP responder | 22 | 0 | 0 | 2 |
 | pnio-dcp | 1.2.0 | DCP responder | 8 | 0 | 0 | 0 |
-| scapy | 2.6.1 | (decoder of every capture) | 7 | 0 | 0 | 0 |
-| tshark | 4.0.17 | (decoder of every capture) | 7 | 0 | 0 | 0 |
-| tshark and scapy | | (decoders of our Hello frames, one check each) | 2 | 0 | 0 | 0 |
+| scapy | 2.6.1 | (decoder of every capture) | 11 | 0 | 0 | 0 |
+| tshark | 4.0.17 | (decoder of every capture) | 10 | 0 | 0 | 0 |
+| tshark and scapy | | (decoders of our Hello, SNMP, UDP-RT and DHCP frames) | 8 | 0 | 0 | 2 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.3/docs/MATRIX.md);
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.2.1/docs/MATRIX.md);
 the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.3/docs/INTEROPERABILITY.md).
-The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set); the
-two deviations are profinet-py's I&M1 write with BlockLength 58.
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.2.1/docs/INTEROPERABILITY.md).
+The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set). Of
+the four deviations, two are profinet-py's I&M1 write with BlockLength 58 and
+two are decoder limits: scapy has no DCP DHCP block class, and Wireshark
+decodes the data of DHCP options 61 and 255 only.
 
 ### Run it
 

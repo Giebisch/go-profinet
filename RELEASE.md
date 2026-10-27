@@ -24,6 +24,62 @@ section ending with a `---` line and no `---` line inside a section.
 
 ---
 
+## v0.3.0
+
+**Date:** 2026-10-27
+**Previous release:** v0.2.0
+
+The rest of the software-only roadmap
+([docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md)):
+multiport devices, MRP, system redundancy as an experiment, SNMP, DCP
+hardening, DHCP blocks, RT_CLASS_UDP codecs and a GSDX inspector. What each
+feature covers, how it was verified and what it does not do is in
+[docs/research/FEATURE-COMPLETION-REPORT.md](docs/research/FEATURE-COMPLETION-REPORT.md).
+Feature coverage is not conformance: go-profinet is not certified, and no
+time measured on the virtual network is a real-time claim.
+
+One incompatible API change (apidiff against v0.2.0): `dcp.ResponderOptions`
+is no longer comparable with `==`, since its `Policy` holds an audit
+callback. Behaviour changes: a
+Connect that has both a bad LT and a bad RT class is refused naming the RT
+class (IOCRProperties) instead of the LT; an AlarmCR over UDP is refused
+naming its properties.
+
+- Multiport devices (roadmap 4A): `l2/bridge`, the learning switch of a
+  multiport device (CPU port, per-port local ports for LLDP and MRP,
+  forwarding/blocked states, DCP boundaries, a bounded FDB), and
+  `device.Config.Bridge`: each port has its own MAC address, LLDP agent,
+  link state, port data and peer check.
+- MRP (roadmap 4B): `mrp.New` runs a ring client or manager on a bridge
+  (200 ms and 500 ms profiles); the PROFINET MRP records 0x8050–0x8054
+  (`pnio`), `device.Config.MRP`, `Device.MRPStatus`,
+  `controller.DeviceConfig.MRP`.
+- System redundancy S2 (roadmap 3): an experiment, off by default and not
+  interoperable: `device.Config.SystemRedundancy`,
+  `controller.DeviceConfig.SystemRedundancy`, `Device.SetPrimary`,
+  `Device.RedundancyAck`; abort reasons 38–43 and the SRInfoBlock error
+  code in `pnio`.
+- SNMP (roadmap 5, for CC-B features): `snmp`, a read-only SNMPv1/v2c agent
+  with MIB-II and the LLDP-MIB; `device.Config.SNMP` (opt-in).
+- DCP: DHCP blocks of option 3 (`dcp.DHCPParameter`, `Identity.DHCP`,
+  `device.Config.DHCP`, `SetDHCP`); an opt-in policy (`dcp.Policy`,
+  `device.Config.DCPPolicy`): read-only DCP, per-source rate limits, audit
+  events. Never called a security class.
+- RT_CLASS_UDP: codecs (`rt.AppendUDPPayload`, `rt.DecodeUDP`, the UDP
+  fields of `pnio`); the device and the controller refuse it.
+- GSDX: `gsdml/gsdx`, a safe inspector of the OPC container (no PI rules,
+  signatures not verified); `gsdml.Severity` decodes from its JSON.
+- Fixes, found by soaking: `controller`: no deadlock between an AR's
+  teardown and a frame being handled (since v0.1.0); `device`: an AR being
+  replaced (a rerun) counts once against MaxARs; a shared-device handover to
+  an AR completing its startup is announced once it runs (v0.2.0);
+  `gsdml.Severity` decodes from its JSON (v0.2.0).
+- Interop: pinned to profinet-interop v0.2.1; new decoder checks for SNMP,
+  UDP-RT, the DCP DHCP blocks and the MRP records.
+- 25 fuzz targets (was 17); coverage 97.1 %.
+
+---
+
 ## v0.2.0
 
 **Date:** 2026-10-27

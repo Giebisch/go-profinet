@@ -26,7 +26,12 @@ The library provides:
   and IOSAR, several ARs), cyclic input production and output consumption
   with watchdogs, process, diagnosis and plug alarms, diagnosis records,
   I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology,
-  port checks (CheckPeers) and adjustments (LLDP and DCP boundaries)
+  port checks (CheckPeers) and adjustments (LLDP and DCP boundaries),
+  shared device (several controllers, one owner per submodule), multiport
+  devices on a software switch (`l2/bridge`), media redundancy (MRP client
+  and manager), an opt-in read-only SNMP agent (MIB-II, LLDP-MIB), an
+  opt-in DCP policy (read-only, rate limits, audit) and, as an experiment
+  off by default, system redundancy S2
 - **DCP** (`dcp`): Identify with filters and response delay, Get, Set
   (station name, IP suite, temporary or permanent), Signal, ResetToFactory,
   Hello (sent by the device, used by the controller to connect without
@@ -124,17 +129,20 @@ Requires Go 1.23 or later.
 | `controller` | IO-Controller, record client, supervisor AR |
 | `device` | IO-Device |
 | `model` | the device model: identity, DAP, slots, modules, submodules, records |
-| `gsdml` | GSDML documents (generated types), validation, model conversion |
+| `gsdml` | GSDML documents (generated types), validation with severities, model conversion |
+| `gsdml/gsdx` | a safe inspector of GSDX (OPC) containers |
 | `dcp` | DCP codec, requester (`Client`), responder |
 | `lldp` | LLDP codec and agent |
 | `rpc` | connectionless DCE/RPC client and server |
 | `pnio` | PNIO blocks, NDR, status, identifiers |
 | `rt` | cyclic frames, layout, provider, consumer, scheduler |
 | `alarm` | RTA alarm transport |
-| `mrp` | MRP frame codec (Test, TopologyChange, LinkDown/Up, Common, Option); no ring manager or client yet |
+| `mrp` | MRP frame codec and the ring client and manager (`mrp.New`) on a switch |
+| `snmp` | read-only SNMPv1/v2c agent: MIB-II system, interfaces, snmp group, LLDP-MIB |
 | `ptcp` | PTCP delay frame codec (DelayReq, DelayRes); no line delay measurement |
 | `ethernet` | Ethernet and VLAN frame codec, MAC addresses |
 | `l2` | the `Port` interface and the frame demultiplexer `Mux` |
+| `l2/bridge` | the learning switch of a multiport device |
 | `l2/afpacket`, `l2/bpf`, `l2/npcap`, `l2/osport` | the operating systems' raw Ethernet backends |
 | `vnet` | virtual Ethernet switch with loss, duplication, corruption, reordering, delay and jitter |
 | `netstack` | ARP, IPv4 and UDP over a `l2.Mux` |
@@ -234,12 +242,15 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 ## Limitations
 
 The features of conformance class A as controller and device (RT_CLASS_1
-and RT_CLASS_2 without synchronization), and shared device; class B also
-requires SNMP, which is missing. This is feature coverage, not
-conformance: go-profinet is not certified for any class. No IRT, MRP,
-system redundancy, PROFIsafe or PROFINET security classes. What can still
-be built without PI membership or hardware, and in which order, is in
-[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md). OT Fabric is not a PI
+and RT_CLASS_2 without synchronization), shared device, multiport devices,
+MRP (client and manager, no MRPD) and a read-only SNMP agent; system
+redundancy S2 is an experiment that is not interoperable. This is feature
+coverage, not conformance: go-profinet is not certified for any class, and
+no time measured on the virtual network is a real-time claim. No IRT,
+PROFIsafe or PROFINET security classes. What was built without PI
+membership or hardware, how it was verified and what it does not do is in
+[docs/research/FEATURE-COMPLETION-REPORT.md](docs/research/FEATURE-COMPLETION-REPORT.md)
+(the plan: [docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md)). OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
 GSDML validation follows
