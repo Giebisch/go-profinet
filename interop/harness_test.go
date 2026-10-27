@@ -352,9 +352,16 @@ func last(evs []map[string]any, name string) map[string]any {
 // returned function stops it and returns the capture's path in the share.
 func (e *env) capture(container, file string) func() string {
 	e.t.Helper()
+	return e.captureOn(container, "eth0", "", file)
+}
+
+// captureOn captures on one interface of a container, with a pcap filter
+// (empty: every frame).
+func (e *env) captureOn(container, iface, filter, file string) func() string {
+	e.t.Helper()
 	full := e.network + "-capture-" + strings.TrimSuffix(file, ".pcap")
 	_, err := docker(context.Background(), "run", "-d", "--name", full, "--network", "container:"+container, "--cap-add", "NET_RAW", "--cap-add", "NET_ADMIN",
-		"-v", e.share+":/share", runnerImage, "tcpdump", "-i", "eth0", "-U", "-s", "0", "-w", "/share/"+file)
+		"-v", e.share+":/share", runnerImage, "tcpdump", "-i", iface, "-U", "-s", "0", "-w", "/share/"+file, filter)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -388,11 +395,29 @@ func (e *env) oracles(file string, deviations ...peerDeviation) {
 		ByKind         map[string]int `json:"byKind"`
 		UndecodedCount int            `json:"undecodedCount"`
 		Undecoded      []any          `json:"undecoded"`
+		NotDissected   []struct {
+			Kind string `json:"kind"`
+		} `json:"notDissected"`
+		NotDissectedCount int `json:"notDissectedCount"`
 	}
 	if err := json.Unmarshal(lastLine(sc), &s); err != nil {
 		e.t.Fatalf("scapy output: %v: %s", err, sc)
 	}
-	e.result.add("scapy decode "+file, s.UndecodedCount == 0, fmt.Sprintf("%d frames %v, %d undecoded", s.Frames, s.ByKind, s.UndecodedCount))
+	e.result.add("scapy decode "+file, s.UndecodedCount == 0, fmt.Sprintf("%d frames %v, %d undecoded, %d without a scapy dissector", s.Frames, s.ByKind, s.UndecodedCount, s.NotDissectedCount))
+	// scapy has no MRP or PTCP dissector: it reads those frames without
+	// decoding them, which is a limit of the decoder, not evidence.
+	if s.NotDissectedCount > 0 {
+		kinds := map[string]bool{}
+		for _, n := range s.NotDissected {
+			kinds[n.Kind] = true
+		}
+		for _, k := range []string{"mrp", "ptcp"} {
+			if kinds[k] {
+				e.result.deviation("scapy: "+strings.ToUpper(k)+" frames of "+file+" not dissected",
+					"decoder limit: scapy "+"has no "+strings.ToUpper(k)+" dissector; the frames are read, not decoded (tshark decodes them)")
+			}
+		}
+	}
 	if s.UndecodedCount != 0 {
 		e.t.Errorf("scapy could not decode %d frames of %s: %v", s.UndecodedCount, file, s.Undecoded)
 	}
