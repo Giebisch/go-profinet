@@ -5,6 +5,7 @@ package device
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/otfabric/go-profinet/pnio"
 )
@@ -145,7 +146,21 @@ func (d *Device) runPlugs(a *ar) {
 // (plug). A controller that does not answer within the AR's activity
 // timeout keeps the submodule; the next one is worked off.
 func (d *Device) plug(a *ar, k key) {
-	if a.currentState() != ARStateData || a.alarmLow == nil {
+	// A submodule handed to an AR that is still starting up (released in
+	// the same instant) waits for it to reach Data.
+	deadline := time.Now().Add(a.cmiTimeout)
+	for a.currentState() != ARStateData {
+		if st := a.currentState(); st == ARStateClosed || time.Now().After(deadline) {
+			d.log.Debugf("device: AR %s: submodule %d/%d handed over in state %s: not announced", a.uuid, k.slot, k.subslot, st)
+			return
+		}
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if a.alarmLow == nil {
 		return
 	}
 	m, ok := d.model.Module(k.slot)
