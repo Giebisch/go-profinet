@@ -35,9 +35,14 @@ type Identity struct {
 	OEMVendorID uint16 `json:"oemVendorId,omitempty"`
 	OEMDeviceID uint16 `json:"oemDeviceId,omitempty"`
 	HasOEM      bool   `json:"-"`
-	// IP is the IP suite and IPInfo its BlockInfo (IPInfo* bits).
+	// IP is the IP suite and IPInfo its BlockInfo (IPInfo* bits): whether
+	// an address is set, set by DHCP, and in conflict.
 	IP     IPSuite `json:"ip"`
 	IPInfo uint16  `json:"ipInfo"`
+	// DHCP are the DHCP options (option 3 blocks) the device reports, in
+	// their order. A block whose value is not a DHCP option of its
+	// suboption's code is left out.
+	DHCP []DHCPParameter `json:"dhcp,omitempty"`
 	// Options lists the blocks the device supports (Device/Options).
 	Options []BlockID `json:"options,omitempty"`
 	// RSIProperties is the Device/RSIProperties value when HasRSI.
@@ -118,6 +123,13 @@ func ParseIdentity(mac ethernet.MAC, blocks []Block) (Identity, error) {
 		case DeviceAlias:
 			id.Alias = string(d)
 		default:
+			if b.ID.Option() == OptionDHCP {
+				// DHCP blocks are optional: an inconsistent one is skipped
+				// rather than losing the device's identity.
+				if p, err := DecodeDHCPParameter(d); err == nil && p.Code == b.ID.Suboption() {
+					id.DHCP = append(id.DHCP, DHCPParameter{Code: p.Code, Data: append([]byte(nil), p.Data...)})
+				}
+			}
 		}
 	}
 	return id, nil
@@ -145,6 +157,11 @@ func (id *Identity) Blocks() []Block {
 		add(DeviceRSI, 0, binary.BigEndian.AppendUint16(nil, id.RSIProperties))
 	}
 	add(IPParameter, id.IPInfo, AppendIPSuite(nil, id.IP))
+	for _, p := range id.DHCP {
+		if v, err := AppendDHCPParameter(nil, p); err == nil {
+			add(p.BlockID(), 0, v)
+		}
+	}
 	if id.HasInitiative {
 		add(Initiative, 0, binary.BigEndian.AppendUint16(nil, id.Initiative))
 	}
@@ -152,7 +169,7 @@ func (id *Identity) Blocks() []Block {
 	if len(opts) == 0 {
 		opts = []BlockID{IPMAC, IPParameter}
 		for _, b := range bs {
-			if b.ID.Option() == OptionDeviceProperties || b.ID == Initiative {
+			if b.ID.Option() == OptionDeviceProperties || b.ID.Option() == OptionDHCP || b.ID == Initiative {
 				opts = append(opts, b.ID)
 			}
 		}
@@ -172,6 +189,24 @@ func (id *Identity) Blocks() []Block {
 		out = append(out, b)
 	}
 	return out
+}
+
+// IPSetByDHCP reports whether the device says its IP address was set by
+// DHCP (IP BlockInfo bit 1).
+func (id *Identity) IPSetByDHCP() bool { return id.IPInfo&IPInfoDHCP != 0 }
+
+// IPConflict reports whether the device says it detected an address
+// conflict (IP BlockInfo bit 7).
+func (id *Identity) IPConflict() bool { return id.IPInfo&IPInfoConflict != 0 }
+
+// DHCPOption returns the DHCP option with the given code.
+func (id *Identity) DHCPOption(code uint8) (DHCPParameter, bool) {
+	for _, p := range id.DHCP {
+		if p.Code == code {
+			return p, true
+		}
+	}
+	return DHCPParameter{}, false
 }
 
 // Block returns the response block for one block ID, and false when the

@@ -33,6 +33,18 @@ type Station interface {
 	ResetToFactory(mode uint16) BlockError
 }
 
+// DHCPSetter is implemented by a [Station] that accepts a DCP Set of the
+// DHCP options (option 3). A responder whose station does not implement
+// it refuses such a Set with BlockErrorOptionUnsupported, as p-net answers
+// a Set of a block it only reports (DeviceInitiative). go-profinet has no
+// DHCP client: the station decides what a DHCP option means for the
+// operating system's addressing.
+type DHCPSetter interface {
+	// SetDHCP stores (and applies) one DHCP option; p.Code is the
+	// block's suboption.
+	SetDHCP(p DHCPParameter, permanent bool) BlockError
+}
+
 // ResponderOptions configure a [Responder].
 type ResponderOptions struct {
 	// Logger receives diagnostics. nil logs nothing.
@@ -242,6 +254,13 @@ func (r *Responder) handleGet(ctx context.Context, src ethernet.MAC, f *Frame) {
 		code := BlockErrorSuboptionUnsupport
 		switch b.ID.Option() {
 		case OptionIP, OptionDeviceProperties:
+		case OptionDHCP:
+			// The option is supported when the station reports any DHCP
+			// option; a code it does not report is then an unsupported
+			// suboption.
+			if len(id.DHCP) == 0 {
+				code = BlockErrorOptionUnsupported
+			}
 		default:
 			code = BlockErrorOptionUnsupported
 		}
@@ -291,6 +310,9 @@ func (r *Responder) apply(b Block) BlockError {
 	case CtrlFactory:
 		return r.station.ResetToFactory(ResetAllData)
 	default:
+		if b.ID.Option() == OptionDHCP {
+			return r.setDHCP(b, permanent)
+		}
 		switch b.ID.Option() {
 		case OptionIP, OptionDeviceProperties, OptionControl:
 			return BlockErrorSuboptionUnsupport
@@ -298,6 +320,21 @@ func (r *Responder) apply(b Block) BlockError {
 			return BlockErrorOptionUnsupported
 		}
 	}
+}
+
+// setDHCP passes a Set of a DHCP option to the station, if it accepts
+// one.
+func (r *Responder) setDHCP(b Block, permanent bool) BlockError {
+	ds, ok := r.station.(DHCPSetter)
+	if !ok {
+		return BlockErrorOptionUnsupported
+	}
+	p, err := DecodeDHCPParameter(b.Data)
+	if err != nil || p.Code != b.ID.Suboption() {
+		return BlockErrorSetNotPossible
+	}
+	p.Data = append([]byte(nil), p.Data...)
+	return ds.SetDHCP(p, permanent)
 }
 
 // validSuite checks an IP suite of a Set: a unicast address, a contiguous

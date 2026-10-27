@@ -42,11 +42,11 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 | Symbol | Purpose |
 |--------|---------|
-| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout` |
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `DHCP`/`IPFromDHCP`/`SetDHCP` (the DHCP options DCP reports and a handler for their Set), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout` |
 | `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
 | `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
 | `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
-| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
+| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `DHCP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
 | `Handler`, `NopHandler` | what the application decides: user records (`ReadRecord`, `WriteRecord`), `PrmEnd`, `StateChanged`, `AlarmAck`, `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` |
 | `RecordError(code1, code2) error` | a PNIORW error for a Handler to return |
 | `ARState`, `CanTransition`, `RecordRequest`, `IMData`, `Alarm` | |
@@ -81,6 +81,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `NewResponder(*l2.Mux, Station, ResponderOptions) (*Responder, error)` | a responder for a `Station` (the device uses one); `StartHello(HelloOptions)`, `StopHello()` |
 | `HelloFrame(*Identity, xid) *Frame` | the DCP Hello request of an identity; `HelloMode`, `HelloOptions` (`Normalize`) |
 | `Identity`, `ParseIdentity`, `IPSuite`, `Block`, `BlockID`, `SetBlock`, `SetError`, `BlockError`, `ValidateStationName` | |
+| `DHCPParameter` (`AppendDHCPParameter`, `DecodeDHCPParameter`, `ClientID`), `DHCPClientIDFromMAC`, `DHCPClientIDArbitrary`, `DHCPControlParameter`, the `DHCPOpt*` codes, `Identity.DHCP`/`IPSetByDHCP`/`IPConflict`/`DHCPOption`, `Client.SetDHCP`, `DHCPSetter` | DCP option 3 (DHCP); no DHCP client |
 | `Decode`, `Frame`, `AppendIPSuite`, `DecodeIPSuite`, `AppendControlResponse`, `DecodeControlResponse` | codec |
 
 ## lldp — Link Layer Discovery Protocol

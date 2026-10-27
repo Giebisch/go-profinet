@@ -10,9 +10,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -338,8 +341,9 @@ func (e *env) writeFrames(file string, frames ...[]byte) {
 }
 
 // scapyLayers returns the layer names scapy dissects in each frame of a
-// capture in the share. The scapy adapter counts a UDP datagram as
-// decoded whatever its payload; this looks at the layers themselves.
+// capture in the share, followed by "dcp:<class>" for each DCP block of a
+// DCP frame. The scapy adapter counts a UDP datagram, and a DCP frame
+// whatever its blocks, as decoded; this looks at the layers themselves.
 func (e *env) scapyLayers(file string) [][]string {
 	e.t.Helper()
 	const script = `import json, sys
@@ -351,6 +355,8 @@ for p in rdpcap(sys.argv[1]):
     while layer and layer.__class__.__name__ != "NoPayload":
         names.append(layer.__class__.__name__)
         layer = layer.payload
+    if p.haslayer(pnio_dcp.ProfinetDCP):
+        names += ["dcp:" + type(b).__name__ for b in (p[pnio_dcp.ProfinetDCP].dcp_blocks or [])]
     out.append(names)
 print(json.dumps(out))`
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -409,4 +415,89 @@ func TestUDPRTDecoders(t *testing.T) {
 	e.expect("scapy dissects the UDP payload of port 34962 as PROFINET RT (scapy)",
 		strings.Contains(rtLayers, "ProfinetIO") && strings.Contains(rtLayers, "PNIORealTimeCyclicPDU"), "%s", rtLayers)
 	e.oracles("udp-rt.pcap")
+}
+
+// TestDCPDHCPDecoders: DCP frames with DHCP blocks (option 3: the client
+// identifier and the control suboption; the IP BlockInfo "set by DHCP"),
+// as go-profinet's dcp package encodes them in Identify and Get responses
+// and Get and Set requests, are decoded by tshark and scapy without a
+// malformed frame or an expert warning. A DHCP option other than 61 and
+// 255 (here 12, the host name) is shown by Wireshark as undecoded data:
+// that is recorded as a deviation of the decoder, not of the encoding.
+func TestDCPDHCPDecoders(t *testing.T) {
+	e := newEnv(t)
+	e.result.peer("tshark/scapy", image("tshark"), "decoder")
+	dev, ctrl := ethernet.MAC{2, 0, 0, 0, 0, 0x20}, ethernet.MAC{2, 0, 0, 0, 0, 0x10}
+	frame := func(dst, src ethernet.MAC, f *dcp.Frame) []byte {
+		h := ethernet.Frame{Dst: dst, Src: src, EtherType: ethernet.EtherTypeProfinet}
+		b, err := f.AppendTo(h.AppendHeader(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	param := func(p dcp.DHCPParameter) []byte {
+		b, err := dcp.AppendDHCPParameter(nil, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	arb, err := dcp.DHCPClientIDArbitrary(0, []byte("dut-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := dcp.Identity{NameOfStation: "dut", TypeOfStation: "go-profinet", VendorID: 0xF000, DeviceID: 1, Role: dcp.RoleIODevice,
+		IP:     dcp.IPSuite{Addr: netip.MustParseAddr("192.168.0.10"), Mask: netip.MustParseAddr("255.255.255.0"), Gateway: netip.MustParseAddr("0.0.0.0")},
+		IPInfo: dcp.IPInfoDHCP, DHCP: []dcp.DHCPParameter{dcp.DHCPClientIDFromMAC(), dcp.DHCPControlParameter(dcp.DHCPControlOn)}}
+	arbID := id
+	arbID.DHCP = []dcp.DHCPParameter{arb}
+	hostID := id
+	hostID.DHCP = []dcp.DHCPParameter{{Code: dcp.DHCPOptHostName, Data: []byte("dut")}}
+	ctrlBlocks := func(errs ...dcp.BlockError) []dcp.Block {
+		var out []dcp.Block
+		for i, code := range errs {
+			out = append(out, dcp.Block{ID: dcp.CtrlResponse, Data: dcp.AppendControlResponse(nil, dcp.ControlResponse{Block: []dcp.BlockID{dcp.DHCPControl, dcp.DHCPClientID}[i], Error: code})})
+		}
+		return out
+	}
+	frames := [][]byte{
+		frame(ctrl, dev, &dcp.Frame{FrameID: dcp.FrameIDIdentifyResponse, Service: dcp.ServiceIdentify, Type: dcp.TypeResponseSuccess, Xid: 1, Blocks: id.Blocks()}),
+		frame(ctrl, dev, &dcp.Frame{FrameID: dcp.FrameIDIdentifyResponse, Service: dcp.ServiceIdentify, Type: dcp.TypeResponseSuccess, Xid: 2, Blocks: arbID.Blocks()}),
+		frame(dev, ctrl, &dcp.Frame{FrameID: dcp.FrameIDGetSet, Service: dcp.ServiceGet, Type: dcp.TypeRequest, Xid: 3, Blocks: []dcp.Block{{ID: dcp.DHCPClientID}, {ID: dcp.DHCPControl}}}),
+		frame(ctrl, dev, &dcp.Frame{FrameID: dcp.FrameIDGetSet, Service: dcp.ServiceGet, Type: dcp.TypeResponseSuccess, Xid: 3, Blocks: []dcp.Block{
+			{ID: dcp.DHCPClientID, HasInfo: true, Data: param(dcp.DHCPClientIDFromMAC())},
+			{ID: dcp.DHCPControl, HasInfo: true, Data: param(dcp.DHCPControlParameter(dcp.DHCPControlOn))}}}),
+		frame(dev, ctrl, &dcp.Frame{FrameID: dcp.FrameIDGetSet, Service: dcp.ServiceSet, Type: dcp.TypeRequest, Xid: 4, Blocks: []dcp.Block{
+			{ID: dcp.DHCPControl, HasInfo: true, Info: dcp.QualifierPermanent, Data: param(dcp.DHCPControlParameter(dcp.DHCPControlOff))},
+			{ID: dcp.DHCPClientID, HasInfo: true, Info: dcp.QualifierPermanent, Data: param(arb)}}}),
+		frame(ctrl, dev, &dcp.Frame{FrameID: dcp.FrameIDGetSet, Service: dcp.ServiceSet, Type: dcp.TypeResponseSuccess, Xid: 4,
+			Blocks: ctrlBlocks(dcp.BlockErrorNone, dcp.BlockErrorOptionUnsupported)}),
+		frame(ctrl, dev, &dcp.Frame{FrameID: dcp.FrameIDIdentifyResponse, Service: dcp.ServiceIdentify, Type: dcp.TypeResponseSuccess, Xid: 5, Blocks: hostID.Blocks()}),
+	}
+	e.writeFrames("dcp-dhcp.pcap", frames...)
+	e.expect("DCP DHCP blocks (client ID from MAC, arbitrary client ID, control) and IP set by DHCP in Identify/Get responses, Get and Set requests encoded (go-profinet)", true, "")
+	// The DHCP blocks decode back to the identity in go-profinet itself.
+	f, err := dcp.Decode(frames[0][14:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := dcp.ParseIdentity(dev, f.Blocks)
+	e.expect("DHCP options and IP BlockInfo parsed back (go-profinet)", err == nil && back.IPSetByDHCP() && len(back.DHCP) == 2, "%+v %v", back, err)
+	// scapy has no class for DCP DHCP blocks: it dissects the first one,
+	// and every block after it, as Raw. That is the decoder's limit, not
+	// the encoding's (tshark decodes the same blocks): recorded, not hidden.
+	raw := 0
+	for _, l := range e.scapyLayers("dcp-dhcp.pcap") {
+		if slices.Contains(l, "dcp:Raw") {
+			raw++
+		}
+	}
+	if raw > 0 {
+		e.result.deviation("scapy: DCP option 3 (DHCP) blocks", fmt.Sprintf("scapy has no DCP DHCP block class: in %d of %d frames the first DHCP block and the blocks after it are left Raw", raw, len(frames)))
+	} else {
+		e.result.add("scapy dissects the DCP DHCP blocks (scapy)", true, "")
+	}
+	e.oracles("dcp-dhcp.pcap", peerDeviation{Protocol: "PN-DCP", Message: "Undecoded Data, 5 bytes",
+		Why: "Wireshark decodes the data of DHCP options 61 and 255 only; option 12 (host name), which go-profinet encodes as code, length and data like the others, is shown as undecoded"})
 }

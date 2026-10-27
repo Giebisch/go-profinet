@@ -92,6 +92,19 @@ type Config struct {
 	// dcp.HelloOnLinkUpDelayed. Zero values are the defaults of
 	// dcp.HelloOptions.
 	HelloOptions dcp.HelloOptions
+	// DHCP are the DHCP options (DCP option 3) the device reports in
+	// Identify and Get responses, for example dcp.DHCPClientIDFromMAC()
+	// and dcp.DHCPControlParameter(dcp.DHCPControlOn). The library has no
+	// DHCP client: addressing stays with the operating system, and the
+	// device only reports what the application configures.
+	DHCP []dcp.DHCPParameter
+	// IPFromDHCP reports the initial IP suite as set by DHCP (IP
+	// BlockInfo 0x0002) until a DCP Set changes it.
+	IPFromDHCP bool
+	// SetDHCP receives a DCP Set of a DHCP option; when it returns
+	// dcp.BlockErrorNone the device reports the new value. nil refuses
+	// every such Set with "option not supported".
+	SetDHCP func(p dcp.DHCPParameter, permanent bool) dcp.BlockError
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
@@ -145,6 +158,11 @@ type Device struct {
 	// pdPoke wakes the PDev check evaluator.
 	pdPoke chan struct{}
 
+	// dhcp are the DHCP options DCP reports; ipDHCP marks ip as set by
+	// DHCP. Both under mu.
+	dhcp   []dcp.DHCPParameter
+	ipDHCP bool
+
 	// imgMu guards the process data images; it is never held while
 	// another lock is taken.
 	imgMu   sync.RWMutex
@@ -178,6 +196,9 @@ func New(cfg Config) (*Device, error) {
 		if err := dcp.ValidateStationName(cfg.StationName); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateDHCP(cfg.DHCP); err != nil {
+		return nil, err
 	}
 	if cfg.Hello > dcp.HelloOnLinkUpDelayed {
 		return nil, fmt.Errorf("device: %w: Hello mode %s", profinet.ErrInvalidConfig, cfg.Hello)
@@ -226,6 +247,8 @@ func New(cfg Config) (*Device, error) {
 		mux:      cfg.Mux,
 		name:     cfg.StationName,
 		ip:       cfg.IP,
+		dhcp:     cloneDHCP(cfg.DHCP),
+		ipDHCP:   cfg.IPFromDHCP,
 		ars:      map[rpc.UUID]*ar{},
 		frameIDs: map[uint16]bool{},
 		records:  map[recKey][]byte{},
@@ -508,7 +531,11 @@ func (s station) Identity() dcp.Identity {
 	}
 	if !d.ip.IsZero() {
 		id.IPInfo = dcp.IPInfoSet
+		if d.ipDHCP {
+			id.IPInfo = dcp.IPInfoDHCP
+		}
 	}
+	id.DHCP = cloneDHCP(d.dhcp)
 	if d.lldpA != nil {
 		id.Alias = d.lldpA.Alias()
 	}
@@ -560,6 +587,7 @@ func (s station) SetIP(ip dcp.IPSuite, permanent bool) dcp.BlockError {
 	}
 	d.mu.Lock()
 	d.ip = ip
+	d.ipDHCP = false
 	d.mu.Unlock()
 	d.handler.IPChanged(ip, permanent)
 	return dcp.BlockErrorNone
@@ -602,6 +630,7 @@ func (s station) ResetToFactory(mode uint16) dcp.BlockError {
 	resetComm := m >= 2
 	if resetComm {
 		d.name = ""
+		d.dhcp = cloneDHCP(d.cfg.DHCP)
 	}
 	d.mu.Unlock()
 	if resetComm {
