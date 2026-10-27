@@ -94,9 +94,13 @@ data (PACKET_AUXDATA).
   devices, not deterministic forwarding; its ports must receive every frame
   (promiscuous). Its forwarding database is bounded (1024 stations by
   default; beyond that frames are flooded).
-- No persistence: I&M records, the station name and the IP address set with
-  `--permanent` are kept in memory; an application that needs persistence
-  stores them from `Handler.NameChanged`, `IPChanged` and `WriteRecord`.
+- Persistence is opt-in (`Config.Store`, package `store`): the permanent
+  station name and IP suite, permanent DHCP options and I&M1–4 survive a
+  restart; port, interface and MRP adjustments and user records are not
+  stored (the IO controller writes them at every startup), so the
+  boundaries and MRP role they set apply again only after the next
+  connect. The semantics of a temporary Set follow p-net's reading of the
+  CMINA state table, not the (non-public) text itself.
 
 ## Verification
 
