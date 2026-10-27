@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic fixture written for go-profinet (MIT). Vendor ID 0xF000 (PI's
+     range for examples); no vendor data. A compact (fixed) device: one
+     device access point whose modules are fixed in their slots, a
+     combined input/output submodule, two submodules in one module, a
+     parameter record and channel diagnoses. -->
+<ISO15745Profile xmlns="http://www.profibus.com/GSDML/2003/11/DeviceProfile" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.profibus.com/GSDML/2003/11/DeviceProfile ..\xsd\GSDML-DeviceProfile-V2.35.xsd">
+  <ProfileHeader>
+    <ProfileIdentification>PROFINET Device Profile</ProfileIdentification>
+    <ProfileRevision>1.00</ProfileRevision>
+    <ProfileName>Device Profile for PROFINET Devices</ProfileName>
+    <ProfileSource>PROFIBUS Nutzerorganisation e. V. (PNO)</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>4</ISO15745Part>
+      <ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>GSDML</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity VendorID="0xF000" DeviceID="0x00A2">
+      <InfoText TextId="T_Info"/>
+      <VendorName Value="OT Fabric"/>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <Family MainFamily="I/O" ProductFamily="OTF Compact Fixture"/>
+    </DeviceFunction>
+    <ApplicationProcess>
+      <DeviceAccessPointList>
+        <DeviceAccessPointItem ID="DAP_C" PNIO_Version="V2.35" PhysicalSlots="0..3" ModuleIdentNumber="0x00000201" MinDeviceInterval="32" DNS_CompatibleName="otf-compact" FixedInSlots="0" ObjectUUID_LocalIndex="1" MultipleWriteSupported="true" DeviceAccessSupported="false" CheckDeviceID_Allowed="true" NameOfStationNotTransferable="false" LLDP_NoD_Supported="true">
+          <ModuleInfo>
+            <Name TextId="T_DAP"/>
+            <InfoText TextId="T_DAP_Info"/>
+            <VendorName Value="OT Fabric"/>
+            <OrderNumber Value="OTF-COMPACT-1"/>
+            <HardwareRelease Value="2"/>
+            <SoftwareRelease Value="V1.2.0"/>
+          </ModuleInfo>
+          <CertificationInfo ConformanceClass="A" ApplicationClass="" NetloadClass="I"/>
+          <IOConfigData MaxInputLength="64" MaxOutputLength="64"/>
+          <UseableModules>
+            <ModuleItemRef ModuleItemTarget="MOD_IO" AllowedInSlots="1" FixedInSlots="1"/>
+            <ModuleItemRef ModuleItemTarget="MOD_STATUS" AllowedInSlots="2" FixedInSlots="2"/>
+            <ModuleItemRef ModuleItemTarget="MOD_SETP" AllowedInSlots="3" FixedInSlots="3"/>
+          </UseableModules>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="DAP_C_SM" SubmoduleIdentNumber="0x00000001" MayIssueProcessAlarm="false" Writeable_IM_Records="1 2 3">
+              <IOData/>
+              <ModuleInfo>
+                <Name TextId="T_DAP"/>
+                <InfoText TextId="T_DAP_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+          <SystemDefinedSubmoduleList>
+            <InterfaceSubmoduleItem ID="IF_C" SubslotNumber="32768" TextId="T_IF" SubmoduleIdentNumber="0x00008000" SupportedRT_Classes="RT_CLASS_1" SupportedProtocols="LLDP">
+              <ApplicationRelations StartupMode="Legacy;Advanced" NumberOfAR="1">
+                <TimingProperties SendClock="32" ReductionRatio="1 2 4 8 16 32 64 128 256 512"/>
+              </ApplicationRelations>
+            </InterfaceSubmoduleItem>
+            <PortSubmoduleItem ID="P1_C" SubslotNumber="32769" TextId="T_P1" SubmoduleIdentNumber="0x00008001">
+              <MAUTypeList>
+                <MAUTypeItem Value="16"/>
+              </MAUTypeList>
+            </PortSubmoduleItem>
+          </SystemDefinedSubmoduleList>
+        </DeviceAccessPointItem>
+      </DeviceAccessPointList>
+      <ModuleList>
+        <ModuleItem ID="MOD_IO" ModuleIdentNumber="0x00000050">
+          <ModuleInfo>
+            <Name TextId="T_IO"/>
+            <InfoText TextId="T_IO_Info"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_IO" SubmoduleIdentNumber="0x00000051" MayIssueProcessAlarm="true">
+              <IOData>
+                <Input Consistency="All items consistency">
+                  <DataItem DataType="Unsigned32" TextId="T_Count"/>
+                  <DataItem DataType="Unsigned8" UseAsBits="true" TextId="T_Inputs">
+                    <BitDataItem BitOffset="0" TextId="T_In0"/>
+                    <BitDataItem BitOffset="1" TextId="T_In1"/>
+                  </DataItem>
+                </Input>
+                <Output>
+                  <DataItem DataType="Unsigned8" UseAsBits="true" TextId="T_Outputs">
+                    <BitDataItem BitOffset="0" TextId="T_Out0"/>
+                  </DataItem>
+                </Output>
+              </IOData>
+              <RecordDataList>
+                <ParameterRecordDataItem Index="1" Length="4">
+                  <Name TextId="T_Par"/>
+                  <Ref ByteOffset="0" DataType="Unsigned16" DefaultValue="100" AllowedValues="1..10000" TextId="T_Debounce"/>
+                  <Ref ByteOffset="2" BitOffset="0" DataType="Bit" DefaultValue="0" TextId="T_Invert" ValueItemTarget="V_ONOFF"/>
+                  <Ref ByteOffset="3" DataType="Unsigned8" DefaultValue="1" TextId="T_Mode" ValueItemTarget="V_MODE"/>
+                </ParameterRecordDataItem>
+              </RecordDataList>
+              <ModuleInfo>
+                <Name TextId="T_IO"/>
+                <InfoText TextId="T_IO_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_STATUS" ModuleIdentNumber="0x00000060">
+          <ModuleInfo>
+            <Name TextId="T_ST"/>
+            <InfoText TextId="T_ST_Info"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_ST1" SubmoduleIdentNumber="0x00000061" FixedInSubslots="1" MayIssueProcessAlarm="false">
+              <IOData>
+                <Input>
+                  <DataItem DataType="Unsigned16" TextId="T_St1"/>
+                </Input>
+              </IOData>
+              <ModuleInfo>
+                <Name TextId="T_St1"/>
+                <InfoText TextId="T_St1"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+            <VirtualSubmoduleItem ID="SM_ST2" SubmoduleIdentNumber="0x00000062" FixedInSubslots="2" MayIssueProcessAlarm="false">
+              <IOData>
+                <Input>
+                  <DataItem DataType="Integer32" TextId="T_St2"/>
+                </Input>
+              </IOData>
+              <ModuleInfo>
+                <Name TextId="T_St2"/>
+                <InfoText TextId="T_St2"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+        <ModuleItem ID="MOD_SETP" ModuleIdentNumber="0x00000070">
+          <ModuleInfo>
+            <Name TextId="T_SP"/>
+            <InfoText TextId="T_SP_Info"/>
+          </ModuleInfo>
+          <VirtualSubmoduleList>
+            <VirtualSubmoduleItem ID="SM_SP" SubmoduleIdentNumber="0x00000071" MayIssueProcessAlarm="false">
+              <IOData>
+                <Output Consistency="All items consistency">
+                  <DataItem DataType="Float32" TextId="T_Setpoint"/>
+                  <DataItem DataType="Integer16" TextId="T_Limit"/>
+                </Output>
+              </IOData>
+              <ModuleInfo>
+                <Name TextId="T_SP"/>
+                <InfoText TextId="T_SP_Info"/>
+              </ModuleInfo>
+            </VirtualSubmoduleItem>
+          </VirtualSubmoduleList>
+        </ModuleItem>
+      </ModuleList>
+      <ValueList>
+        <ValueItem ID="V_ONOFF">
+          <Assignments>
+            <Assign Content="0" TextId="T_Off"/>
+            <Assign Content="1" TextId="T_On"/>
+          </Assignments>
+        </ValueItem>
+        <ValueItem ID="V_MODE">
+          <Assignments>
+            <Assign Content="1" TextId="T_ModeCount"/>
+            <Assign Content="2" TextId="T_ModeFreq"/>
+          </Assignments>
+        </ValueItem>
+      </ValueList>
+      <ChannelDiagList>
+        <ChannelDiagItem ErrorType="257">
+          <Name TextId="T_DiagOver"/>
+          <Help TextId="T_DiagOver_Help"/>
+        </ChannelDiagItem>
+      </ChannelDiagList>
+      <ExternalTextList>
+        <PrimaryLanguage>
+          <Text TextId="T_Info" Value="OT Fabric compact fixture: synthetic fixed device for interoperability tests"/>
+          <Text TextId="T_DAP" Value="Compact device"/>
+          <Text TextId="T_DAP_Info" Value="Fixed configuration, one port"/>
+          <Text TextId="T_IF" Value="X1"/>
+          <Text TextId="T_P1" Value="X1 P1"/>
+          <Text TextId="T_IO" Value="Counter IO"/>
+          <Text TextId="T_IO_Info" Value="A counter, two inputs and one output"/>
+          <Text TextId="T_Count" Value="Count"/>
+          <Text TextId="T_Inputs" Value="Inputs"/>
+          <Text TextId="T_In0" Value="Input 0"/>
+          <Text TextId="T_In1" Value="Input 1"/>
+          <Text TextId="T_Outputs" Value="Outputs"/>
+          <Text TextId="T_Out0" Value="Output 0"/>
+          <Text TextId="T_Par" Value="Counter parameters"/>
+          <Text TextId="T_Debounce" Value="Debounce (us)"/>
+          <Text TextId="T_Invert" Value="Invert input 0"/>
+          <Text TextId="T_Mode" Value="Mode"/>
+          <Text TextId="T_ST" Value="Status"/>
+          <Text TextId="T_ST_Info" Value="Two status words"/>
+          <Text TextId="T_St1" Value="Status word"/>
+          <Text TextId="T_St2" Value="Temperature (0.1 K)"/>
+          <Text TextId="T_SP" Value="Setpoint"/>
+          <Text TextId="T_SP_Info" Value="A setpoint and a limit"/>
+          <Text TextId="T_Setpoint" Value="Setpoint"/>
+          <Text TextId="T_Limit" Value="Limit"/>
+          <Text TextId="T_Off" Value="Off"/>
+          <Text TextId="T_On" Value="On"/>
+          <Text TextId="T_ModeCount" Value="Count"/>
+          <Text TextId="T_ModeFreq" Value="Frequency"/>
+          <Text TextId="T_DiagOver" Value="Counter overflow"/>
+          <Text TextId="T_DiagOver_Help" Value="Reset the counter"/>
+        </PrimaryLanguage>
+      </ExternalTextList>
+    </ApplicationProcess>
+  </ProfileBody>
+</ISO15745Profile>

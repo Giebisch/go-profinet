@@ -529,6 +529,7 @@ func runDevice(args []string) error {
 	iface := fs.String("i", "eth0", "interface")
 	station := fs.String("station", "otf-device", "station name")
 	modelFile := fs.String("model", "", "device model (model JSON or GSDML); default: the built-in interop device")
+	devDAP := fs.String("dap", "", "the GSDML device access point ID of -model (default: the first)")
 	gsdmlOut := fs.String("gsdml-out", "", "write the device's GSDML to this file and continue")
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	alarmAfter := fs.Duration("alarm-after", 0, "raise a diagnosis on slot 1 this long after the AR reaches Data")
@@ -540,7 +541,7 @@ func runDevice(args []string) error {
 	m := defaultModel()
 	if *modelFile != "" {
 		var err error
-		if m, err = loadModel(*modelFile, ""); err != nil {
+		if m, err = loadModel(*modelFile, *devDAP); err != nil {
 			return err
 		}
 	}

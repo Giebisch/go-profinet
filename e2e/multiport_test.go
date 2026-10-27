@@ -54,6 +54,13 @@ func (e *env) multiportDevice(name, ip string, segs ...*vnet.Network) *mpDevice 
 // media redundancy.
 func (e *env) multiportDeviceMRP(name, ip string, mrpCfg *device.MRPConfig, segs ...*vnet.Network) *mpDevice {
 	e.t.Helper()
+	return e.multiportDeviceModel(name, ip, multiportModel(len(segs)), mrpCfg, segs...)
+}
+
+// multiportDeviceModel starts a device of a model with one port on each
+// segment and media redundancy (nil: none).
+func (e *env) multiportDeviceModel(name, ip string, m *model.Device, mrpCfg *device.MRPConfig, segs ...*vnet.Network) *mpDevice {
+	e.t.Helper()
 	var ports []l2.Port
 	var eps []*vnet.Endpoint
 	for _, s := range segs {
@@ -70,7 +77,7 @@ func (e *env) multiportDeviceMRP(name, ip string, mrpCfg *device.MRPConfig, segs
 	mux := l2.NewMux(br.CPU())
 	n := e.stackOn(nil, mux, ip)
 	d, err := device.New(device.Config{
-		Model: multiportModel(len(segs)), Mux: mux, Bridge: br, StationName: name, IP: suite(ip),
+		Model: m, Mux: mux, Bridge: br, StationName: name, IP: suite(ip),
 		ListenPacket: n.stack.ListenPacket, NoResponseDelay: true, LLDPInterval: 200 * time.Millisecond, MRP: mrpCfg,
 		ApplyIP: func(s dcp.IPSuite, _ bool) error { return n.stack.SetAddr(s.Addr, s.Mask, s.Gateway) },
 		Logger:  e.log.logger(name),

@@ -164,6 +164,64 @@ func TestProfinetPyController(t *testing.T) {
 		Why: "profinet-py writes I&M1 with BlockLength 58 and two padding octets; the standard block is 56 octets (tshark flags the extra octets of its Write request)"})
 }
 
+// TestProfinetPyFixtures: profinet-py, an independent GSDML parser and
+// IO-Controller, reads go-profinet's synthetic GSDML fixtures (one-port
+// device access points) and runs a cyclic AR with a go-profinet device
+// configured from the same file and access point.
+func TestProfinetPyFixtures(t *testing.T) {
+	for _, c := range []struct{ file, dap string }{
+		{"GSDML-V2.43-OTFabric-ModularFixture-20261027.xml", "DAP_1P"},
+		{"GSDML-V2.35-OTFabric-CompactFixture-20261027.xml", "DAP_C"},
+	} {
+		t.Run(c.dap, func(t *testing.T) {
+			e := newEnv(t)
+			img := image("profinet-py")
+			e.result.peer("profinet-py", img, "controller")
+			path := "/gsdml-testdata/fixtures/" + c.file
+			dev := e.startOTF("dut", 20, "device", "-station", "otf-fixture", "-model", path, "-dap", c.dap)
+			e.waitEvent(dev, 30*time.Second, "start", named("start"))
+			out := e.run("pypn", img, 3, 3*time.Minute, "controller", "--station", "otf-fixture", "--gsdml", path, "--read-input", "1:1", "--duration", "2")
+			var rep struct {
+				Steps []struct {
+					Step  string `json:"step"`
+					OK    bool   `json:"ok"`
+					Value any    `json:"value"`
+					Error string `json:"error"`
+				} `json:"steps"`
+			}
+			if err := json.Unmarshal(lastLine(out), &rep); err != nil {
+				t.Fatalf("profinet-py output: %v\n%s", err, out)
+			}
+			res := map[string]string{}
+			vals := map[string]any{}
+			for _, st := range rep.Steps {
+				res[st.Step], vals[st.Step] = st.Error, st.Value
+				if st.OK {
+					res[st.Step] = "ok"
+				}
+			}
+			e.expect("GSDML fixture "+c.dap+" parsed by profinet-py; cyclic AR with a device of the same file", res["start-cyclic"] == "ok", "%v", res["start-cyclic"])
+			slots := fmt.Sprint(vals["start-cyclic"])
+			hasSlot1 := false
+			list, _ := vals["start-cyclic"].([]any)
+			for _, x := range list {
+				if m, _ := x.(map[string]any); m != nil && m["slot"] == 1.0 {
+					hasSlot1 = true
+				}
+			}
+			if !hasSlot1 {
+				// profinet-py plugs only the modules a DAP fixes in their
+				// slots (FixedInSlots); the modular fixture proposes its
+				// modules with UsedInSlots, so the AR has the DAP alone.
+				e.result.na("Cyclic inputs from the fixture device "+c.dap,
+					"profinet-py builds its configuration from FixedInSlots only and ignores UsedInSlots: it connected with the DAP alone ("+slots+")")
+				return
+			}
+			e.expect("Cyclic inputs from the fixture device "+c.dap, res["input 1:1"] == "ok" && str(vals["input 1:1"]) != "", "%v %v", res["input 1:1"], vals["input 1:1"])
+		})
+	}
+}
+
 // TestProfinetPyDCP: profinet-py's DCP tool against go-profinet's
 // responder.
 func TestProfinetPyDCP(t *testing.T) {
