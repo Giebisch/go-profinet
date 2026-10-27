@@ -4,6 +4,7 @@ package device
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -63,6 +64,7 @@ func (d *Device) startSNMP() error {
 		descr = d.model.Identity.TypeOfStation
 	}
 	start := time.Now()
+	d.snmpStart = start
 	err = mib.AddSystem(func() snmp.System {
 		return snmp.System{Descr: descr, ObjectID: c.ObjectID, UpTime: time.Since(start), Contact: c.Contact, Name: d.StationName(), Location: c.Location}
 	})
@@ -119,18 +121,24 @@ func (d *Device) snmpLLDPLocal() snmp.LLDPLocal {
 	return l
 }
 
-// snmpLLDPRemote is lldpRemTable: the LLDP neighbors of each port,
-// numbered per port in the order of their chassis and port IDs.
+// snmpLLDPRemote is lldpRemTable: the LLDP neighbors of each port, each
+// with the index its port's LLDP agent gave it when it appeared (kept
+// while it stays), and its last change as a time mark in sysUpTime units
+// (0 for a change before the agent started).
 func (d *Device) snmpLLDPRemote() []snmp.LLDPRemote {
 	var out []snmp.LLDPRemote
 	for _, p := range d.ports {
 		if p.lldpA == nil {
 			continue
 		}
-		for i, n := range p.lldpA.Neighbors() {
+		for _, n := range p.lldpA.Neighbors() {
 			f := &n.Frame
+			var mark uint32
+			if since := n.Changed.Sub(d.snmpStart); since > 0 {
+				mark = uint32(min(since/(10*time.Millisecond), math.MaxUint32))
+			}
 			out = append(out, snmp.LLDPRemote{
-				LocalPortNum: int32(p.n), Index: int32(i + 1),
+				TimeMark: mark, LocalPortNum: int32(p.n), Index: int32(n.Index),
 				ChassisIDSubtype: int32(f.ChassisSubtype), ChassisID: f.ChassisID, PortIDSubtype: int32(f.PortSubtype), PortID: f.PortID,
 				PortDesc: f.PortDescription, SysName: f.SystemName, SysDesc: f.SystemDescription,
 			})
