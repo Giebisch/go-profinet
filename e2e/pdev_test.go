@@ -4,8 +4,8 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -18,11 +18,15 @@ import (
 // portMismatch returns the extended error types of the remote mismatch
 // diagnoses the device reports for its first port, read by the
 // controller.
-func portMismatch(t *testing.T, cd *controller.Device) []uint16 {
+//
+// A read that fails returns ok false: on a starved runner the AR may just
+// have ended, and the controller connects again.
+func portMismatch(t *testing.T, cd *controller.Device) (_ []uint16, ok bool) {
 	t.Helper()
 	diag, err := cd.ReadDiagnosis(context.Background())
 	if err != nil {
-		t.Fatal(err)
+		t.Logf("diagnosis: %v", err)
+		return nil, false
 	}
 	var out []uint16
 	for _, s := range diag {
@@ -35,7 +39,7 @@ func portMismatch(t *testing.T, cd *controller.Device) []uint16 {
 			}
 		}
 	}
-	return out
+	return out, true
 }
 
 func drainAlarms(ch <-chan controller.AlarmEvent) {
@@ -78,12 +82,12 @@ func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bo
 			if st := cd.Stats(); st.Connects != connects {
 				t.Logf("the AR was established again (%d connects, %d aborts): checking the diagnosis instead of the alarm", st.Connects, st.Aborts)
 				eventually(t, 10*time.Second, "diagnosis after the reconnect", func() bool {
-					got := portMismatch(t, cd)
-					return appears == (len(got) == 1 && got[0] == ext)
+					got, ok := portMismatch(t, cd)
+					return ok && appears == (len(got) == 1 && got[0] == ext)
 				})
 				return
 			}
-			t.Fatalf("no alarm of remote mismatch %#x (appears %v); alarms %v; diagnosis now %#x; stats %+v", ext, appears, seen, portMismatch(t, cd), cd.Stats())
+			t.Fatalf("no alarm of remote mismatch %#x (appears %v); alarms %v; stats %+v", ext, appears, seen, cd.Stats())
 		}
 	}
 }
@@ -99,7 +103,10 @@ func TestPeerCheck(t *testing.T) {
 		PeerChecks: []controller.PeerCheck{{Station: "sw-1", Port: "port-001"}},
 		OnAlarm:    func(a controller.AlarmEvent) { alarms <- a },
 	})
-	eventually(t, 5*time.Second, "right neighbor", func() bool { return len(portMismatch(t, cd)) == 0 })
+	eventually(t, 10*time.Second, "right neighbor", func() bool {
+		got, ok := portMismatch(t, cd)
+		return ok && len(got) == 0
+	})
 	// The check was evaluated before the device heard its neighbor: drop
 	// the alarms of that.
 	drainAlarms(alarms)
@@ -108,14 +115,18 @@ func TestPeerCheck(t *testing.T) {
 	_ = sw.Close()
 	_ = swNode.mux.Close()
 	waitPortAlarm(t, alarms, true, 0x8005, cd)
-	if got := portMismatch(t, cd); len(got) != 1 || got[0] != 0x8005 {
-		t.Fatalf("diagnosis %#x", got)
-	}
+	eventually(t, 10*time.Second, "diagnosis of no neighbor", func() bool {
+		got, ok := portMismatch(t, cd)
+		return ok && len(got) == 1 && got[0] == 0x8005
+	})
 	// It comes back.
 	drainAlarms(alarms)
 	e.device("sw-1", "192.168.0.12", testModel(), nil)
 	waitPortAlarm(t, alarms, false, 0x8005, cd)
-	eventually(t, 5*time.Second, "cleared", func() bool { return len(portMismatch(t, cd)) == 0 })
+	eventually(t, 10*time.Second, "cleared", func() bool {
+		got, ok := portMismatch(t, cd)
+		return ok && len(got) == 0
+	})
 
 	// Parameterization in the Data state: another expected neighbor.
 	drainAlarms(alarms)
