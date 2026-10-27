@@ -178,7 +178,7 @@ func TestProcessImages(t *testing.T) {
 	if id.NameOfStation != "dut" || id.IPInfo != dcp.IPInfoSet || id.VendorID != 0xF000 || id.TypeOfStation != "go-profinet device test" {
 		t.Fatalf("identity %+v", id)
 	}
-	if li := d.lldpInfo(); li.StationName != "dut" || li.IP != suite(devIP).Addr || li.PortName != "port-001" {
+	if li := d.lldpInfo(d.ports[0]); li.StationName != "dut" || li.IP != suite(devIP).Addr || li.PortName != "port-001" {
 		t.Fatalf("LLDP %+v", li)
 	}
 }

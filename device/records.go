@@ -258,10 +258,10 @@ func filterIdent(id pnio.IdentificationData, slot, subslot uint16, bySlot, bySub
 	return out
 }
 
-// portData returns the PDPortDataReal of the DAP's ports. The device has
-// one Ethernet port: its link state is the port's (up when the port does
-// not report it), and the neighbors its LLDP agent knows are its peers;
-// the other ports are down.
+// portData returns the PDPortDataReal of the DAP's ports. Each of the
+// device's ports reports its link state (up when the port does not report
+// it) and the neighbors its LLDP agent knows as its peers; port
+// submodules the device has no port for are down.
 func (d *Device) portData() []pnio.PDPortDataReal {
 	var out []pnio.PDPortDataReal
 	for _, sm := range d.model.DAP.Submodules {
@@ -271,11 +271,11 @@ func (d *Device) portData() []pnio.PDPortDataReal {
 		n := sm.Subslot - model.SubslotPort1 + 1
 		p := pnio.PDPortDataReal{Slot: 0, Subslot: sm.Subslot, OwnPortID: fmt.Sprintf("port-%03d", n),
 			LinkState: pnio.LinkStateDown, MediaType: 1}
-		if n == 1 && d.linkUp() {
+		if dp := d.portBySubslot(sm.Subslot); dp != nil && dp.linkUp() {
 			p.LinkState = pnio.LinkStateUp
 			p.MAUType = 0x0010 // 100BASE-TX full duplex
-			if d.lldpA != nil {
-				for _, nb := range d.lldpA.Neighbors() {
+			if dp.lldpA != nil {
+				for _, nb := range dp.lldpA.Neighbors() {
 					peer := pnio.PDPortPeer{PortID: nb.Frame.PortString(), ChassisID: nb.Frame.ChassisString(), MAC: nb.MAC}
 					if nb.Frame.Delay != nil {
 						peer.LineDelay = nb.Frame.Delay.Cable

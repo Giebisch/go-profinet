@@ -42,7 +42,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 | Symbol | Purpose |
 |--------|---------|
-| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout` |
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`; `Bridge` makes it a multiport device (one port submodule, MAC, LLDP agent and link state per bridge port; `Mux` on the bridge's CPU port) |
 | `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
 | `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
 | `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
@@ -132,6 +132,7 @@ controller and the device do.
 | Package | Symbol | Purpose |
 |---------|--------|---------|
 | `l2` | `Port`, `MulticastPort`, `LinkStater`, `NewMux`, `Mux.Subscribe`, `MatchEtherType`, `MatchFrameIDs`, `JoinMulticast` | the frame interface and demultiplexer |
+| `l2/bridge` | `New(Config)`, `Bridge.CPU`, `Port(i)`, `Physical(i)`, `SetState(i, Forwarding\|Blocked)`, `SetBoundary`, `Flush`, `Learned`, `Stats`, `LinkLocal` | the learning switch of a multiport device: the interface on the CPU port, link-local and MRP frames on each port's local port |
 | `l2/osport` | `Open(name, Options)`, `Interfaces()`, `Backend()` | the raw Ethernet backend of the platform |
 | `l2/afpacket`, `l2/bpf`, `l2/npcap` | `Open`, `Port` | the backends themselves (Linux, macOS/BSD, Windows) |
 | `vnet` | `New(seed)`, `Network.NewEndpoint`, `Endpoint.SetFaults(Faults)`, `SetLinkUp`, `Network.AddTap` | the virtual switch |

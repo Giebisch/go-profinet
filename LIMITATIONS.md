@@ -70,8 +70,13 @@ data (PACKET_AUXDATA).
 
 - One owner AR per submodule (shared device); several ARs per device up to
   `MaxARs`.
-- One Ethernet port: port data reports the LLDP neighbors of the interface
-  as the peers of the first port.
+- One Ethernet port by default; with `Config.Bridge` a multiport device
+  (`l2/bridge`): each port has its own MAC, LLDP agent, link state and port
+  data. The bridge forwards in software (a goroutine hop and a copy per
+  frame, no cut-through, no hardware queues): it suits tests and software
+  devices, not deterministic forwarding; its ports must receive every frame
+  (promiscuous). Its forwarding database is bounded (1024 stations by
+  default; beyond that frames are flooded).
 - No persistence: I&M records, the station name and the IP address set with
   `--permanent` are kept in memory; an application that needs persistence
   stores them from `Handler.NameChanged`, `IPChanged` and `WriteRecord`.

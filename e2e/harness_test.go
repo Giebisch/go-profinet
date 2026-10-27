@@ -140,15 +140,30 @@ func sanitize(s string) string {
 
 func (e *env) node(ip string) *node {
 	e.t.Helper()
+	return e.nodeOn(e.net, ip)
+}
+
+// mac returns a MAC address unique in the test.
+func (e *env) mac() ethernet.MAC {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.n++
-	n := e.n
-	e.mu.Unlock()
-	ep, err := e.net.NewEndpoint(vnet.EndpointConfig{Name: ip, MAC: ethernet.MAC{0x02, 0x00, 0x00, 0x00, 0x00, n}})
+	return ethernet.MAC{0x02, 0x00, 0x00, 0x00, 0x00, e.n}
+}
+
+// nodeOn is a node on another segment than the environment's network.
+func (e *env) nodeOn(net *vnet.Network, ip string) *node {
+	e.t.Helper()
+	ep, err := net.NewEndpoint(vnet.EndpointConfig{Name: ip, MAC: e.mac()})
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	mux := l2.NewMux(ep)
+	return e.stackOn(ep, l2.NewMux(ep), ip)
+}
+
+// stackOn starts an IP stack on a mux.
+func (e *env) stackOn(ep *vnet.Endpoint, mux *l2.Mux, ip string) *node {
+	e.t.Helper()
 	cfg := netstack.Config{}
 	if ip != "" {
 		cfg.Addr, cfg.Mask = netip.MustParseAddr(ip), mask
@@ -160,7 +175,9 @@ func (e *env) node(ip string) *node {
 	e.t.Cleanup(func() {
 		_ = st.Close()
 		_ = mux.Close()
-		_ = ep.Close()
+		if ep != nil {
+			_ = ep.Close()
+		}
 	})
 	return &node{ep: ep, mux: mux, stack: st}
 }
@@ -193,7 +210,12 @@ func (e *env) device(name, ip string, m *model.Device, h device.Handler) (*devic
 
 func (e *env) controller(ip string) (*controller.Controller, *node) {
 	e.t.Helper()
-	n := e.node(ip)
+	return e.controllerOn(e.net, ip)
+}
+
+func (e *env) controllerOn(net *vnet.Network, ip string) (*controller.Controller, *node) {
+	e.t.Helper()
+	n := e.nodeOn(net, ip)
 	c, err := controller.New(controller.Config{Mux: n.mux, ListenPacket: n.stack.ListenPacket, StationName: "plc", Logger: e.log.logger("plc@" + ip)})
 	if err != nil {
 		e.t.Fatal(err)
