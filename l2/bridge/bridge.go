@@ -539,11 +539,14 @@ func (v *vport) deliver(frame []byte) bool {
 		return false
 	default:
 	}
+	// Counted before the frame is queued, so that a reader that took it
+	// sees it counted.
+	v.delivered.Add(1)
 	select {
 	case v.q <- frame:
-		v.delivered.Add(1)
 		return true
 	default:
+		v.delivered.Add(^uint64(0))
 		v.overflow.Add(1)
 		return false
 	}
