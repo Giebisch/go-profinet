@@ -217,6 +217,16 @@ func (b *Bridge) SetState(i int, s State) {
 	}
 }
 
+// SetBlocked blocks port i (0-based) or makes it forward; the MRP entity
+// (package mrp) uses it.
+func (b *Bridge) SetBlocked(i int, blocked bool) {
+	if blocked {
+		b.SetState(i, Blocked)
+	} else {
+		b.SetState(i, Forwarding)
+	}
+}
+
 // State returns the forwarding state of port i (0-based).
 func (b *Bridge) State(i int) State { return State(b.ports[i].state.Load()) }
 

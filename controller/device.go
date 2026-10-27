@@ -79,6 +79,9 @@ type DeviceConfig struct {
 	// are written (PDPortDataCheck) before Parameters, and the device
 	// reports a remote mismatch diagnosis while a port's neighbor differs.
 	PeerChecks []PeerCheck
+	// MRP gives the device a media redundancy role (MRP records written
+	// after the peer checks, before Parameters); nil writes none.
+	MRP *MRPSetting
 	// SystemRedundancy makes the AR an IOCARSR of an S2 AR set:
 	// EXPERIMENTAL, not interoperable (sr.go).
 	SystemRedundancy *SRSetting
@@ -285,7 +288,11 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.Parameters = append(checks, cfg.Parameters...)
+	mrps, err := mrpParameters(cfg.Model, cfg.MRP)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Parameters = append(append(checks, mrps...), cfg.Parameters...)
 	if want := startupClass(cfg.Advanced); cfg.RTClass != 0 && cfg.RTClass != want {
 		return nil, fmt.Errorf("controller: %w: device %q: %s (this startup mode uses %s)", profinet.ErrUnsupported, cfg.StationName, cfg.RTClass, want)
 	}
