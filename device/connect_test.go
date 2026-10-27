@@ -765,9 +765,23 @@ func TestConcurrentConnects(t *testing.T) {
 			defer wg.Done()
 			req := p.ioCAR()
 			<-start
-			if _, err := p.connect(req); err == nil {
-				accepted.Add(1)
+			// A Connect is accepted or refused out of ARs; one that got no
+			// answer (an RPC timeout on a loaded runner) is sent again.
+			for try := 0; try < 3; try++ {
+				_, err := p.connect(req)
+				if err == nil {
+					accepted.Add(1)
+					return
+				}
+				var se *pnio.StatusError
+				if errors.As(err, &se) {
+					if se.Status.Code2 != pnio.CMRPCOutOfARs {
+						t.Errorf("refused with %v", err)
+					}
+					return
+				}
 			}
+			t.Errorf("no answer to a Connect")
 		}(ps[i])
 	}
 	close(start)

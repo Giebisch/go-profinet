@@ -505,6 +505,13 @@ func (e *Entity) managerRecv(port int, f Frame) {
 		}
 		e.testsRecv.Add(1)
 		e.mu.Lock()
+		if f.Test.Transition != e.transitions {
+			// Sent before the ring last opened: still on its way
+			// through a client's queues, it proves nothing about the
+			// ring now.
+			e.mu.Unlock()
+			return
+		}
 		e.misses = 0
 		var closed bool
 		if e.up[0] && e.up[1] && (e.ringOpen || !e.blocked[1]) {
