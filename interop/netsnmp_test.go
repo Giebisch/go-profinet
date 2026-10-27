@@ -229,7 +229,6 @@ func TestNetSNMPErrors(t *testing.T) {
 	r = e.netsnmp(2, "get", "--version", "1", oidSysName, "1.3.6.1.2.1.1.5.1")
 	e.expect("SNMP v1 Get of an unknown name: noSuchName, index 2 (Net-SNMP)", r.ErrorStatus == "noSuchName" && r.FailedObject == "1.3.6.1.2.1.1.5.1", "%+v", r)
 	r = e.netsnmp(2, "getnext", "1.3.6.1.2.1.11.999", "2.1")
-	m = r.byOID()
 	e.expect("SNMP v2c GetNext past the end: endOfMibView (Net-SNMP)", len(r.VarBinds) == 2 && r.VarBinds[1].Type == "endOfMibView", "%+v", r.VarBinds)
 
 	r = e.netsnmp(2, "set", "--set", oidSysName, "s", "renamed")
