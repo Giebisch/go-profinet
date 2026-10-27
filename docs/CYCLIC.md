@@ -57,6 +57,15 @@ Go timers on a general-purpose operating system, which stalls a process for
 | Linux arm64 (Docker Desktop VM) | 2 ms | 10 | 2 | 518 µs / 2.0 ms | 10.9 ms |
 | Linux arm64 (Docker Desktop VM) | 4 ms | 5 | **0** | 812 µs / 3.9 ms | 17.3 ms |
 
+Over a real veth pair with the AF_PACKET backend (scripts/l2-bench.sh,
+2026-10-27, Docker Desktop, linuxkit 7.0.14 arm64), a 1 ms cycle for 30 s:
+the scheduler missed about 6000 of 30 000 deadlines (it skips a deadline it
+is a whole cycle late for), the frames left at a median interval of 1.3 ms,
+the 99.9th percentile was 1.7 ms and the longest 4 to 34 ms depending on
+the run; no AR was lost with a hold of 1000 cycles. The hypervisor causes
+most of it: a bare `time.Sleep(1 ms)` loop in the same container wakes
+0.7 ms late at the median. See [BENCHMARKS.md](BENCHMARKS.md).
+
 Against rt-labs p-net over AF_PACKET in Docker (the interop suite,
 `TestPnetStartupModes`), a 1 ms cycle with a factor of 10 ran without an
 abort for its 3 s: 2946 cycles, 56 missed, mean lateness 748 µs.
