@@ -321,7 +321,8 @@ func TestManyDevices(t *testing.T) {
 		name := fmt.Sprintf("dev-%02d", i)
 		devs[i], _ = e.device(name, fmt.Sprintf("192.168.0.%d", 10+i), testModel(), nil)
 		var err error
-		cds[i], err = ctrl.AddDevice(controller.DeviceConfig{StationName: name, Model: testModel()})
+		cds[i], err = ctrl.AddDevice(controller.DeviceConfig{StationName: name, Model: testModel(),
+			DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 		if err != nil {
 			t.Fatal(err)
 		}
