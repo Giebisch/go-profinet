@@ -24,15 +24,14 @@ type prmHandler struct {
 	delay time.Duration
 }
 
-func (h *prmHandler) PrmEnd(ctx context.Context, _ device.ARInfo) error {
+func (h *prmHandler) PrmEnd(context.Context, device.ARInfo) error {
 	if h.n.Add(1) < 2 {
 		return nil
 	}
 	if h.delay > 0 {
-		select {
-		case <-time.After(h.delay):
-		case <-ctx.Done():
-		}
+		// Past the controller's timeout, whatever the context says: no
+		// ApplicationReady in time.
+		time.Sleep(h.delay)
 	}
 	if h.fail {
 		return errors.New("refused")
@@ -107,7 +106,7 @@ func TestReparameterizeRefused(t *testing.T) {
 }
 
 func TestReparameterizeTimeout(t *testing.T) {
-	cd, _ := runningWith(t, &prmHandler{delay: 5 * time.Second}, DeviceConfig{ActivityTimeout: 300 * time.Millisecond, ReconnectMin: time.Hour})
+	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ActivityTimeout: 300 * time.Millisecond, ReconnectMin: time.Hour})
 	start := time.Now()
 	err := cd.Reparameterize(context.Background(), nil)
 	if !errors.Is(err, profinet.ErrTimeout) && !errors.Is(err, profinet.ErrAborted) || time.Since(start) > 3*time.Second {
@@ -116,7 +115,7 @@ func TestReparameterizeTimeout(t *testing.T) {
 }
 
 func TestReparameterizeContext(t *testing.T) {
-	cd, _ := runningWith(t, &prmHandler{delay: 5 * time.Second}, DeviceConfig{ReconnectMin: time.Hour})
+	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ReconnectMin: time.Hour})
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	if err := cd.Reparameterize(ctx, nil); !errors.Is(err, context.DeadlineExceeded) {
