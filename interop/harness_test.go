@@ -427,7 +427,7 @@ func (e *env) oracles(file string, deviations ...peerDeviation) {
 		}
 		for _, k := range []string{"mrp", "ptcp"} {
 			if kinds[k] {
-				e.result.deviation("scapy: "+strings.ToUpper(k)+" frames of "+file+" not dissected",
+				e.result.deviation("scapy decode "+file+": "+strings.ToUpper(k)+" frames not dissected",
 					"decoder limit: scapy "+"has no "+strings.ToUpper(k)+" dissector; the frames are read, not decoded (tshark decodes them)")
 			}
 		}

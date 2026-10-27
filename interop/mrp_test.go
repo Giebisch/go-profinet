@@ -66,7 +66,7 @@ func eachPeer(t *testing.T, test func(t *testing.T, peer string)) {
 			setup(t)
 			if ok, why := peerSupported(peer); !ok {
 				r := newResult(t)
-				r.peer(peer, image(peer), "MRP manager and client")
+				r.peer(peer, image(peer), "MRP manager and client (go-profinet: MRP manager and client)")
 				r.na("MRP ring with "+peer, why)
 				r.write()
 				t.Skip(why)
