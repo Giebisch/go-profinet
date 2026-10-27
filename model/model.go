@@ -142,6 +142,9 @@ type Capabilities struct {
 	LLDP bool `json:"lldp"`
 	// Ports is the number of Ethernet ports.
 	Ports int `json:"ports"`
+	// DCPHello reports whether the device can send DCP Hello (GSDML
+	// DCP_HelloSupported; device.Config.Hello enables it).
+	DCPHello bool `json:"dcpHello,omitempty"`
 }
 
 // Device is the description of an IO-Device.

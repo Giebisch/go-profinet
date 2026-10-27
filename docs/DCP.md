@@ -47,6 +47,42 @@ answers over the requested delay, answers Get with the requested blocks,
 applies Set blocks in order (with Control/Start and Control/Stop around
 them), and refuses other requesters for 3 s after a Get or Set.
 
+## Hello
+
+A device can announce itself with a DCP Hello request (FrameID 0xFEFC,
+multicast to 01:0E:CF:00:00:01, no response): NameOfStation, IP parameter,
+DeviceID, DeviceRole and DeviceInitiative, each with its BlockInfo. A
+controller that knows the name connects with the MAC and IP address from the
+Hello, without an Identify.
+
+```go
+r.StartHello(dcp.HelloOptions{Count: 3, Interval: 30 * time.Millisecond}) // a Responder
+r.StopHello()
+frame := dcp.HelloFrame(&identity, xid) // the request itself
+```
+
+- A sequence is `Count` Hellos (1–15, default 3) `Interval` apart (at least
+  10 ms, default 30 ms), the first after `Delay`. A new sequence replaces the
+  running one, and two Hellos of a responder are never closer than the
+  interval, whatever restarts sequences: a flapping link cannot cause a
+  storm.
+- No Hello goes out while the station has no name or no IP address.
+- A DCP Set ends the sequence (a tool is configuring the device), as p-net
+  does; the IO-Device also ends it on a Connect.
+- The defaults (3 Hellos, 30 ms) are those vendor documents state; p-net
+  sends 3 Hellos 3 s apart. The modes of `dcp.HelloMode` are the values of
+  FSHelloMode: off, on link up, on link up after a delay.
+- The device reports `DeviceInitiative` = 1 (Hello after power-on) in its
+  Identify and Get responses when Hello is on.
+
+This is DCP Hello, not the whole of Fast Startup: Fast Startup also fixes
+the port's MAU type with autonegotiation off and stores parameters in
+non-volatile memory (FSParameterBlock), which a library on a
+general-purpose OS does not control. Startup times on the virtual network
+are measured by the e2e tests (`TestHelloDiscovery` logs them); they are no
+promise for a real network. Evidence and sources:
+[research/EVIDENCE-DCP-PDEV.md](research/EVIDENCE-DCP-PDEV.md).
+
 ## Reset modes
 
 | Constant | Resets |

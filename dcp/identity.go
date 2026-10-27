@@ -43,6 +43,10 @@ type Identity struct {
 	// RSIProperties is the Device/RSIProperties value when HasRSI.
 	RSIProperties uint16 `json:"rsiProperties,omitempty"`
 	HasRSI        bool   `json:"-"`
+	// Initiative is the DeviceInitiative value when HasInitiative:
+	// InitiativeHello when the device sends DCP Hello after power-on.
+	Initiative    uint16 `json:"initiative,omitempty"`
+	HasInitiative bool   `json:"-"`
 	// Alias is the AliasName a device derives from its LLDP neighbor;
 	// it is only used to match Identify filters.
 	Alias string `json:"-"`
@@ -105,6 +109,12 @@ func ParseIdentity(mac ethernet.MAC, blocks []Block) (Identity, error) {
 			}
 			id.IP = s
 			id.IPInfo = b.Info
+		case Initiative:
+			if len(d) < 2 {
+				return id, fmt.Errorf("dcp: %w: DeviceInitiative block of %d octets", profinet.ErrMalformed, len(d))
+			}
+			id.Initiative = binary.BigEndian.Uint16(d)
+			id.HasInitiative = true
 		case DeviceAlias:
 			id.Alias = string(d)
 		default:
@@ -135,11 +145,14 @@ func (id *Identity) Blocks() []Block {
 		add(DeviceRSI, 0, binary.BigEndian.AppendUint16(nil, id.RSIProperties))
 	}
 	add(IPParameter, id.IPInfo, AppendIPSuite(nil, id.IP))
+	if id.HasInitiative {
+		add(Initiative, 0, binary.BigEndian.AppendUint16(nil, id.Initiative))
+	}
 	opts := id.Options
 	if len(opts) == 0 {
 		opts = []BlockID{IPMAC, IPParameter}
 		for _, b := range bs {
-			if b.ID.Option() == OptionDeviceProperties {
+			if b.ID.Option() == OptionDeviceProperties || b.ID == Initiative {
 				opts = append(opts, b.ID)
 			}
 		}

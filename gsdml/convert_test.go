@@ -203,3 +203,33 @@ type failWriter struct{}
 func (failWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
 
 var testTime = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// TestDCPHelloAndProtocols: DCP_HelloSupported follows the model, and the
+// generated interface declares only the protocols the device implements
+// (LLDP; no SNMP agent exists).
+func TestDCPHelloAndProtocols(t *testing.T) {
+	for _, hello := range []bool{false, true} {
+		m := testModel()
+		m.Capabilities.DCPHello = hello
+		doc, err := FromModel(m, GenerateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(b, []byte("SNMP")) {
+			t.Fatal("generated GSDML declares SNMP")
+		}
+		back, err := ParseBytes(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dap := back.ProfileBody.ApplicationProcess.DeviceAccessPointList.DeviceAccessPointItems[0]
+		m2, err := ToModel(back, dap.ID)
+		if err != nil || m2.Capabilities.DCPHello != hello {
+			t.Fatalf("hello %v: %+v %v", hello, m2.Capabilities, err)
+		}
+	}
+}

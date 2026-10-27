@@ -466,6 +466,14 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		_ = a.transition(ARStateData)
 		d.watchIdle(a)
 	} else {
+		// The controller found the device: it stops announcing itself. The
+		// responder starts after the RPC server, so it may not exist yet.
+		d.mu.Lock()
+		r := d.dcpR
+		d.mu.Unlock()
+		if r != nil {
+			r.StopHello()
+		}
 		_ = a.transition(ARStateParameterizing)
 		a.mu.Lock()
 		a.cmiTimer = time.AfterFunc(a.cmiTimeout, func() {

@@ -89,3 +89,10 @@ the RPC activity of its Connect.
 
 `ctrl.DCP()` is the controller's DCP requester ([DCP.md](DCP.md)): Identify,
 Set the name and the IP address, Signal, ResetToFactory.
+
+The controller listens for DCP Hello requests: a Hello that names a
+configured device which is not connected starts its connection at once,
+with the MAC and IP address from the Hello and without an Identify, instead
+of waiting for the next attempt. A Hello stands in for an Identify for 3 s;
+one without an IP address is not used. `DeviceStats.Hellos` counts the
+connections a Hello started; `Config.IgnoreHello` turns this off.
