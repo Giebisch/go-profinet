@@ -25,8 +25,10 @@ import (
 //     sockets, with the adapter's ifdriver for generic bridge port states;
 //     runs on any Linux kernel.
 //   - mrp (microchip-ung/mrp, unmodified): Microchip's daemon for the Linux
-//     bridge's MRP support; needs a host kernel with CONFIG_BRIDGE_MRP
-//     (the GitHub-hosted runners have it, Docker Desktop has not: n/a). Each node is a
+//     bridge's MRP support; needs a host kernel with CONFIG_BRIDGE_MRP that
+//     accepts an MRP instance on a software bridge (without
+//     CONFIG_NET_SWITCHDEV). Docker Desktop has no bridge MRP and the
+//     GitHub-hosted runners have switchdev built in: n/a on both. Each node is a
 // container without a Docker network; a privileged helper creates a veth
 // pair for every cable and moves its ends into the two nodes' network
 // namespaces. Taking one end of a cable down is a cable break: both ends
@@ -52,7 +54,7 @@ func peerSupported(peer string) (bool, string) {
 	}
 	_, err := docker(context.Background(), "run", "--rm", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW", image(peer), "kernel-mrp")
 	if err != nil {
-		return false, "the Docker host's kernel has no bridge MRP support (CONFIG_BRIDGE_MRP); microchip-ung/mrp needs it: " + err.Error()
+		return false, "the Docker host's kernel does not accept an MRP instance on a software bridge (no CONFIG_BRIDGE_MRP, or CONFIG_NET_SWITCHDEV built in); microchip-ung/mrp needs it: " + err.Error()
 	}
 	return true, ""
 }
