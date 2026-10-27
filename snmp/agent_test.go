@@ -494,19 +494,31 @@ func TestDrops(t *testing.T) {
 	}
 }
 
+// allows counts the requests of n at now that the rate limit lets
+// through.
+func allows(a *Agent, now time.Time, n int) int {
+	c := 0
+	for range n {
+		if a.allow(now) {
+			c++
+		}
+	}
+	return c
+}
+
 func TestRateLimit(t *testing.T) {
 	a := newTestAgent(t, Config{Rate: 10, Burst: 2})
 	now := time.Unix(1000, 0)
-	if !a.allow(now) || !a.allow(now) || a.allow(now) {
-		t.Fatal("burst")
+	if got := allows(a, now, 3); got != 2 {
+		t.Fatalf("burst: %d of 3", got)
 	}
 	if a.allow(now.Add(50*time.Millisecond)) || !a.allow(now.Add(160*time.Millisecond)) {
 		t.Fatal("refill")
 	}
 	// Refilled to the burst at most.
 	later := now.Add(time.Hour)
-	if !a.allow(later) || !a.allow(later) || a.allow(later) {
-		t.Fatal("cap")
+	if got := allows(a, later, 3); got != 2 {
+		t.Fatalf("cap: %d of 3", got)
 	}
 	u := newTestAgent(t, Config{Rate: -1})
 	for range 1000 {
