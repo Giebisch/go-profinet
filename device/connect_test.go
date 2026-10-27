@@ -209,11 +209,30 @@ func TestConnectARLimits(t *testing.T) {
 	}
 	eventually(t, 5*time.Second, "no ARs", func() bool { return len(d.ARs()) == 0 })
 
-	// One IOCAR at a time; a second controller's is refused.
+	// A second controller's IOCAR is accepted (shared device), with
+	// every submodule locked: the first owns them. A third exceeds MaxARs.
 	c1 := p.ioCAR()
 	p.establish(c1)
+	c2 := p.ioCAR()
+	resp, err := p.connect(c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, api := range resp.ModuleDiff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) != pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d state %#x, want locked by IO controller", m.Slot, sm.Subslot, sm.State)
+				}
+			}
+		}
+	}
 	_, err = p.connect(p.ioCAR())
 	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
+	if err := p.release(c2); err != nil {
+		t.Fatal(err)
+	}
+	waitAR(t, d, c2.AR.ARUUID, ARStateClosed)
 	// A rerun of the IOCAR aborts the old one.
 	if _, err := p.connect(c1); err != nil {
 		t.Fatal(err)
@@ -703,14 +722,15 @@ func TestConnectModuleDiff(t *testing.T) {
 	d.mu.Lock()
 	a := d.ars[req.AR.ARUUID]
 	d.mu.Unlock()
-	if a.proper[key{2, 1}] || !a.proper[key{1, 1}] {
-		t.Fatalf("proper %v", a.proper)
+	if d.ownerOf(2, 1) == a || d.ownerOf(1, 1) != a {
+		t.Fatalf("owners: 2/1 %v, 1/1 %v", d.ownerOf(2, 1), d.ownerOf(1, 1))
 	}
 }
 
 // TestConcurrentConnects: of several IOCAR Connects that arrive at the
-// same time, exactly one is accepted; the reservation keeps the others
-// from slipping between the check and the insertion.
+// same time, MaxARs (2) are accepted; the reservation keeps the others
+// from slipping between the check and the insertion, and every submodule
+// has exactly one owner.
 func TestConcurrentConnects(t *testing.T) {
 	n := newNet(t)
 	d, _ := n.device(nil)
@@ -735,10 +755,19 @@ func TestConcurrentConnects(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
-	if accepted.Load() != 1 {
+	if accepted.Load() != 2 {
 		t.Fatalf("%d IOCARs accepted", accepted.Load())
 	}
-	if ars := d.ARs(); len(ars) != 1 {
+	ars := d.ARs()
+	if len(ars) != 2 {
 		t.Fatalf("ARs %+v", ars)
+	}
+	d.mu.Lock()
+	a1, a2 := d.ars[ars[0].UUID], d.ars[ars[1].UUID]
+	d.mu.Unlock()
+	for k := range a1.match {
+		if o := d.ownerOf(k.slot, k.subslot); o != a1 && o != a2 {
+			t.Fatalf("submodule %v without an owner", k)
+		}
 	}
 }

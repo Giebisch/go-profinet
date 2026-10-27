@@ -129,6 +129,20 @@ func (d *Device) control(op pnio.OpNum, blocks []byte) ([]byte, error) {
 		}
 		d.prmEnd(a)
 		return resp.Append(nil), nil
+	case op == pnio.OpControl && c.Type == pnio.BlockPrmEndPlugReq && c.Command&pnio.CmdPrmEnd != 0:
+		// The controller parameterized a submodule handed over to it
+		// (owner.go); it is answered with ApplicationReady (plug).
+		a.mu.Lock()
+		busy := a.plugBusy
+		a.mu.Unlock()
+		if !busy || a.currentState() != ARStateData {
+			return nil, stateErr()
+		}
+		select {
+		case a.prmEndPlug <- c.AlarmSequence:
+		default:
+		}
+		return resp.Append(nil), nil
 	case op == pnio.OpControl && c.Type == pnio.BlockPrmBeginReq && c.Command&pnio.CmdPrmBegin != 0:
 		if a.currentState() != ARStateData || a.typ == pnio.ARTypeIOSAR {
 			return nil, stateErr()

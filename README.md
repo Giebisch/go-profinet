@@ -88,7 +88,8 @@ is from PI's public pages.
 | Alarms | ✅ both priorities, all types | ✅ | ◐ low priority, diagnosis only | ✅ receive and acknowledge | ✅ |
 | Diagnosis records | ✅ serve and read | ✅ | — (invalid index) | ✅ read | ✅ |
 | I&M | ✅ I&M0–4 | ✅ I&M0–4 (device only) | ◐ I&M0–3 | ✅ read I&M0–15, write I&M1–3 | ✅ |
-| Several ARs on a device | ✅ IOCAR + IOSAR | ◐ 2 IOCARs | — single AR | n/a | ✅ |
+| Several ARs on a device | ✅ IOCARs + IOSAR | ◐ 2 IOCARs | — single AR | n/a | ✅ |
+| Shared device (one owner per submodule, hand-over) | ✅ device and controller | ✅ | — | — | ✅ |
 | Device access AR (IOSAR) | ✅ both roles | — | — | ✅ | not documented |
 | ModuleDiffBlock | ✅ both roles | ✅ (plugs expected modules) | — (mismatch rejects Connect) | ✅ read | ✅ |
 | ReadImplicit, WriteMultiple | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ |
@@ -231,7 +232,7 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 ## Limitations
 
 Conformance classes A and B as controller and device (RT_CLASS_1 and
-RT_CLASS_2 without synchronization); no IRT, MRP, shared device, system
+RT_CLASS_2 without synchronization) and shared device; no IRT, MRP, system
 redundancy, PROFIsafe or PROFINET security classes. OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).

@@ -48,8 +48,11 @@ against (see [the matrix](#interop-matrix)).
 | PrmBegin (re-parameterization in Data) | ◐ (`RecordClient.Control`; not in the lifecycle) | ✅ | |
 | Release, abort, CM initiator activity timeout | ✅ | ✅ | p-net, pnio-rs |
 | ARRPCBlockReq (controller RPC port) | ✅ | ✅ | |
-| Several ARs on one device (`MaxARs`), one controller AR per submodule | — | ✅ | profinet-py (IOSAR + IOCAR) |
-| Shared device, IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
+| Several ARs on one device (`MaxARs`) | ✅ | ✅ | profinet-py (IOSAR + IOCAR) |
+| Shared device: several IOCARs, one owner per submodule, "locked by IO controller" in the ModuleDiff, owner-only data, alarms and writes | ✅ (subset models, locked submodules) | ✅ | p-net with two go-profinet controllers (`TestPnetSharedDevice`) |
+| Hand-over: Released alarm, PrmEnd (plug), ApplicationReady (plug), one submodule at a time | ✅ | ✅ | p-net (`TestPnetSharedDevice`) |
+| Shared input | — | — | not public; p-net does not implement it |
+| IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
 | DCE/RPC: fragmentation, retransmission, at-most-once, idempotent calls, ping/working, big- and little-endian NDR | ✅ | ✅ | all |
 
 ### Records

@@ -36,7 +36,12 @@ type ar struct {
 	cmiTimeout time.Duration
 
 	expected []pnio.ExpectedSubmoduleBlockReq
-	proper   map[key]bool // submodules whose expected and real ident match
+	// match are the submodules whose expected and real ident match;
+	// which of them the AR owns is in Device.owner.
+	match map[key]bool
+	// seq orders the IOCARs by their Connect: ownership released by one
+	// goes to the earliest other AR that expects the submodule.
+	seq uint64
 
 	inLayout, outLayout rt.Layout
 	provider            *rt.Provider
@@ -61,6 +66,13 @@ type ar struct {
 	ackWait      map[uint16]chan pnio.AlarmAck
 	iocs         map[key]uint8 // the controller's consumer status of our inputs
 	cmiTimer     *time.Timer
+	// plugs are the submodules handed over to the AR whose Released
+	// alarm still has to go out; plugBusy is set while plugs are worked
+	// off (owner.go), and prmEndPlug carries the alarm sequence numbers
+	// of the controller's PrmEnd (plug) meanwhile.
+	plugs      []key
+	plugBusy   bool
+	prmEndPlug chan uint16
 }
 
 func (a *ar) info() ARInfo {
@@ -222,8 +234,9 @@ func shapes(exp []pnio.ExpectedSubmoduleBlockReq) []rt.SubmoduleIO {
 
 // moduleDiff compares the expected configuration with the real one. It
 // returns the ModuleDiffBlock (nil when everything matches) and the
-// submodules that match.
-func (d *Device) moduleDiff(exp []pnio.ExpectedSubmoduleBlockReq, appReadyPending bool) (*pnio.ModuleDiffBlock, map[key]bool) {
+// submodules that match. The submodules in locked match but are owned by
+// another IO controller's AR: they are reported as locked.
+func (d *Device) moduleDiff(exp []pnio.ExpectedSubmoduleBlockReq, appReadyPending bool, locked map[key]bool) (*pnio.ModuleDiffBlock, map[key]bool) {
 	proper := map[key]bool{}
 	var apis []pnio.DiffAPI
 	addModule := func(api uint32, m pnio.DiffModule) {
@@ -262,6 +275,12 @@ func (d *Device) moduleDiff(exp []pnio.ExpectedSubmoduleBlockReq, appReadyPendin
 				}
 				if dm.State == pnio.ModuleStateProper {
 					proper[key{em.Slot, es.Subslot}] = true
+				}
+				if locked[key{em.Slot, es.Subslot}] {
+					// Another IO controller's AR owns it (shared device).
+					st |= pnio.SubmStateARInfoCtrlLock
+					dm.Submodules = append(dm.Submodules, pnio.DiffSubmodule{Subslot: es.Subslot, IdentNumber: rs.IdentNumber, State: st})
+					continue
 				}
 				if appReadyPending {
 					// Every submodule of the AR waits for ApplicationReady.
@@ -365,21 +384,13 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		rerun = old
 	}
 	// Connects in progress hold a reservation, so that concurrent ones
-	// cannot exceed the limits between this check and the insertion.
+	// cannot exceed MaxARs between this check and the insertion. Several
+	// IO controllers may connect (shared device): each submodule belongs
+	// to one of them (claimOwnership).
 	count := d.reserved
-	if !iosar && d.reservedIO {
-		d.mu.Unlock()
-		return fail(pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
-	}
 	for _, a := range d.ars {
-		if a == rerun {
-			continue
-		}
-		count++
-		if !iosar && a.typ != pnio.ARTypeIOSAR {
-			// One IO controller owns the submodules at a time.
-			d.mu.Unlock()
-			return fail(pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
+		if a != rerun {
+			count++
 		}
 	}
 	if count >= d.model.Capabilities.MaxARs {
@@ -388,14 +399,16 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	}
 	d.reserved++
 	if !iosar {
-		d.reservedIO = true
+		d.reservedIO++
 	}
+	d.arSeq++
+	seq := d.arSeq
 	d.mu.Unlock()
 	defer func() {
 		d.mu.Lock()
 		d.reserved--
 		if !iosar {
-			d.reservedIO = false
+			d.reservedIO--
 		}
 		d.mu.Unlock()
 	}()
@@ -420,12 +433,25 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		ackWait:      map[uint16]chan pnio.AlarmAck{},
 		iocs:         map[key]uint8{},
 		lastActivity: time.Now(),
+		seq:          seq,
+		prmEndPlug:   make(chan uint16, 16),
 	}
 	if req.ARRPC != nil && req.ARRPC.InitiatorRPCServerPort != 0 {
 		a.ctrlPort = int(req.ARRPC.InitiatorRPCServerPort)
 	}
-	diff, proper := d.moduleDiff(req.Expected, !iosar)
-	a.proper = proper
+	_, a.match = d.moduleDiff(req.Expected, false, nil)
+	var locked map[key]bool
+	if !iosar {
+		locked = d.claimOwnership(a)
+	}
+	diff, _ := d.moduleDiff(req.Expected, !iosar, locked)
+	// A Connect that fails from here on gives its submodules back.
+	established := false
+	defer func() {
+		if !established && !iosar {
+			d.releaseOwnership(a)
+		}
+	}()
 
 	resp := &pnio.ConnectResponse{
 		AR: pnio.ARBlockRes{Type: arb.Type, ARUUID: arb.ARUUID, SessionKey: arb.SessionKey, ResponderMAC: d.mux.HardwareAddr(), UDPRTPort: pnio.LT},
@@ -462,6 +488,7 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	d.mu.Lock()
 	d.ars[a.uuid] = a
 	d.mu.Unlock()
+	established = true
 	if iosar {
 		_ = a.transition(ARStateData)
 		d.watchIdle(a)
@@ -584,7 +611,7 @@ func (d *Device) fillInputs(a *ar, c []byte) {
 		k := key{o.Slot, o.Subslot}
 		in := d.inputs[k]
 		dst := c[o.Offset : o.Offset+o.Length]
-		if in == nil || !a.proper[k] || len(in.data) != int(o.Length) {
+		if in == nil || d.owner[k] != a || len(in.data) != int(o.Length) {
 			clear(dst)
 			c[o.IOPSOffset()] = pnio.IOxSBad
 			continue
@@ -593,7 +620,7 @@ func (d *Device) fillInputs(a *ar, c []byte) {
 		c[o.IOPSOffset()] = in.iops
 	}
 	for _, s := range a.inLayout.IOCS {
-		if a.proper[key{s.Slot, s.Subslot}] {
+		if d.owner[key{s.Slot, s.Subslot}] == a {
 			c[s.Offset] = pnio.IOxSGood
 		} else {
 			c[s.Offset] = pnio.IOxSBad
@@ -611,7 +638,7 @@ func (d *Device) storeOutputs(a *ar, c []byte, s rt.DataStatus) {
 	for _, o := range a.outLayout.Objects {
 		k := key{o.Slot, o.Subslot}
 		out := d.outputs[k]
-		if out == nil || !a.proper[k] || len(out.data) != int(o.Length) {
+		if out == nil || d.owner[k] != a || len(out.data) != int(o.Length) {
 			continue
 		}
 		copy(out.data, c[o.Offset:o.Offset+o.Length])
@@ -703,13 +730,10 @@ func (d *Device) abort(a *ar, reason pnio.AbortReason, notify bool) {
 		delete(d.ars, a.uuid)
 	}
 	d.mu.Unlock()
-	// The outputs of a closed IOCAR are no longer valid.
+	// The outputs of a closed IOCAR are no longer valid; its submodules
+	// go to the next AR that expects them.
 	if a.typ != pnio.ARTypeIOSAR {
-		d.imgMu.Lock()
-		for _, o := range d.outputs {
-			o.iops = pnio.IOxSBad
-		}
-		d.imgMu.Unlock()
+		d.releaseOwnership(a)
 	}
 	if reason == 0 {
 		d.log.Infof("device: AR %s released", a.uuid)
@@ -760,12 +784,17 @@ func (d *Device) prmEnd(a *ar) {
 // applicationReady calls the controller's Control operation with the
 // IOXBlockReq ApplicationReady.
 func (d *Device) applicationReady(ctx context.Context, a *ar) error {
+	return d.callApplicationReady(ctx, a, pnio.ControlBlock{Type: pnio.BlockAppReadyReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdApplicationReady})
+}
+
+// callApplicationReady sends an ApplicationReady (or its plug variant) to
+// the controller and checks its answer.
+func (d *Device) callApplicationReady(ctx context.Context, a *ar, blk pnio.ControlBlock) error {
 	ua, ok := a.ctrlAddr.(*net.UDPAddr)
 	if !ok {
 		return fmt.Errorf("device: %w: controller address %v", profinet.ErrInvalidState, a.ctrlAddr)
 	}
 	dst := &net.UDPAddr{IP: ua.IP, Port: a.ctrlPort}
-	blk := pnio.ControlBlock{Type: pnio.BlockAppReadyReq, ARUUID: a.uuid, SessionKey: a.sessionKey, Command: pnio.CmdApplicationReady}
 	body := pnio.AppendNDRRequest(nil, rpcOrder, pnio.DefaultArgsMaximum, blk.Append(nil))
 	cctx, cancel := context.WithTimeout(ctx, d.cfg.ApplicationReadyTimeout)
 	defer cancel()
@@ -788,7 +817,7 @@ func (d *Device) applicationReady(ctx context.Context, a *ar) error {
 	if err != nil {
 		return err
 	}
-	if c.Type != pnio.BlockAppReadyRes || c.Command&pnio.CmdDone == 0 || c.ARUUID != a.uuid {
+	if c.Type != blk.Type|0x8000 || c.Command&pnio.CmdDone == 0 || c.ARUUID != a.uuid {
 		return fmt.Errorf("device: %w: ApplicationReady answered with %s command 0x%04X", profinet.ErrMalformed, c.Type, c.Command)
 	}
 	return nil

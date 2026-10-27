@@ -72,14 +72,12 @@ func (d *Device) SendAlarm(ctx context.Context, al Alarm) error {
 	if !ok {
 		return fmt.Errorf("device: alarm: subslot %d/%d: %w", al.Slot, al.Subslot, profinet.ErrNotFound)
 	}
-	d.mu.Lock()
+	// The alarm goes to the AR that owns the submodule (several IO
+	// controllers may share the device).
 	var targets []*ar
-	for _, a := range d.ars {
-		if a.typ != pnio.ARTypeIOSAR && a.alarmLow != nil {
-			targets = append(targets, a)
-		}
+	if a := d.ownerOf(al.Slot, al.Subslot); a != nil && a.alarmLow != nil {
+		targets = append(targets, a)
 	}
-	d.mu.Unlock()
 	var sent int
 	var errs []error
 	for _, a := range targets {
@@ -98,6 +96,13 @@ func (d *Device) SendAlarm(ctx context.Context, al Alarm) error {
 }
 
 func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subIdent uint32) error {
+	_, err := d.sendAlarmSeq(ctx, a, al, modIdent, subIdent)
+	return err
+}
+
+// sendAlarmSeq sends an alarm and waits for its acknowledgement; it
+// returns the alarm's sequence number.
+func (d *Device) sendAlarmSeq(ctx context.Context, a *ar, al Alarm, modIdent, subIdent uint32) (uint16, error) {
 	a.mu.Lock()
 	seq := a.alarmSeq
 	a.alarmSeq = (a.alarmSeq + 1) & pnio.AlarmSpecSeqMask
@@ -115,7 +120,7 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 		a.mu.Lock()
 		delete(a.ackWait, seq)
 		a.mu.Unlock()
-		return fmt.Errorf("device: alarm: %w: %d octets exceed MaxAlarmDataLength %d", profinet.ErrInvalidConfig, len(body), a.maxAlarmData)
+		return seq, fmt.Errorf("device: alarm: %w: %d octets exceed MaxAlarmDataLength %d", profinet.ErrInvalidConfig, len(body), a.maxAlarmData)
 	}
 	ep := a.alarmLow
 	if al.High {
@@ -132,9 +137,9 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 		// acknowledgement: its endpoint was closed under it. Only a closed
 		// device is "closed".
 		if errors.Is(err, profinet.ErrClosed) && d.ctx.Err() == nil {
-			return fmt.Errorf("device: alarm to AR %s: %w: %w", a.uuid, profinet.ErrAborted, err)
+			return seq, fmt.Errorf("device: alarm to AR %s: %w: %w", a.uuid, profinet.ErrAborted, err)
 		}
-		return fmt.Errorf("device: alarm to AR %s: %w", a.uuid, err)
+		return seq, fmt.Errorf("device: alarm to AR %s: %w", a.uuid, err)
 	}
 	// The application acknowledgement comes as a DATA PDU of the
 	// controller; it has as long as the transport would retransmit, and at
@@ -144,22 +149,22 @@ func (d *Device) sendAlarm(ctx context.Context, a *ar, al Alarm, modIdent, subId
 	select {
 	case ack, ok := <-ch:
 		if !ok {
-			return fmt.Errorf("device: alarm to AR %s: %w", a.uuid, profinet.ErrAborted)
+			return seq, fmt.Errorf("device: alarm to AR %s: %w", a.uuid, profinet.ErrAborted)
 		}
 		if !ack.Status.OK() {
-			return &pnio.StatusError{Op: "alarm ack", Status: ack.Status}
+			return seq, &pnio.StatusError{Op: "alarm ack", Status: ack.Status}
 		}
-		return nil
+		return seq, nil
 	case <-t.C:
 		a.mu.Lock()
 		delete(a.ackWait, seq)
 		a.mu.Unlock()
-		return fmt.Errorf("device: alarm to AR %s: %w: no AlarmAck", a.uuid, profinet.ErrTimeout)
+		return seq, fmt.Errorf("device: alarm to AR %s: %w: no AlarmAck", a.uuid, profinet.ErrTimeout)
 	case <-ctx.Done():
 		a.mu.Lock()
 		delete(a.ackWait, seq)
 		a.mu.Unlock()
-		return ctx.Err()
+		return seq, ctx.Err()
 	}
 }
 

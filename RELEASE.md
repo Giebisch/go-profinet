@@ -24,6 +24,15 @@ versions may change the API. Releases are tagged by the Release workflow
   `DeviceConfig.PeerChecks` and verifies a topology (`CheckTopology`).
   The LLDP agent reports changes (`AgentOptions.OnChange`), can stop
   sending (`SetTransmit`) and forget its neighbors (`Clear`).
+- Shared device (roadmap 2): the IO-Device accepts IOCARs of several IO
+  controllers; each submodule belongs to the first AR that expects it,
+  the others see it locked (ModuleDiff ARInfo 3), get no data of it,
+  cannot write it; alarms go to the owner; when the owner leaves, the
+  submodule is handed over with a Released alarm, PrmEnd (plug) and
+  ApplicationReady (plug). The IO-Controller leaves out locked submodules,
+  takes over released ones, and `model.Device.WithSlots` builds the
+  model of a controller that owns only some modules. A closed AR now
+  invalidates only its own outputs.
 - Generated GSDML no longer declares SNMP in `SupportedProtocols`: the
   device has no SNMP agent.
 - `docs/research/SOFTWARE-ONLY-ROADMAP.md` and its evidence files.

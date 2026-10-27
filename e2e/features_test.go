@@ -432,13 +432,37 @@ func TestActivityTimeout(t *testing.T) {
 	eventually(t, 3*time.Second, "device abort", func() bool { return len(dev.ARs()) == 0 })
 }
 
-func TestSecondControllerRejected(t *testing.T) {
+// TestSecondControllerLocked: a second controller that expects the same
+// submodules connects (shared device) but finds them all locked: it
+// exchanges no data. A third exceeds MaxARs.
+func TestSecondControllerLocked(t *testing.T) {
 	e := newEnv(t, 10)
-	_, _, _ = running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{})
+	dev, _, _ := running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{})
 	ctrl2, _ := e.controller("192.168.0.2")
 	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
-	eventually(t, 5*time.Second, "connect failure", func() bool { _, err := cd2.State(); return err != nil })
-	_, last := cd2.State()
+	waitState(t, cd2, controller.StateRunning, 10*time.Second)
+	diff := cd2.ModuleDiff()
+	if diff == nil {
+		t.Fatal("no ModuleDiff")
+	}
+	for _, api := range diff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) != pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d state %#x", m.Slot, sm.Subslot, sm.State)
+				}
+			}
+		}
+	}
+	_ = dev.SetInput(1, 1, []byte{1, 2, 3, 4, 5, 6, 7, 8}, pnio.IOxSGood)
+	time.Sleep(200 * time.Millisecond)
+	if in, iops, _ := cd2.Input(1, 1); iops == pnio.IOxSGood || in[0] != 0 {
+		t.Fatalf("a locked input reaches the second controller: % x %#x", in, iops)
+	}
+	ctrl3, _ := e.controller("192.168.0.3")
+	cd3, _ := ctrl3.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
+	eventually(t, 5*time.Second, "connect failure", func() bool { _, err := cd3.State(); return err != nil })
+	_, last := cd3.State()
 	var se *pnio.StatusError
 	if !errors.As(last, &se) || se.Status.Code1 != pnio.Code1CMRPC || se.Status.Code2 != pnio.CMRPCOutOfARs || !errors.Is(last, profinet.ErrResourceExhausted) {
 		t.Fatalf("last error %v", last)

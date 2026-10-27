@@ -84,6 +84,21 @@ A device access AR (IOSAR) gives read and write access without IO data;
 devices that do not support it (p-net) reject it. All calls of one AR use
 the RPC activity of its Connect.
 
+## Shared devices
+
+Several controllers can share a device, each owning the submodules it
+connects first. Give each controller a model with only its modules:
+
+```go
+cd, _ := ctrl.AddDevice(controller.DeviceConfig{StationName: "rack-1", Model: m.WithSlots(1, 3)})
+```
+
+A submodule another controller owns comes back in the ModuleDiff as locked
+(`cd.ModuleDiff()`): the controller exchanges no data for it. When the
+owner leaves, the device hands it over with a "Released" alarm; the
+controller writes the submodule's `Parameters`, sends PrmEnd (plug) and,
+on the device's ApplicationReady (plug), exchanges its data from then on.
+
 ## Discovery and addressing
 
 `ctrl.DCP()` is the controller's DCP requester ([DCP.md](DCP.md)): Identify,

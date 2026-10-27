@@ -79,7 +79,11 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 		if a == nil {
 			return nil, rwErr(pnio.RWStateConflict)
 		}
-		diff, _ := d.moduleDiff(a.expected, a.currentState() != ARStateData && a.typ != pnio.ARTypeIOSAR)
+		var locked map[key]bool
+		if a.typ != pnio.ARTypeIOSAR {
+			locked = d.lockedFor(a)
+		}
+		diff, _ := d.moduleDiff(a.expected, a.currentState() != ARStateData && a.typ != pnio.ARTypeIOSAR, locked)
 		if diff == nil {
 			diff = &pnio.ModuleDiffBlock{}
 		}
@@ -131,6 +135,13 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 	sm, ok := d.model.Submodule(q.Slot, q.Subslot)
 	if !ok {
 		return rwErr(pnio.RWInvalidSlot)
+	}
+	// A submodule another IO controller owns is not this one's to write
+	// (a device access AR may write anything).
+	if a.typ != pnio.ARTypeIOSAR {
+		if o := d.ownerOf(q.Slot, q.Subslot); o != nil && o != a {
+			return rwErr(pnio.RWAccessDenied)
+		}
 	}
 	req := RecordRequest{AR: a.info(), API: q.API, Slot: q.Slot, Subslot: q.Subslot, Index: q.Index, Length: q.Length}
 	switch q.Index {
