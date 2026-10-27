@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -203,4 +204,20 @@ func TestSeverityJSON(t *testing.T) {
 	// A document without a body has no semantic issues to report.
 	semantic(&Document{}, &validator{})
 	semantic(&Document{ProfileBody: &ProfileBody{ApplicationProcess: &ApplicationProcess{}}}, &validator{})
+}
+
+func TestReportJSONRoundTrip(t *testing.T) {
+	in := Report{Issues: []Issue{{Path: "a", Message: "m", Severity: SeverityWarning, Rule: RuleSlots}, {Severity: SeverityUnvalidated}, {}}}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out Report
+	if err := json.Unmarshal(b, &out); err != nil || !reflect.DeepEqual(in, out) {
+		t.Fatalf("%s: %+v %v", b, out, err)
+	}
+	var s Severity
+	if err := s.UnmarshalText([]byte("fatal")); !errors.Is(err, profinet.ErrMalformed) {
+		t.Fatal(err)
+	}
 }

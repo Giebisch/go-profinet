@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/otfabric/go-profinet"
 )
 
 // Severity grades an issue of a GSDML document.
@@ -42,6 +44,18 @@ func (s Severity) String() string {
 
 // MarshalText makes a Severity a JSON string.
 func (s Severity) MarshalText() ([]byte, error) { return []byte(s.String()), nil }
+
+// UnmarshalText reads the names MarshalText writes, so that a Report
+// decodes from its own JSON.
+func (s *Severity) UnmarshalText(b []byte) error {
+	for _, v := range []Severity{SeverityError, SeverityWarning, SeverityUnvalidated} {
+		if string(b) == v.String() {
+			*s = v
+			return nil
+		}
+	}
+	return fmt.Errorf("gsdml: %w: severity %q", profinet.ErrMalformed, b)
+}
 
 // Rules of the issues. The catalog rules come from the independent
 // catalog; the semantic rules each state their basis.
