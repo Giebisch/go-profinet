@@ -4,7 +4,30 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## v0.2.0 (2026-10-27)
+The notes of a version are the body of its GitHub release: the Release
+workflow (the shared `go-package-release.yml`) takes everything after the
+heading `## vX.Y.Z` up to the next line that is exactly `---`. So: one
+section per version, newest first, the heading exactly `## vX.Y.Z`, each
+section ending with a `---` line and no `---` line inside a section.
+
+## Release checklist
+
+1. `make check` and `make test-e2e` pass; the Interop workflow is green; a
+   Soak run of the release commit (25 runs) is entirely green.
+2. `INTEROP_REF` (Makefile and `.github/workflows/interop.yml`) names the
+   profinet-interop release the matrix in INTEROPERABILITY.md came from.
+3. This file lists the changes under the new version, in a `## vX.Y.Z`
+   section ending with `---` (`make release-notes-check`); API changes are
+   called out.
+4. Run the Release workflow with the version bump.
+5. Update profinetctl: `go get github.com/otfabric/go-profinet@<tag>`.
+
+---
+
+## v0.2.0
+
+**Date:** 2026-10-27
+**Previous release:** v0.1.2
 
 The first features of the software-only roadmap
 ([docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md)):
@@ -71,7 +94,12 @@ Feature coverage is not conformance: go-profinet is not certified.
 - Interop: pinned to profinet-interop v0.1.3, whose matrix covers the new
   features (p-net 55 checks pass, 0 fail).
 
-## v0.1.2 (2026-10-26)
+---
+
+## v0.1.2
+
+**Date:** 2026-10-26
+**Previous release:** v0.1.1
 
 Fixes found by soaking every CI job and the interop suite 25 times in
 parallel. No API change.
@@ -94,7 +122,12 @@ parallel. No API change.
 - CI: the Soak workflow (every job N times in parallel, own chaos seeds);
   Intel macOS on `macos-15-intel` (GitHub retired `macos-13`).
 
-## v0.1.1 (2026-10-26)
+---
+
+## v0.1.1
+
+**Date:** 2026-10-26
+**Previous release:** v0.1.0
 
 No code change.
 
@@ -104,7 +137,11 @@ No code change.
 - Documentation names the released versions (SECURITY.md, this file) and
   links profinet-interop's matrix at v0.1.0.
 
-## v0.1.0 (2026-10-26)
+---
+
+## v0.1.0
+
+**Date:** 2026-10-26
 
 First version.
 
@@ -124,13 +161,4 @@ First version.
 - Verified against p-net, pnio-rs, profinet-py and pnio-dcp
   ([INTEROPERABILITY.md](INTEROPERABILITY.md)).
 
-## Release checklist
-
-1. `make check` and `make test-e2e` pass; the Interop workflow is green; a
-   Soak run of the release commit (25 runs) is entirely green.
-2. `INTEROP_REF` (Makefile and `.github/workflows/interop.yml`) names the
-   profinet-interop release the matrix in INTEROPERABILITY.md came from.
-3. This file lists the changes under the new version; API changes are
-   called out.
-4. Run the Release workflow with the version bump.
-5. Update profinetctl: `go get github.com/otfabric/go-profinet@<tag>`.
+---
