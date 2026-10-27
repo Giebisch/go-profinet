@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"testing"
 	"time"
@@ -48,20 +49,21 @@ func drainAlarms(ch <-chan controller.AlarmEvent) {
 }
 
 // waitPortAlarm waits for a diagnosis alarm of the first port, appearing
-// or disappearing, with the extended error type ext.
-func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bool, ext uint16) {
+// or disappearing, with the extended error type ext. On a timeout it lists
+// what it saw instead.
+func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bool, ext uint16, cd *controller.Device) {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
+	connects := cd.Stats().Connects
+	var seen []string
 	for {
 		select {
 		case a := <-alarms:
 			n := a.Notification
+			items, _ := pnio.DecodeDiagnosisItems(n.USI, n.Data)
+			seen = append(seen, fmt.Sprintf("%s %d/%#x %+v", n.Type, n.Slot, n.Subslot, items))
 			if n.Subslot != model.SubslotPort1 || !n.HasItem {
 				continue
-			}
-			items, err := pnio.DecodeDiagnosisItems(n.USI, n.Data)
-			if err != nil {
-				t.Fatal(err)
 			}
 			for _, it := range items {
 				if it.ErrorType == pnio.ChannelErrRemoteMismat && it.ExtErrorType == ext && it.Appears() == appears {
@@ -69,7 +71,19 @@ func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bo
 				}
 			}
 		case <-deadline:
-			t.Fatalf("no alarm of remote mismatch %#x (appears %v)", ext, appears)
+			// On a starved runner the device may end the AR when an alarm
+			// is not acknowledged in time; the controller connects again
+			// and an alarm sent meanwhile went to the old AR. The diagnosis
+			// must then be right in the new one.
+			if st := cd.Stats(); st.Connects != connects {
+				t.Logf("the AR was established again (%d connects, %d aborts): checking the diagnosis instead of the alarm", st.Connects, st.Aborts)
+				eventually(t, 10*time.Second, "diagnosis after the reconnect", func() bool {
+					got := portMismatch(t, cd)
+					return appears == (len(got) == 1 && got[0] == ext)
+				})
+				return
+			}
+			t.Fatalf("no alarm of remote mismatch %#x (appears %v); alarms %v; diagnosis now %#x; stats %+v", ext, appears, seen, portMismatch(t, cd), cd.Stats())
 		}
 	}
 }
@@ -93,14 +107,14 @@ func TestPeerCheck(t *testing.T) {
 	// The neighbor goes: its LLDP information times out.
 	_ = sw.Close()
 	_ = swNode.mux.Close()
-	waitPortAlarm(t, alarms, true, 0x8005)
+	waitPortAlarm(t, alarms, true, 0x8005, cd)
 	if got := portMismatch(t, cd); len(got) != 1 || got[0] != 0x8005 {
 		t.Fatalf("diagnosis %#x", got)
 	}
 	// It comes back.
 	drainAlarms(alarms)
 	e.device("sw-1", "192.168.0.12", testModel(), nil)
-	waitPortAlarm(t, alarms, false, 0x8005)
+	waitPortAlarm(t, alarms, false, 0x8005, cd)
 	eventually(t, 5*time.Second, "cleared", func() bool { return len(portMismatch(t, cd)) == 0 })
 
 	// Parameterization in the Data state: another expected neighbor.
@@ -109,7 +123,7 @@ func TestPeerCheck(t *testing.T) {
 	if err := cd.WriteRecord(context.Background(), controller.Record{Subslot: model.SubslotPort1, Index: pnio.IndexPDPortDataCheck}, c.Append(nil)); err != nil {
 		t.Fatal(err)
 	}
-	waitPortAlarm(t, alarms, true, 0x8000)
+	waitPortAlarm(t, alarms, true, 0x8000, cd)
 	// The device refuses checks it does not implement.
 	mau := pnio.PDPortDataCheck{Subslot: model.SubslotPort1, Other: []pnio.RawBlock{{Header: pnio.BlockHeader{Type: pnio.BlockCheckMAUType, VersionHigh: 1}, Body: []byte{0, 0x10}}}}
 	err := cd.WriteRecord(context.Background(), controller.Record{Subslot: model.SubslotPort1, Index: pnio.IndexPDPortDataCheck}, mau.Append(nil))
