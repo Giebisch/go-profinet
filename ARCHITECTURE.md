@@ -59,8 +59,11 @@ counts.
 | `rt.Dispatcher` | one reader that routes cyclic frames to consumers by FrameID |
 | `rt.Scheduler` | one goroutine that runs every periodic task (provider transmissions, consumer watchdogs) on deadlines `start + n × period` |
 | `netstack.Stack` | one reader (ARP, IPv4, UDP to sockets) |
+| `l2/bridge.Bridge` | one reader per physical port; the CPU port and each port's local port are queues the device's muxes read |
+| `mrp.Entity` | one reader per ring port, one loop (link polling, the manager's test rounds) and a short-lived sender per burst of link change frames |
+| `snmp.Agent` | one reader of its socket (opt-in) |
 | `controller.Controller` | its DCP client, RPC client and server, alarm manager, dispatcher and scheduler, and **one lifecycle goroutine per device** |
-| `device.Device` | its DCP responder, LLDP agent, RPC client and server, alarm manager, dispatcher and scheduler; per AR, a watchdog and the ApplicationReady call |
+| `device.Device` | its DCP responder, an LLDP agent per port, RPC client and server, alarm manager, dispatcher and scheduler, a link watcher and the PDev evaluator, the MRP entity and SNMP agent when configured; per AR, a watchdog and the ApplicationReady call; per shared-device handover, the plug sequence |
 
 Application callbacks (`controller.DeviceConfig.OnState`, `OnAlarm`, the
 `device.Handler` methods) run on these goroutines and must return promptly.

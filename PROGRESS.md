@@ -42,11 +42,11 @@ Resume from here after an interruption.
 | IO-Device, IO-Controller, supervisor (device access) AR, AR info | done, tested |
 | GSDML parse/validate/encode/model conversion, codegen | done |
 | OS L2 backends | AF_PACKET tested in Docker (`make l2-test`), BPF opened on macOS, Npcap cross-compiled |
-| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 113 pass, 0 fail, 2 n/a, 2 attributed peer deviations; CI and contract check |
+| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, scapy, tshark: 126 pass, 0 fail, 2 n/a, 4 attributed peer deviations; CI, contract check, release and upstream-candidate workflows |
 | go-profinet interop suite + `make interop` + Interop workflow | done; 10/10 tests pass |
 | profinetctl | done: every command family, 93 % coverage, race-free, verified against p-net |
 | Documentation | complete: reference documents in the root, guides in docs/ |
-| Releases (2026-10-27) | go-profinet v0.1.0–v0.2.0 (v0.2.0: roadmap 1A, 1B, 1C, 2 and the codecs of 3, 4B, 5; interop pinned to profinet-interop v0.1.3; soaked 25× green), profinet-interop v0.1.0–v0.1.3, profinetctl v0.1.0–v0.1.2 |
+| Releases (2026-10-27) | go-profinet v0.1.0–v0.3.0 (v0.3.0: the whole software-only roadmap, see docs/research/FEATURE-COMPLETION-REPORT.md; interop pinned to profinet-interop v0.2.1; soaked 25× green), profinet-interop v0.1.0–v0.2.1 (release and upstream-candidate workflows), profinetctl v0.1.0–v0.2.0 |
 | Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (38 passed incl. 21 chaos runs, chaos monkey, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 11/11, profinetctl make check-equivalents and pnet-smoke |
 
 ## Blockers
