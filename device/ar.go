@@ -383,6 +383,19 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	if old := d.ars[arb.ARUUID]; old != nil {
 		rerun = old
 	}
+	// An IO controller holds one IOCAR to a device: a new one from the same
+	// controller (initiator MAC and object) replaces the old one, which the
+	// device has not yet seen end (the controller lost it first). Without
+	// this the new AR would find its submodules locked by the old one
+	// until the old one timed out (shared device).
+	if rerun == nil && !iosar {
+		for _, a := range d.ars {
+			if a.typ != pnio.ARTypeIOSAR && a.ctrlMAC == arb.InitiatorMAC && a.ctrlObject == arb.InitiatorObject {
+				rerun = a
+				break
+			}
+		}
+	}
 	// Connects in progress hold a reservation, so that concurrent ones
 	// cannot exceed MaxARs between this check and the insertion. Several
 	// IO controllers may connect (shared device): each submodule belongs
