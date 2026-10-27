@@ -418,9 +418,11 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	// cannot exceed MaxARs between this check and the insertion. Several
 	// IO controllers may connect (shared device): each submodule belongs
 	// to one of them (claimOwnership).
+	// An AR that a Connect in progress replaces counts once: its
+	// replacement holds a reservation already.
 	count := d.reserved
 	for _, a := range d.ars {
-		if a != rerun {
+		if a != rerun && !d.replacing[a] {
 			count++
 		}
 	}
@@ -432,6 +434,9 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	if !iosar {
 		d.reservedIO++
 	}
+	if rerun != nil {
+		d.replacing[rerun] = true
+	}
 	d.arSeq++
 	seq := d.arSeq
 	d.mu.Unlock()
@@ -440,6 +445,9 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		d.reserved--
 		if !iosar {
 			d.reservedIO--
+		}
+		if rerun != nil {
+			delete(d.replacing, rerun)
 		}
 		d.mu.Unlock()
 	}()

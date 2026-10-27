@@ -837,3 +837,33 @@ func TestConnectSameControllerReplaces(t *testing.T) {
 		t.Fatal("old AR still there")
 	}
 }
+
+// TestRerunCountsOnce: while a Connect replaces an AR (a rerun), the AR
+// and its replacement count once against MaxARs (2): another controller
+// is accepted.
+func TestRerunCountsOnce(t *testing.T) {
+	n := newNet(t)
+	d, _ := n.device(nil)
+	p1 := n.peer(d, "192.168.0.2", true)
+	p2 := n.peer(d, "192.168.0.3", true)
+	c1 := p1.ioCAR()
+	p1.establish(c1)
+	// The rerun of c1 in progress: a reservation that replaces it.
+	d.mu.Lock()
+	old := d.ars[c1.AR.ARUUID]
+	d.reserved++
+	d.replacing[old] = true
+	d.mu.Unlock()
+	if _, err := p2.connect(p2.ioCAR()); err != nil {
+		t.Fatalf("another controller during a rerun: %v", err)
+	}
+	d.mu.Lock()
+	d.reserved--
+	delete(d.replacing, old)
+	d.mu.Unlock()
+	// Without the rerun the device is full.
+	c3 := p2.ioCAR()
+	c3.AR.InitiatorObject[11] ^= 0xFF
+	_, err := p2.connect(c3)
+	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
+}
