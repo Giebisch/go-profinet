@@ -13,6 +13,17 @@ versions may change the API. Releases are tagged by the Release workflow
   reports DeviceInitiative; the IO-Controller connects through a Hello
   without Identify (`controller.Config.IgnoreHello`, `DeviceStats.Hellos`).
   `model.Capabilities.DCPHello` and GSDML `DCP_HelloSupported`.
+- Port checks and adjustments (roadmap 1B): `pnio` codecs of
+  PDPortDataCheck, PDPortDataAdjust, PDInterfaceAdjust, PDInterfaceDataReal
+  and the PDRealData record with the interface (`DecodePDRealDataRecord`);
+  the IO-Device evaluates CheckPeers against its LLDP neighbor (remote
+  mismatch diagnoses with alarms), applies PeerToPeerBoundary,
+  DCPBoundary and PDInterfaceAdjust, serves PDExpectedData and
+  PDInterfaceDataReal, reports the real link state, and refuses the
+  checks and adjustments it cannot honour; the IO-Controller writes
+  `DeviceConfig.PeerChecks` and verifies a topology (`CheckTopology`).
+  The LLDP agent reports changes (`AgentOptions.OnChange`), can stop
+  sending (`SetTransmit`) and forget its neighbors (`Clear`).
 - Generated GSDML no longer declares SNMP in `SupportedProtocols`: the
   device has no SNMP agent.
 - `docs/research/SOFTWARE-ONLY-ROADMAP.md` and its evidence files.

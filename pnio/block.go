@@ -105,6 +105,36 @@ func (t BlockType) String() string {
 		return "PDPortDataReal"
 	case BlockPDInterfaceDataReal:
 		return "PDInterfaceDataReal"
+	case BlockPDPortDataCheck:
+		return "PDPortDataCheck"
+	case BlockPDPortDataAdjust:
+		return "PDPortDataAdjust"
+	case BlockAdjustDomainBoundary:
+		return "AdjustDomainBoundary"
+	case BlockCheckPeers:
+		return "CheckPeers"
+	case BlockCheckLineDelay:
+		return "CheckLineDelay"
+	case BlockCheckMAUType:
+		return "CheckMAUType"
+	case BlockAdjustMAUType:
+		return "AdjustMAUType"
+	case BlockAdjustMulticastBoundary:
+		return "AdjustMulticastBoundary"
+	case BlockAdjustLinkState:
+		return "AdjustLinkState"
+	case BlockCheckLinkState:
+		return "CheckLinkState"
+	case BlockCheckMAUTypeDifference:
+		return "CheckMAUTypeDifference"
+	case BlockAdjustPeerToPeerBoundary:
+		return "AdjustPeerToPeerBoundary"
+	case BlockAdjustDCPBoundary:
+		return "AdjustDCPBoundary"
+	case BlockAdjustPreambleLength:
+		return "AdjustPreambleLength"
+	case BlockPDInterfaceAdjust:
+		return "PDInterfaceAdjust"
 	case BlockMultipleBlockHeader:
 		return "MultipleBlockHeader"
 	case BlockIM0:

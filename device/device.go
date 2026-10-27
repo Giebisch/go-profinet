@@ -139,6 +139,10 @@ type Device struct {
 	im         IMData
 	diags      map[key][]pnio.DiagnosisItem
 	closed     bool
+	pd         pdevState
+
+	// pdPoke wakes the PDev check evaluator.
+	pdPoke chan struct{}
 
 	// imgMu guards the process data images; it is never held while
 	// another lock is taken.
@@ -222,6 +226,8 @@ func New(cfg Config) (*Device, error) {
 		records:  map[recKey][]byte{},
 		im:       cfg.IM,
 		diags:    map[key][]pnio.DiagnosisItem{},
+		pd:       pdevState{checks: map[uint16]*pnio.PDPortDataCheck{}, adjusts: map[uint16]*pnio.PDPortDataAdjust{}, active: map[uint16][]uint16{}},
+		pdPoke:   make(chan struct{}, 1),
 		inputs:   map[key]*ioData{},
 		outputs:  map[key]*ioData{},
 		ctx:      ctx,
@@ -265,6 +271,7 @@ func (d *Device) start() error {
 		d.lldpA, err = lldp.NewAgent(d.mux, lldp.AgentOptions{
 			Interval: d.cfg.LLDPInterval,
 			Local:    d.lldpInfo,
+			OnChange: d.pokePDev,
 			Logger:   d.log,
 		})
 		if err != nil {
@@ -292,18 +299,29 @@ func (d *Device) start() error {
 	d.mu.Lock()
 	d.dcpR = r
 	d.mu.Unlock()
+	d.wg.Add(1)
+	go d.evalPDev()
+	if ls, ok := d.mux.Port().(l2.LinkStater); ok {
+		d.wg.Add(1)
+		go d.watchLink(ls)
+	}
 	if d.cfg.Hello != dcp.HelloOff {
 		d.startHello()
-		if ls, ok := d.mux.Port().(l2.LinkStater); ok {
-			d.wg.Add(1)
-			go d.watchLink(ls)
-		}
 	}
 	return nil
 }
 
+// linkUp reports the link state of the port; a port that does not report
+// it counts as up.
+func (d *Device) linkUp() bool {
+	if ls, ok := d.mux.Port().(l2.LinkStater); ok {
+		return ls.LinkUp()
+	}
+	return true
+}
+
 // helloLinkPoll is how often the device polls the link state of its port
-// for Hello on link up.
+// (Hello on link up, port data, port checks).
 const helloLinkPoll = 50 * time.Millisecond
 
 // startHello starts a Hello sequence unless an IO controller is
@@ -313,7 +331,7 @@ func (d *Device) startHello() {
 		return
 	}
 	d.mu.Lock()
-	busy := d.hasIOAR() || d.reservedIO || d.closed
+	busy := d.hasIOAR() || d.reservedIO || d.closed || d.pd.helloBlocked()
 	d.mu.Unlock()
 	if busy {
 		return
@@ -323,7 +341,9 @@ func (d *Device) startHello() {
 	}
 }
 
-// watchLink starts a Hello sequence whenever the link comes up.
+// watchLink follows the link of the port: when it goes down the LLDP
+// neighbors are gone; when it comes up a Hello sequence starts (if
+// configured); the port checks are evaluated again either way.
 func (d *Device) watchLink(ls l2.LinkStater) {
 	defer d.wg.Done()
 	t := time.NewTicker(helloLinkPoll)
@@ -336,9 +356,19 @@ func (d *Device) watchLink(ls l2.LinkStater) {
 		case <-t.C:
 		}
 		now := ls.LinkUp()
-		if now && !up {
-			d.log.Debugf("device: link up: Hello")
-			d.startHello()
+		switch {
+		case now && !up:
+			d.log.Debugf("device: link up")
+			d.pokePDev()
+			if d.cfg.Hello != dcp.HelloOff {
+				d.startHello()
+			}
+		case !now && up:
+			d.log.Debugf("device: link down")
+			if d.lldpA != nil {
+				d.lldpA.Clear()
+			}
+			d.pokePDev()
 		}
 		up = now
 	}
@@ -582,5 +612,8 @@ func (d *Device) lldpInfo() lldp.LocalInfo {
 		PortName:    "port-001",
 		Description: d.model.Identity.TypeOfStation,
 		IP:          d.ip.Addr,
+		// PDInterfaceAdjust: without NameOfDevice the port ID is the
+		// port's name alone.
+		Legacy: d.pd.interfaceMode()&pnio.InterfaceModeNameOfDevice == 0,
 	}
 }

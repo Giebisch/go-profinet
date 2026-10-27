@@ -65,7 +65,11 @@ against (see [the matrix](#interop-matrix)).
 | Diagnosis: channel, all, maintenance and qualified (0x800A–0x800C, 0xC00A–0xC00C, 0xE00A–0xE00C, 0xF00A–0xF00C, 0xF80C) | ✅ | n/a | p-net |
 | PDPortDataReal (0x802A), PDRealData (0xF841) | ✅ | n/a | p-net (decoded) |
 | RecordInputData (0x8028), LogBook (0xF830, without entries) | ✅ | n/a | |
-| PDPortDataCheck, PDPortDataAdjust, PDInterfaceDataReal, PDExpectedData, PDIRData, MRP records | — | — | |
+| PDPortDataCheck with CheckPeers (0x802B): written before PrmEnd and in Data; remote mismatch diagnoses 0x8001 with 0x8000 (name of station), 0x8001 (port), 0x8005 (no peer) | ✅ (`PeerChecks`) | ✅ | p-net (decodes our record, evaluates it, reports the same diagnoses: `TestPnetPortCheck`) |
+| PDPortDataAdjust (0x802F): PeerToPeerBoundary, DCPBoundary | ✅ (encode) | ✅ (applies LLDP off, Hello off) | |
+| PDInterfaceAdjust (0x8071), PDInterfaceDataReal (0x8080, in PDRealData), PDExpectedData (0xF842) | ✅ (decode) | ✅ | |
+| Topology verification from PDRealData (`CheckTopology`) | ✅ | n/a | |
+| Other checks and adjustments (MAU type, link state, line delay, boundaries), PDIRData, MRP records | — | refused (0xA9) | |
 
 ### Alarms (RTA)
 
