@@ -52,6 +52,8 @@ against (see [the matrix](#interop-matrix)).
 | Shared device: several IOCARs, one owner per submodule, "locked by IO controller" in the ModuleDiff, owner-only data, alarms and writes | ✅ (subset models, locked submodules) | ✅ | p-net with two go-profinet controllers (`TestPnetSharedDevice`) |
 | Hand-over: Released alarm, PrmEnd (plug), ApplicationReady (plug), one submodule at a time | ✅ | ✅ | p-net (`TestPnetSharedDevice`) |
 | Shared input | — | — | not public; p-net does not implement it |
+| IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
+| MRP frames (Test, TopologyChange, LinkDown/Up), PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
 | IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
 | DCE/RPC: fragmentation, retransmission, at-most-once, idempotent calls, ping/working, big- and little-endian NDR | ✅ | ✅ | all |
 

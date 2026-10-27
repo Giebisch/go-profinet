@@ -17,8 +17,11 @@ import (
 
 	"github.com/otfabric/go-profinet/dcp"
 	"github.com/otfabric/go-profinet/ethernet"
+	"github.com/otfabric/go-profinet/mrp"
 	"github.com/otfabric/go-profinet/pcap"
 	"github.com/otfabric/go-profinet/pnio"
+	"github.com/otfabric/go-profinet/ptcp"
+	"github.com/otfabric/go-profinet/rpc"
 )
 
 // countHellos returns the DCP Hellos of a capture in the share, by source
@@ -209,4 +212,102 @@ func TestPnetSharedDevice(t *testing.T) {
 	s1, _ := in["1:1"].(map[string]any)
 	e.expect("Slot 1 taken over (PrmEnd and ApplicationReady for the plugged submodule): its input valid at the second controller (p-net)",
 		s1 != nil && s1["iops"] == float64(pnio.IOxSGood), "%v", in)
+}
+
+// ipv4UDP builds an Ethernet/IPv4/UDP frame (UDP without checksum).
+func ipv4UDP(src, dst ethernet.MAC, sip, dip [4]byte, sport, dport uint16, payload []byte) []byte {
+	be := binary.BigEndian
+	udp := be.AppendUint16(be.AppendUint16(nil, sport), dport)
+	udp = be.AppendUint16(be.AppendUint16(udp, uint16(8+len(payload))), 0)
+	udp = append(udp, payload...)
+	ip := []byte{0x45, 0, 0, 0, 0, 1, 0, 0, 64, 17, 0, 0}
+	be.PutUint16(ip[2:], uint16(20+len(udp)))
+	ip = append(append(ip, sip[:]...), dip[:]...)
+	var sum uint32
+	for i := 0; i < 20; i += 2 {
+		sum += uint32(be.Uint16(ip[i:]))
+	}
+	for sum > 0xFFFF {
+		sum = sum&0xFFFF + sum>>16
+	}
+	be.PutUint16(ip[10:], ^uint16(sum))
+	h := ethernet.Frame{Dst: dst, Src: src, EtherType: 0x0800}
+	return append(append(h.AppendHeader(nil), ip...), udp...)
+}
+
+// TestCodecDecoders: frames go-profinet's codecs build for features whose
+// behaviour no open implementation offers (MRP, PTCP delay, the IOCARSR and
+// MCR blocks of a Connect) are decoded by tshark and scapy, independent of
+// go-profinet, without a malformed frame or an expert warning.
+func TestCodecDecoders(t *testing.T) {
+	e := newEnv(t)
+	e.result.peer("tshark/scapy", image("tshark"), "decoder")
+	f, err := os.Create(filepath.Join(e.share, "codecs.pcap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := pcap.NewWriter(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, dst := ethernet.MAC{2, 0, 0, 0, 0, 1}, ethernet.MAC{2, 0, 0, 0, 0, 2}
+	add := func(frame []byte) {
+		if err := w.WriteFrame(time.Now(), ethernet.Pad(frame, 0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eth := func(d ethernet.MAC, et ethernet.EtherType, payload []byte) []byte {
+		h := ethernet.Frame{Dst: d, Src: src, EtherType: et}
+		return append(h.AppendHeader(nil), payload...)
+	}
+	for _, fr := range []mrp.Frame{
+		{Test: &mrp.Test{Prio: mrp.DefaultManagerPrio, SA: src, RingState: mrp.RingClosed, TimeStamp: 5}, Common: &mrp.Common{SequenceID: 1, Domain: mrp.DefaultDomain}},
+		{TopologyChange: &mrp.TopologyChange{Prio: mrp.DefaultManagerPrio, SA: src, Interval: 10}, Common: &mrp.Common{SequenceID: 2, Domain: mrp.DefaultDomain}},
+		{Link: &mrp.LinkChange{SA: src, PortRole: mrp.PortSecondary, Interval: 20, Blocked: 1}, Common: &mrp.Common{SequenceID: 3, Domain: mrp.DefaultDomain}},
+		{Link: &mrp.LinkChange{Up: true, SA: src, Interval: 20}, Common: &mrp.Common{SequenceID: 4, Domain: mrp.DefaultDomain}},
+	} {
+		b, err := fr.AppendTo(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := mrp.MACControl
+		if fr.Test != nil {
+			d = mrp.MACTest
+		}
+		add(eth(d, mrp.EtherType, b))
+	}
+	req := ptcp.Delay{FrameID: ptcp.FrameIDDelayReq, SequenceID: 7, HasPortMAC: true, PortMAC: src, HasPortParameter: true, RxDelay: 100, TxDelay: 200}
+	add(eth(ethernet.LLDPMulticast, ethernet.EtherTypeProfinet, req.AppendTo(nil)))
+	res := ptcp.Delay{FrameID: ptcp.FrameIDDelayRes, SequenceID: 7, Delay: 1234, HasPortMAC: true, PortMAC: src, HasPortTime: true, T2TimeStamp: 99}
+	add(eth(ethernet.LLDPMulticast, ethernet.EtherTypeProfinet, res.AppendTo(nil)))
+
+	// A Connect request of an IOCARSR with its SRInfoBlock and an
+	// MCRBlockReq.
+	set := pnio.ARSetID{Discriminator: [6]byte{1, 2, 3, 4, 5, 6}, ConfigID: [8]byte{7, 7, 7, 7, 7, 7, 7, 7}, ARNumber: 1, Resource: 2}
+	block := func(b []byte) pnio.RawBlock {
+		blk, _, err := pnio.ReadBlock(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return blk
+	}
+	cr := pnio.ConnectRequest{
+		AR: pnio.ARBlockReq{Type: pnio.ARTypeIOCARSR, ARUUID: set.UUID(), SessionKey: 1, InitiatorMAC: src, InitiatorObject: pnio.ObjectUUID(1, 1, 0xF000),
+			Properties: pnio.ARPropStateActive | pnio.ARPropPrmServerCMInit, ActivityTimeoutFactor: 100, UDPRTPort: pnio.LT, StationName: "plc"},
+		Other: []pnio.RawBlock{
+			block((&pnio.SRInfoBlock{RedundancyDataHoldFactor: 0xC8, Properties: pnio.SRPropInputValidOnBackupAR}).Append(nil)),
+			block((&pnio.MCRBlockReq{IOCRReference: 2, AddressResolutionProperties: 1, MCITimeoutFactor: 10, ProviderStationName: "provider"}).Append(nil)),
+		},
+	}
+	body := pnio.AppendNDRRequest(nil, binary.LittleEndian, pnio.DefaultArgsMaximum, cr.Append(nil))
+	h := rpc.Header{Type: rpc.TypeRequest, Flags1: rpc.FlagIdempotent, DRep: [3]byte{rpc.DRepLittleEndian, 0, 0},
+		Object: pnio.ObjectUUID(1, 2, 0xF000), Iface: pnio.DeviceInterface, Activity: rpc.NewRandomUUID(), IfaceVersion: pnio.InterfaceVersion,
+		OpNum: uint16(pnio.OpConnect), IfaceHint: 0xFFFF, ActivityHint: 0xFFFF, BodyLen: uint16(len(body))}
+	payload := append(h.AppendTo(nil), body...)
+	add(ipv4UDP(src, dst, [4]byte{10, 0, 0, 1}, [4]byte{10, 0, 0, 2}, 49152, rpc.Port, payload))
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	e.expect("MRP Test, TopologyChange, LinkDown, LinkUp; PTCP DelayReq, DelayRes; IOCARSR Connect with SRInfoBlock and MCRBlockReq encoded (go-profinet)", true, "")
+	e.oracles("codecs.pcap")
 }

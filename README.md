@@ -131,6 +131,8 @@ Requires Go 1.23 or later.
 | `pnio` | PNIO blocks, NDR, status, identifiers |
 | `rt` | cyclic frames, layout, provider, consumer, scheduler |
 | `alarm` | RTA alarm transport |
+| `mrp` | MRP frame codec (Test, TopologyChange, LinkDown/Up, Common, Option); no ring manager or client yet |
+| `ptcp` | PTCP delay frame codec (DelayReq, DelayRes); no line delay measurement |
 | `ethernet` | Ethernet and VLAN frame codec, MAC addresses |
 | `l2` | the `Port` interface and the frame demultiplexer `Mux` |
 | `l2/afpacket`, `l2/bpf`, `l2/npcap`, `l2/osport` | the operating systems' raw Ethernet backends |
