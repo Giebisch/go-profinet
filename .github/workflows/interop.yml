@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  INTEROP_REF: ${{ inputs.interop_ref || 'v0.1.1' }}
+  INTEROP_REF: ${{ inputs.interop_ref || 'v0.1.2' }}
   GOWORK: "off"
 
 jobs:

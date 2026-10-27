@@ -117,17 +117,18 @@ is an attributed deviation of the peer.
 
 | Peer | Version | go-profinet as | pass | fail | n/a | peer deviation |
 |------|---------|----------------|-----:|-----:|----:|---------------:|
-| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 45 | 0 | 0 | 0 |
+| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 55 | 0 | 0 | 0 |
 | pnio-rs | v0.1.0 | IO-Controller, DCP requester | 12 | 0 | 2 | 0 |
 | profinet-py | 0.6.6 | IO-Device, DCP responder | 22 | 0 | 0 | 2 |
 | pnio-dcp | 1.2.0 | DCP responder | 8 | 0 | 0 | 0 |
-| scapy | 2.6.1 | (decoder of every capture) | 4 | 0 | 0 | 0 |
-| tshark | 4.0.17 | (decoder of every capture) | 4 | 0 | 0 | 0 |
+| scapy | 2.6.1 | (decoder of every capture) | 7 | 0 | 0 | 0 |
+| tshark | 4.0.17 | (decoder of every capture) | 7 | 0 | 0 | 0 |
+| tshark and scapy | | (decoders of our Hello frames, one check each) | 2 | 0 | 0 | 0 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.1/docs/MATRIX.md);
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.1.2/docs/MATRIX.md);
 the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.1/docs/INTEROPERABILITY.md).
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.1.2/docs/INTEROPERABILITY.md).
 The two "n/a" are pnio-rs limitations (no diagnosis records, no DCP Set); the
 two deviations are profinet-py's I&M1 write with BlockLength 58.
 
