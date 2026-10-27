@@ -57,6 +57,14 @@ func drainAlarms(ch <-chan controller.AlarmEvent) {
 // what it saw instead.
 func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bool, ext uint16, cd *controller.Device) {
 	t.Helper()
+	waitPortAlarmOr(t, alarms, appears, ext, cd, func(got []uint16) bool { return appears == (len(got) == 1 && got[0] == ext) })
+}
+
+// waitPortAlarmOr is waitPortAlarm whose diagnosis check after a
+// reconnect is afterReconnect: a reconnect writes the configured checks
+// again, not those written in Data.
+func waitPortAlarmOr(t *testing.T, alarms <-chan controller.AlarmEvent, appears bool, ext uint16, cd *controller.Device, afterReconnect func([]uint16) bool) {
+	t.Helper()
 	deadline := time.After(10 * time.Second)
 	connects := cd.Stats().Connects
 	var seen []string
@@ -83,7 +91,7 @@ func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bo
 				t.Logf("the AR was established again (%d connects, %d aborts): checking the diagnosis instead of the alarm", st.Connects, st.Aborts)
 				eventually(t, 10*time.Second, "diagnosis after the reconnect", func() bool {
 					got, ok := portMismatch(t, cd)
-					return ok && appears == (len(got) == 1 && got[0] == ext)
+					return ok && afterReconnect(got)
 				})
 				return
 			}
@@ -134,7 +142,9 @@ func TestPeerCheck(t *testing.T) {
 	if err := cd.WriteRecord(context.Background(), controller.Record{Subslot: model.SubslotPort1, Index: pnio.IndexPDPortDataCheck}, c.Append(nil)); err != nil {
 		t.Fatal(err)
 	}
-	waitPortAlarm(t, alarms, true, 0x8000, cd)
+	// After a reconnect the configured check (sw-1, present) applies
+	// again: no mismatch.
+	waitPortAlarmOr(t, alarms, true, 0x8000, cd, func(got []uint16) bool { return len(got) == 0 })
 	// The device refuses checks it does not implement.
 	mau := pnio.PDPortDataCheck{Subslot: model.SubslotPort1, Other: []pnio.RawBlock{{Header: pnio.BlockHeader{Type: pnio.BlockCheckMAUType, VersionHigh: 1}, Body: []byte{0, 0x10}}}}
 	err := cd.WriteRecord(context.Background(), controller.Record{Subslot: model.SubslotPort1, Index: pnio.IndexPDPortDataCheck}, mau.Append(nil))

@@ -3,7 +3,9 @@
 package lldp
 
 import (
+	"bytes"
 	"context"
+	"math"
 	"net/netip"
 	"sort"
 	"strings"
@@ -71,6 +73,18 @@ type Neighbor struct {
 	Frame   Frame        `json:"frame"`
 	Updated time.Time    `json:"updated"`
 	Expires time.Time    `json:"expires"`
+	// Index numbers the neighbor for as long as the agent knows it: the
+	// agent gives each new neighbor the next number from 1 to 2^31-1 (an
+	// LLDP-MIB lldpRemIndex) and, when it wraps, skips the numbers of the
+	// current neighbors. A neighbor that expires or leaves and comes back
+	// gets a new number.
+	Index uint32 `json:"index"`
+	// Changed is when the neighbor first appeared or its identity last
+	// changed: its address, chassis and port IDs, port description,
+	// system name or description (the LLDP-MIB's lldpRemTable columns).
+	// Frames that only refresh it, or change other TLVs (a measured
+	// delay), leave it.
+	Changed time.Time `json:"changed"`
 }
 
 // Alias returns the PROFINET AliasName of the device connected to this
@@ -112,6 +126,8 @@ type Agent struct {
 
 	mu        sync.Mutex
 	neighbors map[string]*Neighbor
+	// lastIndex is the Index of the newest neighbor.
+	lastIndex uint32
 
 	malformed atomic.Uint64
 	sent      atomic.Uint64
@@ -318,11 +334,43 @@ func (a *Agent) update(src ethernet.MAC, f Frame, now time.Time) {
 		if len(a.neighbors) >= a.opts.MaxNeighbors {
 			return
 		}
-		n = &Neighbor{}
+		n = &Neighbor{Index: a.nextIndexLocked(), Changed: now}
 		a.neighbors[k] = n
+	} else if !sameInfo(&n.Frame, &f) || n.MAC != src {
+		n.Changed = now
 	}
 	n.MAC, n.Frame, n.Updated = src, f, now
 	n.Expires = now.Add(time.Duration(f.TTL) * time.Second)
+}
+
+// nextIndexLocked returns the next neighbor index: from 1 to 2^31-1,
+// then from 1 again, skipping the indexes of the current neighbors.
+func (a *Agent) nextIndexLocked() uint32 {
+	for {
+		a.lastIndex++
+		if a.lastIndex > math.MaxInt32 {
+			a.lastIndex = 0
+			continue
+		}
+		used := false
+		for _, n := range a.neighbors {
+			if n.Index == a.lastIndex {
+				used = true
+				break
+			}
+		}
+		if !used {
+			return a.lastIndex
+		}
+	}
+}
+
+// sameInfo reports whether two frames of a neighbor carry the same
+// identity (see Neighbor.Changed).
+func sameInfo(a, b *Frame) bool {
+	return a.ChassisSubtype == b.ChassisSubtype && bytes.Equal(a.ChassisID, b.ChassisID) &&
+		a.PortSubtype == b.PortSubtype && bytes.Equal(a.PortID, b.PortID) &&
+		a.PortDescription == b.PortDescription && a.SystemName == b.SystemName && a.SystemDescription == b.SystemDescription
 }
 
 // expireLocked removes the expired neighbors and returns their number.

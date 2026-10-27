@@ -177,3 +177,88 @@ func TestSNMPWalk(t *testing.T) {
 		t.Fatal("sysName changed")
 	}
 }
+
+// TestSNMPLLDPIndexStable: the rows of lldpRemTable keep their
+// lldpRemIndex while neighbors come and go: a neighbor that appears gets
+// the next index, the others keep theirs, a neighbor that left and
+// returns gets a new one. Each row's time mark is its arrival in
+// sysUpTime units, and a Get with that TimeFilter value finds it.
+func TestSNMPLLDPIndexStable(t *testing.T) {
+	e := newEnv(t, 8)
+	n := e.node("192.168.0.10")
+	dev, err := device.New(device.Config{
+		Model: testModel(), Mux: n.mux, StationName: "dut", IP: suite("192.168.0.10"), ListenPacket: n.stack.ListenPacket,
+		NoResponseDelay: true, LLDPInterval: 200 * time.Millisecond, Logger: e.log.logger("dut"),
+		SNMP: &device.SNMPConfig{Community: "public"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = dev.Close() })
+	cn := e.node("192.168.0.20")
+	conn, err := cn.stack.ListenPacket(context.Background(), "udp4", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	c := &snmpClient{t: t, conn: conn, dst: &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10), Port: snmp.Port}}
+	remName := snmp.MustParseOID("1.0.8802.1.1.2.1.4.1.1.9")
+	type row struct{ filter, port, index uint32 }
+	// rows walks lldpRemSysName: the walk's instances (filter 0).
+	rows := func() map[string]row {
+		out := map[string]row{}
+		for _, vb := range c.walkNext() {
+			if vb.Name.HasPrefix(remName) && len(vb.Name) == len(remName)+3 {
+				out[string(vb.Value.Bytes)] = row{vb.Name[len(remName)], vb.Name[len(remName)+1], vb.Name[len(remName)+2]}
+			}
+		}
+		return out
+	}
+	waitRows := func(what string, ok func(map[string]row) bool) map[string]row {
+		t.Helper()
+		var r map[string]row
+		eventually(t, 10*time.Second, what, func() bool { r = rows(); return ok(r) })
+		return r
+	}
+	// get reads lldpRemSysName with a TimeFilter value.
+	get := func(filter, port, index uint32) snmp.Value {
+		r := c.do(snmp.Message{PDU: snmp.PDU{Type: snmp.PDUGetRequest, VarBinds: []snmp.VarBind{{Name: remName.Append(filter, port, index), Value: snmp.Null()}}}})
+		return r.PDU.VarBinds[0].Value
+	}
+	uptime := func() uint32 {
+		r := c.do(snmp.Message{PDU: snmp.PDU{Type: snmp.PDUGetRequest, VarBinds: []snmp.VarBind{{Name: snmp.MustParseOID("1.3.6.1.2.1.1.3.0"), Value: snmp.Null()}}}})
+		return uint32(r.PDU.VarBinds[0].Value.Uint)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	beforeA := uptime()
+	a, _ := e.device("na", "192.168.0.11", testModel(), nil)
+	r := waitRows("neighbor na", func(r map[string]row) bool { _, ok := r["na"]; return ok })
+	if r["na"].filter != 0 || r["na"].port != 1 || r["na"].index != 1 {
+		t.Fatalf("na %+v", r["na"])
+	}
+	if v := get(beforeA, 1, 1); string(v.Bytes) != "na" {
+		t.Fatalf("Get with the filter before na arrived: %+v", v)
+	}
+	if v := get(uptime()+100, 1, 1); v.Type != snmp.TypeNoSuchInstance {
+		t.Fatalf("Get with a filter after na arrived: %+v", v)
+	}
+
+	e.device("nb", "192.168.0.12", testModel(), nil)
+	r = waitRows("neighbor nb", func(r map[string]row) bool { _, ok := r["nb"]; return ok })
+	if r["na"].index != 1 || r["nb"].index != 2 {
+		t.Fatalf("after nb: %+v", r)
+	}
+	// na leaves: nb keeps its index.
+	_ = a.Close()
+	r = waitRows("na gone", func(r map[string]row) bool { _, ok := r["na"]; return !ok })
+	if r["nb"].index != 2 {
+		t.Fatalf("after na left: %+v", r)
+	}
+	// na returns: a new index.
+	e.device("na", "192.168.0.13", testModel(), nil)
+	r = waitRows("na back", func(r map[string]row) bool { _, ok := r["na"]; return ok })
+	if r["na"].index != 3 || r["nb"].index != 2 {
+		t.Fatalf("after na returned: %+v", r)
+	}
+}

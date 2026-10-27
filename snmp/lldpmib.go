@@ -54,14 +54,24 @@ type LLDPLocalPort struct {
 
 // LLDPRemote is a row of lldpRemTable, INDEX { lldpRemTimeMark,
 // lldpRemLocalPortNum, lldpRemIndex }.
+//
+// lldpRemTimeMark is a TimeFilter (RFC 2021): the table holds a row for
+// every filter value up to the row's last change, so that a manager
+// that reads with filter t sees the rows changed since t. The agent
+// serves GetNext and GetBulk at filter 0, which lists every row once
+// (a finite walk), and answers a Get of any filter value t: the row is
+// there when t ≤ TimeMark.
 type LLDPRemote struct {
-	// TimeMark is lldpRemTimeMark (a TimeFilter; 0 shows the row to a
-	// manager that does not filter by time).
+	// TimeMark is when the row last changed, in sysUpTime units
+	// (hundredths of a second since the agent started); 0 when that is
+	// not known.
 	TimeMark uint32
 	// LocalPortNum is lldpRemLocalPortNum: the local port (1 to 4096)
 	// the neighbor was heard on.
 	LocalPortNum int32
-	// Index is lldpRemIndex (from 1).
+	// Index is lldpRemIndex (1 to 2^31-1): an agent should give each new
+	// neighbor of a port the next number and keep it for as long as the
+	// neighbor stays (IEEE 802.1AB LLDP-MIB, lldpRemIndex).
 	Index int32
 	// The remote system's information: lldpRemChassisIdSubtype,
 	// lldpRemChassisId, lldpRemPortIdSubtype, lldpRemPortId,
@@ -135,23 +145,49 @@ func (m *MIB) AddLLDP(local func() LLDPLocal, remote func() []LLDPRemote) error 
 	// lldpRemEntry ::= { lldpRemTable 1 }; columns 4 to 10 (1 to 3 are
 	// the not-accessible index).
 	rem := OIDLLDPRemTable.Append(1)
-	return m.AddSubtree(OIDLLDPRemTable, func() []VarBind {
+	columns := func(r LLDPRemote, filter uint32, col func(c uint32, name OID, v Value)) {
+		for _, c := range []struct {
+			n uint32
+			v Value
+		}{
+			{4, Integer(r.ChassisIDSubtype)}, {5, lldpID(r.ChassisID)}, {6, Integer(r.PortIDSubtype)}, {7, lldpID(r.PortID)},
+			{8, displayString(r.PortDesc)}, {9, displayString(r.SysName)}, {10, displayString(r.SysDesc)},
+		} {
+			col(c.n, rem.Append(c.n, filter, uint32(r.LocalPortNum), uint32(r.Index)), c.v)
+		}
+	}
+	valid := func(r LLDPRemote) bool {
+		return r.LocalPortNum >= 1 && r.LocalPortNum <= maxPortNumber && r.Index >= 1
+	}
+	list := func() []VarBind {
 		var out []VarBind
 		for _, r := range remote() {
-			if r.LocalPortNum < 1 || r.LocalPortNum > maxPortNumber || r.Index < 1 {
-				continue
+			if valid(r) {
+				columns(r, 0, func(_ uint32, name OID, v Value) { out = append(out, VarBind{Name: name, Value: v}) })
 			}
-			col := func(c uint32, v Value) {
-				out = append(out, VarBind{Name: rem.Append(c, r.TimeMark, uint32(r.LocalPortNum), uint32(r.Index)), Value: v})
-			}
-			col(4, Integer(r.ChassisIDSubtype))
-			col(5, lldpID(r.ChassisID))
-			col(6, Integer(r.PortIDSubtype))
-			col(7, lldpID(r.PortID))
-			col(8, displayString(r.PortDesc))
-			col(9, displayString(r.SysName))
-			col(10, displayString(r.SysDesc))
 		}
 		return out
-	})
+	}
+	// A Get of filter t > 0: the row changed at or after t.
+	get := func(name OID) (Value, bool) {
+		if len(name) != len(rem)+4 {
+			return Value{}, false
+		}
+		c, t, port, idx := name[len(rem)], name[len(rem)+1], name[len(rem)+2], name[len(rem)+3]
+		for _, r := range remote() {
+			if !valid(r) || uint32(r.LocalPortNum) != port || uint32(r.Index) != idx || t > r.TimeMark {
+				continue
+			}
+			var val Value
+			found := false
+			columns(r, t, func(n uint32, _ OID, v Value) {
+				if n == c {
+					val, found = v, true
+				}
+			})
+			return val, found
+		}
+		return Value{}, false
+	}
+	return m.addSubtree(OIDLLDPRemTable, list, get)
 }

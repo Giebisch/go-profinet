@@ -867,3 +867,41 @@ func TestRerunCountsOnce(t *testing.T) {
 	_, err := p2.connect(c3)
 	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
 }
+
+// TestTwoConnectsBothAccepted: two IO controllers connecting at once to a
+// device with room for two ARs are both accepted. A Connect's reservation
+// ends when its AR enters the device's table; before, the AR counted
+// twice until the handler returned, and the other Connect could be
+// refused "out of AR resources".
+func TestTwoConnectsBothAccepted(t *testing.T) {
+	for round := range 30 {
+		n := newNet(t)
+		d, _ := n.device(nil)
+		ps := []*peer{n.peer(d, "192.168.0.100", false), n.peer(d, "192.168.0.101", false)}
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		errs := make([]error, len(ps))
+		for i, p := range ps {
+			req := p.ioCAR()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				for try := 0; try < 3; try++ {
+					var se *pnio.StatusError
+					if _, errs[i] = p.connect(req); errs[i] == nil || errors.As(errs[i], &se) {
+						return
+					}
+				}
+			}()
+		}
+		close(start)
+		wg.Wait()
+		for i, err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: controller %d refused: %v", round, i, err)
+			}
+		}
+		_ = d.Close()
+	}
+}
