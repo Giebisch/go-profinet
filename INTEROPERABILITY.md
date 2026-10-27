@@ -22,7 +22,7 @@ against (see [the matrix](#interop-matrix)).
 | Set NameOfStation, IP parameter, temporary or permanent | ✅ | ✅ | p-net, pnio-dcp, profinet-py |
 | Set Control/Signal | ✅ | ✅ | p-net, pnio-dcp, profinet-py |
 | Set Control/ResetToFactory (all modes), FactoryReset | ✅ | ✅ | p-net, pnio-dcp, profinet-py |
-| Hello | ✅ (receive) | — (no fast startup) | |
+| Hello: the device announces itself; the controller connects without Identify | ✅ (connects through the Hello) | ✅ (sends; not the rest of Fast Startup) | p-net (its Hellos, our controller: `TestPnetHello`); tshark and scapy decode our Hellos (`TestOtfHelloDecoders`) |
 | Control/Start and Control/Stop around a Set | ✅ | ✅ | |
 | DHCP options | — | — | |
 | Requester lock of another requester (3 s) | — | ✅ | p-net (as the locking side) |

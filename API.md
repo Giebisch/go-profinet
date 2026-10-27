@@ -77,7 +77,8 @@ v1.0.0 the API may change between minor versions; changes are listed in
 |--------|---------|
 | `NewClient(*l2.Mux, ClientOptions) (*Client, error)` | a requester: `Identify(ctx, Filter, IdentifyOptions)`, `IdentifyName`, `Get`, `GetIdentity`, `Set`, `SetName`, `SetIP`, `Signal`, `ResetToFactory`, `Hellos` |
 | `FilterAll`, `FilterName`, `FilterAlias`, `FilterIP`, `FilterDeviceID` | Identify filters |
-| `NewResponder(*l2.Mux, Station, ResponderOptions) (*Responder, error)` | a responder for a `Station` (the device uses one) |
+| `NewResponder(*l2.Mux, Station, ResponderOptions) (*Responder, error)` | a responder for a `Station` (the device uses one); `StartHello(HelloOptions)`, `StopHello()` |
+| `HelloFrame(*Identity, xid) *Frame` | the DCP Hello request of an identity; `HelloMode`, `HelloOptions` (`Normalize`) |
 | `Identity`, `ParseIdentity`, `IPSuite`, `Block`, `BlockID`, `SetBlock`, `SetError`, `BlockError`, `ValidateStationName` | |
 | `Decode`, `Frame`, `AppendIPSuite`, `DecodeIPSuite`, `AppendControlResponse`, `DecodeControlResponse` | codec |
 

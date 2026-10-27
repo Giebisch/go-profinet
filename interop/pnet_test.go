@@ -5,6 +5,7 @@
 package interop
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,16 +16,43 @@ import (
 	"time"
 
 	"github.com/otfabric/go-profinet/pnio"
+	"github.com/otfabric/go-profinet/rpc"
 )
 
-// pnet starts the p-net device.
+// pnet starts the p-net device and waits until it serves RPC. pn_dev opens
+// its RPC socket some time after the start event; in one CI run of about
+// 150 it never did (every Connect was answered with ICMP port unreachable
+// while DCP and LLDP worked), so a p-net that has not opened its port after
+// 15 s is restarted once.
 func pnet(e *env, station string) string {
 	img := image("pnet")
 	e.result.peer("p-net", img, "device")
-	c := e.start("pnet", img, 10, "device", "--station", station)
-	e.waitEvent(c, 30*time.Second, "start", func(m map[string]any) bool { return m["event"] == "start" })
-	time.Sleep(2 * time.Second) // pn_dev initialises its sockets after the start event
-	return c
+	for attempt := 1; ; attempt++ {
+		c := e.start("pnet", img, 10, "device", "--station", station)
+		e.waitEvent(c, 30*time.Second, "start", func(m map[string]any) bool { return m["event"] == "start" })
+		if e.udpListening(c, rpc.Port, 15*time.Second) {
+			return c
+		}
+		if attempt == 2 {
+			e.t.Fatalf("p-net did not open its RPC port %d (twice)", rpc.Port)
+		}
+		e.t.Logf("p-net did not open its RPC port %d within 15 s: restarting it", rpc.Port)
+		_, _ = docker(context.Background(), "rm", "-f", c)
+	}
+}
+
+// udpListening waits until a UDP socket of the container is bound to port.
+func (e *env) udpListening(container string, port int, timeout time.Duration) bool {
+	pattern := fmt.Sprintf(":%04X ", port)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, err := docker(context.Background(), "exec", container, "cat", "/proc/net/udp")
+		if err == nil && strings.Contains(string(out), pattern) {
+			return true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return false
 }
 
 // TestPnetController: go-profinet as IO-Controller of p-net.

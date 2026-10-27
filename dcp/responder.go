@@ -48,6 +48,8 @@ type ResponderOptions struct {
 // ResponderStats are the counters of a [Responder].
 type ResponderStats struct {
 	Identify, Get, Set, Malformed, Ignored uint64
+	// Hello is the number of DCP Hello requests sent.
+	Hello uint64
 }
 
 // Responder answers DCP requests for one [Station] on a port.
@@ -59,9 +61,17 @@ type Responder struct {
 	log     profinet.Logger
 	delay   time.Duration
 
-	identify, get, set, malformed, ignored atomic.Uint64
-	pendingIdentify                        atomic.Int32
+	identify, get, set, malformed, ignored, hellos atomic.Uint64
+	pendingIdentify                                atomic.Int32
 
+	// helloMu guards the running Hello sequence (see StartHello).
+	helloMu   sync.Mutex
+	helloStop context.CancelFunc
+	helloDone chan struct{}
+	helloLast time.Time
+	helloXid  uint32
+
+	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	once   sync.Once
@@ -81,7 +91,7 @@ func NewResponder(mux *l2.Mux, station Station, opts ResponderOptions) (*Respond
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &Responder{mux: mux, sub: sub, station: station, opts: opts, log: log, cancel: cancel}
+	r := &Responder{mux: mux, sub: sub, station: station, opts: opts, log: log, ctx: ctx, cancel: cancel}
 	// The spread of Identify responses: a fixed fraction of the window,
 	// derived from the MAC address as IEC 61158-6-10 suggests.
 	h := fnv.New32a()
@@ -101,13 +111,17 @@ func (r *Responder) Stats() ResponderStats {
 		Set:       r.set.Load(),
 		Malformed: r.malformed.Load(),
 		Ignored:   r.ignored.Load(),
+		Hello:     r.hellos.Load(),
 	}
 }
 
 // Close stops the responder.
 func (r *Responder) Close() error {
 	r.once.Do(func() {
+		// Under helloMu: StartHello starts no sequence after this.
+		r.helloMu.Lock()
 		r.cancel()
+		r.helloMu.Unlock()
 		r.sub.Close()
 		r.wg.Wait()
 	})
@@ -237,6 +251,8 @@ func (r *Responder) handleGet(ctx context.Context, src ethernet.MAC, f *Frame) {
 }
 
 func (r *Responder) handleSet(ctx context.Context, src ethernet.MAC, f *Frame) {
+	// A tool is configuring the device: it no longer announces itself.
+	r.stopHelloAsync()
 	resp := &Frame{FrameID: FrameIDGetSet, Service: ServiceSet, Type: TypeResponseSuccess, Xid: f.Xid}
 	for _, b := range f.Blocks {
 		code := r.apply(b)
@@ -315,14 +331,18 @@ func validSuite(s IPSuite) bool {
 }
 
 func (r *Responder) reply(ctx context.Context, dst ethernet.MAC, f *Frame) {
+	r.send(ctx, dst, f, f.Service.String()+" response")
+}
+
+func (r *Responder) send(ctx context.Context, dst ethernet.MAC, f *Frame, what string) {
 	hdr := ethernet.Frame{Dst: dst, Src: r.mux.HardwareAddr(), EtherType: ethernet.EtherTypeProfinet}
 	b := hdr.AppendHeader(make([]byte, 0, 256))
 	b, err := f.AppendTo(b)
 	if err != nil {
-		r.log.Errorf("dcp: encode %s response: %v", f.Service, err)
+		r.log.Errorf("dcp: encode %s: %v", what, err)
 		return
 	}
 	if err := r.mux.Send(ctx, ethernet.Pad(b, 0)); err != nil && ctx.Err() == nil {
-		r.log.Warnf("dcp: send %s response to %s: %v", f.Service, dst, err)
+		r.log.Warnf("dcp: send %s to %s: %v", what, dst, err)
 	}
 }

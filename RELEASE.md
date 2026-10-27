@@ -4,8 +4,18 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
-## Unreleased (GSDML validation)
+## Unreleased
 
+- DCP Hello (roadmap 1A): `dcp.HelloFrame`, `Responder.StartHello` and
+  `StopHello` (bounded sequences, rate-limited across restarts, ended by a
+  DCP Set); the IO-Device sends Hello at start and on link up while no IO
+  controller is connected (`device.Config.Hello`, `HelloOptions`) and
+  reports DeviceInitiative; the IO-Controller connects through a Hello
+  without Identify (`controller.Config.IgnoreHello`, `DeviceStats.Hellos`).
+  `model.Capabilities.DCPHello` and GSDML `DCP_HelloSupported`.
+- Generated GSDML no longer declares SNMP in `SupportedProtocols`: the
+  device has no SNMP agent.
+- `docs/research/SOFTWARE-ONLY-ROADMAP.md` and its evidence files.
 - GSDML validation (roadmap 1C): `gsdml.Check` grades every issue as
   error, warning or unvalidated and names its rule; semantic rules for IO
   data that does not fit an RT frame (error), slots against PhysicalSlots

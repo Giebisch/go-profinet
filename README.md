@@ -28,7 +28,8 @@ The library provides:
   I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology
 - **DCP** (`dcp`): Identify with filters and response delay, Get, Set
   (station name, IP suite, temporary or permanent), Signal, ResetToFactory,
-  Hello; requester and responder
+  Hello (sent by the device, used by the controller to connect without
+  Identify); requester and responder
 - **LLDP** (`lldp`) with the PROFINET TLVs, an agent and a neighbor table
 - **Connectionless DCE/RPC** (`rpc`) over any `net.PacketConn`: activities,
   fragmentation and reassembly, at-most-once execution, idempotent calls
@@ -79,7 +80,7 @@ is from PI's public pages.
 | IO-Controller | ✅ | — | — | ✅ minimal (cyclic marked experimental) | not documented publicly |
 | IO-Device | ✅ | ✅ | ✅ | — | ✅ |
 | DCP requester | ✅ Identify (all filters), Get, Set, Signal, Reset | — | — | ✅ | — |
-| DCP responder | ✅ incl. filters, response delay, requester lock | ✅ incl. Hello | ◐ Identify by name or all; no Get, Set name, Signal or Reset | — | ✅ |
+| DCP responder | ✅ incl. filters, response delay, requester lock, Hello | ✅ incl. Hello | ◐ Identify by name or all; no Get, Set name, Signal or Reset | — | ✅ |
 | LLDP | ✅ agent and neighbor table | ✅ | — | — (reads PDRealData only) | ✅ |
 | RT_CLASS_1 / RT_CLASS_2 (unsynchronized) | ✅ / ✅ | ✅ / ✅ | ◐ RT_CLASS_2 FrameIDs only | ✅ / — | ✅ |
 | IRT (RT_CLASS_3) | — | — | — | — | ✅ with a hardware driver |
@@ -227,9 +228,13 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 
 ## Limitations
 
-Conformance classes A and B as controller and device (RT_CLASS_1 and
-RT_CLASS_2 without synchronization); no IRT, MRP, shared device, system
-redundancy, PROFIsafe or PROFINET security classes. OT Fabric is not a PI
+The features of conformance class A as controller and device (RT_CLASS_1
+and RT_CLASS_2 without synchronization); class B also requires SNMP, which
+is missing. This is feature coverage, not conformance: go-profinet is not
+certified for any class. No IRT, MRP, shared device, system redundancy, PROFIsafe or
+PROFINET security classes. What can still be built without PI membership or
+hardware, and in which order, is in
+[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md). OT Fabric is not a PI
 member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
 GSDML validation follows

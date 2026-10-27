@@ -11,10 +11,14 @@ and what would lift it.
 | MRP (media redundancy), MRPD | no ring support; a device with two ports is not modelled (one Ethernet port) |
 | System redundancy (IOCARSR, S2/R1/R2), shared device, shared input, MCR (multicast CRs) | rejected by the device; not requested by the controller |
 | PROFINET security classes 1–3, PROFIsafe | no authentication, integrity protection or safety layer (see [SECURITY.md](SECURITY.md)) |
-| Fast startup (DCP Hello as a device), DHCP | the requester receives Hellos; the device does not send them |
+| Fast Startup beyond DCP Hello, DHCP | the device sends DCP Hello and the controller connects through it; the rest of Fast Startup (fixed MAU type with autonegotiation off, stored parameters, ARFSUBlock) needs control over the link and persistence that a library on a general-purpose OS does not have |
 | Port and interface parameterization (PDPortDataCheck/Adjust, PDInterfaceAdjust), topology checks by the controller | the device serves PDPortDataReal and PDRealData read-only; the controller writes no PD records |
 | RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
+
+What of this list can be built without PI membership or PROFINET hardware,
+with the protocol evidence for each feature and the order of work, is in
+[docs/research/SOFTWARE-ONLY-ROADMAP.md](docs/research/SOFTWARE-ONLY-ROADMAP.md).
 
 ## Without PI membership
 

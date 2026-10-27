@@ -16,6 +16,7 @@
 | [COVERAGE.md](COVERAGE.md) | coverage per package |
 | [BENCHMARKS.md](BENCHMARKS.md) | measured performance |
 | [research/GSDML.md](research/GSDML.md), [research/STACKS.md](research/STACKS.md) | the research behind the GSDML decision and the choice of reference implementations |
+| [research/SOFTWARE-ONLY-ROADMAP.md](research/SOFTWARE-ONLY-ROADMAP.md) | what can be built without PI membership or hardware, per feature with its evidence, priority and acceptance criteria; the evidence files `research/EVIDENCE-*.md` |
 
 The reference documents are in the repository root:
 [API.md](../API.md), [ARCHITECTURE.md](../ARCHITECTURE.md),

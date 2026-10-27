@@ -80,6 +80,18 @@ type Config struct {
 	LLDPInterval time.Duration
 	// NoResponseDelay answers DCP Identify at once (for tests).
 	NoResponseDelay bool
+	// Hello makes the device announce itself with DCP Hello requests, so
+	// that its IO controller can connect without an Identify: a sequence
+	// at start and, with a port that reports its link state
+	// (l2.LinkStater), whenever the link comes up, while no IO controller
+	// is connected. A DCP Set and a Connect end the sequence. The device's
+	// DeviceInitiative then reports Hello. Zero (dcp.HelloOff) sends none.
+	Hello dcp.HelloMode
+	// HelloOptions configure each sequence: the number of Hellos and
+	// their interval, and the delay after the link came up in mode
+	// dcp.HelloOnLinkUpDelayed. Zero values are the defaults of
+	// dcp.HelloOptions.
+	HelloOptions dcp.HelloOptions
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
@@ -157,6 +169,19 @@ func New(cfg Config) (*Device, error) {
 		if err := dcp.ValidateStationName(cfg.StationName); err != nil {
 			return nil, err
 		}
+	}
+	if cfg.Hello > dcp.HelloOnLinkUpDelayed {
+		return nil, fmt.Errorf("device: %w: Hello mode %s", profinet.ErrInvalidConfig, cfg.Hello)
+	}
+	if cfg.Hello != dcp.HelloOff {
+		opts, err := cfg.HelloOptions.Normalize()
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Hello == dcp.HelloOnLinkUp {
+			opts.Delay = 0
+		}
+		cfg.HelloOptions = opts
 	}
 	if cfg.RPCPort == 0 {
 		cfg.RPCPort = rpc.Port
@@ -259,10 +284,64 @@ func (d *Device) start() error {
 	d.rpcSrv.Register(pnio.DeviceInterface, pnio.InterfaceVersion, rpc.HandlerFunc(d.serveRPC))
 	// DCP last: once the device can be found, everything a controller
 	// talks to is in place.
-	if d.dcpR, err = dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay}); err != nil {
+	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay})
+	if err != nil {
 		return err
 	}
+	// Under mu: the RPC server already runs, and a Connect reads it.
+	d.mu.Lock()
+	d.dcpR = r
+	d.mu.Unlock()
+	if d.cfg.Hello != dcp.HelloOff {
+		d.startHello()
+		if ls, ok := d.mux.Port().(l2.LinkStater); ok {
+			d.wg.Add(1)
+			go d.watchLink(ls)
+		}
+	}
 	return nil
+}
+
+// helloLinkPoll is how often the device polls the link state of its port
+// for Hello on link up.
+const helloLinkPoll = 50 * time.Millisecond
+
+// startHello starts a Hello sequence unless an IO controller is
+// connected or the link is down.
+func (d *Device) startHello() {
+	if ls, ok := d.mux.Port().(l2.LinkStater); ok && !ls.LinkUp() {
+		return
+	}
+	d.mu.Lock()
+	busy := d.hasIOAR() || d.reservedIO || d.closed
+	d.mu.Unlock()
+	if busy {
+		return
+	}
+	if err := d.dcpR.StartHello(d.cfg.HelloOptions); err != nil {
+		d.log.Debugf("device: Hello: %v", err)
+	}
+}
+
+// watchLink starts a Hello sequence whenever the link comes up.
+func (d *Device) watchLink(ls l2.LinkStater) {
+	defer d.wg.Done()
+	t := time.NewTicker(helloLinkPoll)
+	defer t.Stop()
+	up := ls.LinkUp()
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-t.C:
+		}
+		now := ls.LinkUp()
+		if now && !up {
+			d.log.Debugf("device: link up: Hello")
+			d.startHello()
+		}
+		up = now
+	}
 }
 
 // Close aborts every AR and stops the device.
@@ -386,6 +465,9 @@ func (s station) Identity() dcp.Identity {
 		HasInstance:   true,
 		Instance:      max(d.model.Identity.Instance, 1),
 		IP:            d.ip,
+	}
+	if d.cfg.Hello != dcp.HelloOff {
+		id.Initiative, id.HasInitiative = dcp.InitiativeHello, true
 	}
 	if !d.ip.IsZero() {
 		id.IPInfo = dcp.IPInfoSet

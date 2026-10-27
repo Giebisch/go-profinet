@@ -60,6 +60,9 @@ func monkey(t *testing.T, seed uint64, steps int) {
 	newDevice := func(m *monkeyDev) {
 		d, err := device.New(device.Config{Model: testModel(), Mux: m.node.mux, StationName: m.name, IP: suite(m.ip),
 			ListenPacket: m.node.stack.ListenPacket, NoResponseDelay: true, LLDPInterval: 200 * time.Millisecond,
+			// DCP Hello on: restarts, renames, link flaps and faults all
+			// interact with it.
+			Hello:   dcp.HelloOnLinkUp,
 			ApplyIP: func(s dcp.IPSuite, _ bool) error { return m.node.stack.SetAddr(s.Addr, s.Mask, s.Gateway) }})
 		if err != nil {
 			t.Fatal(err)
