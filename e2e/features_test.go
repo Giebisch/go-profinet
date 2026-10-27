@@ -395,7 +395,9 @@ func TestRecovery(t *testing.T) {
 	}
 	defer func() { _ = dev2.Close() }()
 	waitState(t, cd, controller.StateRunning, 10*time.Second)
-	if states.Load() < 3 || cd.Stats().Connects < 3 || cd.Stats().Aborts < 2 {
+	// OnState may run just after WaitState returns.
+	eventually(t, 5*time.Second, "three times running", func() bool { return states.Load() >= 3 })
+	if cd.Stats().Connects < 3 || cd.Stats().Aborts < 2 {
 		t.Fatalf("running %d times, stats %+v", states.Load(), cd.Stats())
 	}
 	// Controller restart: the device aborts the old AR and accepts a new
@@ -437,9 +439,10 @@ func TestActivityTimeout(t *testing.T) {
 // exchanges no data. A third exceeds MaxARs.
 func TestSecondControllerLocked(t *testing.T) {
 	e := newEnv(t, 10)
-	dev, _, _ := running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{})
+	dev, _, _ := running(t, e, "dut", "192.168.0.10", controller.DeviceConfig{DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 	ctrl2, _ := e.controller("192.168.0.2")
-	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
+	cd2, _ := ctrl2.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour,
+		DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 	waitState(t, cd2, controller.StateRunning, 10*time.Second)
 	diff := cd2.ModuleDiff()
 	if diff == nil {
@@ -460,7 +463,8 @@ func TestSecondControllerLocked(t *testing.T) {
 		t.Fatalf("a locked input reaches the second controller: % x %#x", in, iops)
 	}
 	ctrl3, _ := e.controller("192.168.0.3")
-	cd3, _ := ctrl3.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
+	cd3, _ := ctrl3.AddDevice(controller.DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour,
+		DataHoldFactor: stallHold, WatchdogFactor: stallHold})
 	eventually(t, 5*time.Second, "connect failure", func() bool { _, err := cd3.State(); return err != nil })
 	_, last := cd3.State()
 	var se *pnio.StatusError
