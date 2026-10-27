@@ -4,7 +4,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help all build examples fmt fmt-check lint lint-ci vet vuln test test-e2e coverage cover coverage-check bench fuzz check clean generate generate-check coverpkg-check l2-test interop interop-images test-interop interop-matrix cross
+.PHONY: help all build examples fmt fmt-check lint lint-ci vet vuln test test-e2e coverage cover coverage-check bench fuzz check clean release-notes-check generate generate-check coverpkg-check l2-test interop interop-images test-interop interop-matrix cross
 
 help: ## This help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -104,6 +104,9 @@ generate: ## Generate the GSDML types and SCHEMA.md from gsdml/schema/catalog.js
 generate-check: ## Fail when the generated files differ from what the catalog generates
 	@go run ./internal/cmd/gengsdml -check
 
+release-notes-check: ## Fail when RELEASE.md is not in the otfabric release-notes format (## vX.Y.Z sections ending with ---)
+	@scripts/release-notes.sh --check
+
 coverpkg-check: ## Fail when CI's coverpkg (.github/workflows/ci.yml) is not COVER_PKGS
 	@grep -qF -- "$(COVER_PKGS)" .github/workflows/ci.yml || { echo "coverpkg in .github/workflows/ci.yml must be: $(COVER_PKGS)"; exit 1; }
 
@@ -142,7 +145,7 @@ cross: ## Build every package for the supported platforms
 		echo "Building $$p"; GOOS=$${p%/*} GOARCH=$${p#*/} go build ./... || exit 1; \
 	done
 
-check: generate-check coverpkg-check fmt fmt-check lint lint-ci vet vuln test coverage-check examples ## Run everything CI runs, except the Docker-based suites
+check: generate-check coverpkg-check release-notes-check fmt fmt-check lint lint-ci vet vuln test coverage-check examples ## Run everything CI runs, except the Docker-based suites
 
 clean: ## Remove generated binaries and coverage artifacts
 	@rm -rf $(BIN_DIR) coverage.out coverage.html

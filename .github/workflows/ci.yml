@@ -31,6 +31,16 @@ jobs:
       test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/e2e$)"
     secrets: inherit
 
+  # RELEASE.md in the format the shared release workflow reads: without
+  # it a release body is a commit log.
+  release-notes:
+    name: Release notes format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: make release-notes-check
+
   # The end-to-end, chaos, chaos monkey and leak tests, with the race
   # detector and a timeout that fits them.
   e2e:
