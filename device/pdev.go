@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/otfabric/go-profinet/ethernet"
 	"github.com/otfabric/go-profinet/lldp"
 	"github.com/otfabric/go-profinet/model"
 	"github.com/otfabric/go-profinet/pnio"
@@ -50,14 +51,16 @@ func (p *pdevState) interfaceMode() uint32 {
 	return p.ifAdjust.MultipleInterfaceMode
 }
 
-// helloBlocked reports whether a port's DCPBoundary blocks DCP Hello.
-func (p *pdevState) helloBlocked() bool {
-	for _, a := range p.adjusts {
-		if a.HasDCPBoundary && a.DCPBoundary&pnio.DCPBoundaryHello != 0 {
-			return true
+// helloBlocked reports whether the DCPBoundaries block DCP Hello on
+// every one of the device's ports (subslots): then it sends none.
+func (p *pdevState) helloBlocked(subslots []uint16) bool {
+	for _, sub := range subslots {
+		a := p.adjusts[sub]
+		if a == nil || !a.HasDCPBoundary || a.DCPBoundary&pnio.DCPBoundaryHello == 0 {
+			return false
 		}
 	}
-	return false
+	return len(subslots) > 0
 }
 
 // isPort reports whether slot/subslot is a port submodule of the DAP.
@@ -158,9 +161,9 @@ func (d *Device) writeAdjust(q pnio.WriteReq, blk pnio.RawBlock) error {
 	if err != nil || a.Slot != q.Slot || a.Subslot != q.Subslot {
 		return rwErr(pnio.RWInvalidParameter)
 	}
-	// Domain and multicast boundaries act on forwarding, which a device
-	// with one port does not do; MAU type, link state and preamble belong
-	// to the operating system.
+	// Domain and multicast boundaries (other than DCP's) act on
+	// forwarding the bridge does not filter by; MAU type, link state and
+	// preamble belong to the operating system.
 	if len(a.Other) > 0 {
 		return errUnsupportedPDev
 	}
@@ -180,24 +183,46 @@ func (d *Device) writeAdjust(q pnio.WriteReq, blk pnio.RawBlock) error {
 	return nil
 }
 
-// applyAdjust applies the adjustments: LLDP transmission (the device
-// sends no PTCP or path delay requests and no DCP Identify, so those bits
-// hold already) and DCP Hello.
+// applyAdjust applies the adjustments of each port: LLDP transmission
+// (the device sends no PTCP or path delay requests and no DCP Identify,
+// so those bits hold already) and the DCP boundary: on a multiport device
+// the bridge stops forwarding DCP Identify and Hello across the port; a
+// device sends no Hello while every port blocks it.
 func (d *Device) applyAdjust() {
 	d.mu.Lock()
-	noLLDP := false
-	for _, a := range d.pd.adjusts {
-		noLLDP = noLLDP || (a.HasPeerToPeerBoundary && a.PeerToPeerBoundary&pnio.PeerToPeerNoLLDP != 0)
+	noLLDP := make([]bool, len(d.ports))
+	groups := make([][]ethernet.MAC, len(d.ports))
+	for i, p := range d.ports {
+		if a := d.pd.adjusts[p.subslot]; a != nil {
+			noLLDP[i] = a.HasPeerToPeerBoundary && a.PeerToPeerBoundary&pnio.PeerToPeerNoLLDP != 0
+			if a.HasDCPBoundary {
+				groups[i] = dcpGroups(a.DCPBoundary)
+			}
+		}
 	}
-	blocked := d.pd.helloBlocked()
+	blocked := d.pd.helloBlocked(d.portSubslots())
 	r := d.dcpR
 	d.mu.Unlock()
-	if d.lldpA != nil {
-		d.lldpA.SetTransmit(!noLLDP)
+	for i, p := range d.ports {
+		if p.lldpA != nil {
+			p.lldpA.SetTransmit(!noLLDP[i])
+		}
+		if d.cfg.Bridge != nil {
+			d.cfg.Bridge.SetBoundary(i, groups[i])
+		}
 	}
 	if blocked && r != nil {
 		r.StopHello()
 	}
+}
+
+// portSubslots returns the port submodules of the device's ports.
+func (d *Device) portSubslots() []uint16 {
+	out := make([]uint16, len(d.ports))
+	for i, p := range d.ports {
+		out[i] = p.subslot
+	}
+	return out
 }
 
 func (d *Device) writeInterfaceAdjust(blk pnio.RawBlock) error {
@@ -209,10 +234,15 @@ func (d *Device) writeInterfaceAdjust(blk pnio.RawBlock) error {
 	changed := d.pd.interfaceMode() != a.MultipleInterfaceMode
 	d.pd.ifAdjust = &a
 	d.mu.Unlock()
-	if changed && d.lldpA != nil {
-		// Announce the new port ID at once.
-		if err := d.lldpA.SendNow(d.ctx); err != nil {
-			d.log.Debugf("device: LLDP: %v", err)
+	if changed {
+		// Announce the new port IDs at once.
+		for _, p := range d.ports {
+			if p.lldpA == nil {
+				continue
+			}
+			if err := p.lldpA.SendNow(d.ctx); err != nil {
+				d.log.Debugf("device: port %d: LLDP: %v", p.n, err)
+			}
 		}
 	}
 	return nil
@@ -362,9 +392,8 @@ func (d *Device) evalPort(subslot uint16) {
 	d.mu.Unlock()
 	var peer lldp.Neighbor
 	found := false
-	// The device's one Ethernet port is the first port.
-	if d.lldpA != nil && subslot == model.SubslotPort1 && d.linkUp() {
-		peer, found = d.lldpA.Latest()
+	if p := d.portBySubslot(subslot); p != nil && p.lldpA != nil && p.linkUp() {
+		peer, found = p.lldpA.Latest()
 	}
 	want := peerMismatch(c, peer, found)
 	if equalTypes(want, active) {

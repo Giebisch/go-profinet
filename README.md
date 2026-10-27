@@ -244,7 +244,8 @@ member: what that costs (official XSD validation, GSDX, MRCD, signing,
 certification) is listed in [docs/PI-MEMBERSHIP.md](docs/PI-MEMBERSHIP.md).
 GSDML validation follows
 an independent catalog, not PI's licensed schemas; GSDX and MRCD are not
-implemented (their formats are not public). The full list is in
+implemented (their formats are not public), beyond a generic inspector of
+the public OPC container (`gsdml/gsdx`, signatures not verified). The full list is in
 [LIMITATIONS.md](LIMITATIONS.md).
 
 ## License

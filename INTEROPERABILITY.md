@@ -24,8 +24,9 @@ against (see [the matrix](#interop-matrix)).
 | Set Control/ResetToFactory (all modes), FactoryReset | ✅ | ✅ | p-net, pnio-dcp, profinet-py |
 | Hello: the device announces itself; the controller connects without Identify | ✅ (connects through the Hello) | ✅ (sends; not the rest of Fast Startup) | p-net (its Hellos, our controller: `TestPnetHello`); tshark and scapy decode our Hellos (`TestOtfHelloDecoders`) |
 | Control/Start and Control/Stop around a Set | ✅ | ✅ | |
-| DHCP options | — | — | |
+| DHCP options (option 3: client ID 61, control 255, others raw), IP BlockInfo "set by DHCP" | ✅ (Get, `SetDHCP`, parsed in `Identity`) | ✅ (reports `Config.DHCP`; Set only through `Config.SetDHCP`, else "option not supported"; no DHCP client) | tshark decodes them (`TestDCPDHCPDecoders`; it shows options other than 61 and 255 as undecoded data); scapy 2.6.1 has no DCP DHCP block class and leaves them Raw |
 | Requester lock of another requester (3 s) | — | ✅ | p-net (as the locking side) |
+| Read-only DCP, per-source rate limits, audit events (`DCPPolicy`, opt-in) | — | ✅ | own e2e and flood tests only (local policy, no peer behaviour to compare) |
 
 ### LLDP (IEEE 802.1AB with the PROFINET TLVs)
 
@@ -54,6 +55,7 @@ against (see [the matrix](#interop-matrix)).
 | Shared input | — | — | not public; p-net does not implement it |
 | IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
 | MRP frames (Test, TopologyChange, LinkDown/Up), PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
+| RT_CLASS_UDP: RT payload on UDP port 34962, RTClass 4 / LT 0x0800 / RTA_CLASS_UDP in Connect (codecs only) | ✅ encode, refused by `AddDevice` | ✅ decode, Connect refused (DB 81 02 07) | tshark and scapy decode both (`TestUDPRTDecoders`); no open implementation of the data path |
 | IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
 | DCE/RPC: fragmentation, retransmission, at-most-once, idempotent calls, ping/working, big- and little-endian NDR | ✅ | ✅ | all |
 

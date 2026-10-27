@@ -25,6 +25,7 @@ import (
 	"github.com/otfabric/go-profinet/alarm"
 	"github.com/otfabric/go-profinet/dcp"
 	"github.com/otfabric/go-profinet/l2"
+	"github.com/otfabric/go-profinet/l2/bridge"
 	"github.com/otfabric/go-profinet/lldp"
 	"github.com/otfabric/go-profinet/model"
 	"github.com/otfabric/go-profinet/pnio"
@@ -49,8 +50,15 @@ type IMData struct {
 type Config struct {
 	// Model describes the device; required.
 	Model *model.Device
-	// Mux is the Layer 2 port; required.
+	// Mux is the Layer 2 port; required. With a Bridge it is the mux of
+	// the bridge's CPU port (the device's interface).
 	Mux *l2.Mux
+	// Bridge makes the device a multiport device: each bridge port is a
+	// device port (port submodules 0x8001, 0x8002, ... of the model's
+	// DAP, which must declare them), with its own MAC address, LLDP agent
+	// and link state. nil: the device has one port, Mux's. The caller
+	// owns the bridge and closes it after the device.
+	Bridge *bridge.Bridge
 	// StationName and IP are the initial station name and IP suite.
 	StationName string
 	IP          dcp.IPSuite
@@ -93,6 +101,24 @@ type Config struct {
 	// dcp.HelloOnLinkUpDelayed. Zero values are the defaults of
 	// dcp.HelloOptions.
 	HelloOptions dcp.HelloOptions
+	// DHCP are the DHCP options (DCP option 3) the device reports in
+	// Identify and Get responses, for example dcp.DHCPClientIDFromMAC()
+	// and dcp.DHCPControlParameter(dcp.DHCPControlOn). The library has no
+	// DHCP client: addressing stays with the operating system, and the
+	// device only reports what the application configures.
+	DHCP []dcp.DHCPParameter
+	// IPFromDHCP reports the initial IP suite as set by DHCP (IP
+	// BlockInfo 0x0002) until a DCP Set changes it.
+	IPFromDHCP bool
+	// SetDHCP receives a DCP Set of a DHCP option; when it returns
+	// dcp.BlockErrorNone the device reports the new value. nil refuses
+	// every such Set with "option not supported".
+	SetDHCP func(p dcp.DHCPParameter, permanent bool) dcp.BlockError
+	// DCPPolicy restricts the DCP responder: a read-only mode (Set
+	// refused, Identify and Get answered), rate limits per source for
+	// Identify responses and Set requests, and audit events for every Set,
+	// ResetToFactory and refused request. The zero value restricts nothing.
+	DCPPolicy dcp.Policy
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
@@ -126,7 +152,7 @@ type Device struct {
 	alarms *alarm.Manager
 	disp   *rt.Dispatcher
 	sched  *rt.Scheduler
-	lldpA  *lldp.Agent
+	ports  []*port
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
 	snmpA  *snmp.Agent
@@ -150,6 +176,11 @@ type Device struct {
 
 	// pdPoke wakes the PDev check evaluator.
 	pdPoke chan struct{}
+
+	// dhcp are the DHCP options DCP reports; ipDHCP marks ip as set by
+	// DHCP. Both under mu.
+	dhcp   []dcp.DHCPParameter
+	ipDHCP bool
 
 	// imgMu guards the process data images; it is never held while
 	// another lock is taken.
@@ -184,6 +215,9 @@ func New(cfg Config) (*Device, error) {
 		if err := dcp.ValidateStationName(cfg.StationName); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateDHCP(cfg.DHCP); err != nil {
+		return nil, err
 	}
 	if cfg.Hello > dcp.HelloOnLinkUpDelayed {
 		return nil, fmt.Errorf("device: %w: Hello mode %s", profinet.ErrInvalidConfig, cfg.Hello)
@@ -232,6 +266,8 @@ func New(cfg Config) (*Device, error) {
 		mux:      cfg.Mux,
 		name:     cfg.StationName,
 		ip:       cfg.IP,
+		dhcp:     cloneDHCP(cfg.DHCP),
+		ipDHCP:   cfg.IPFromDHCP,
 		ars:      map[rpc.UUID]*ar{},
 		frameIDs: map[uint16]bool{},
 		records:  map[recKey][]byte{},
@@ -279,15 +315,12 @@ func (d *Device) start() error {
 	if d.disp, err = rt.NewDispatcher(d.mux); err != nil {
 		return err
 	}
+	if err := d.openPorts(); err != nil {
+		return err
+	}
 	// LLDP before DCP: the DCP responder reads its alias.
 	if !d.cfg.DisableLLDP {
-		d.lldpA, err = lldp.NewAgent(d.mux, lldp.AgentOptions{
-			Interval: d.cfg.LLDPInterval,
-			Local:    d.lldpInfo,
-			OnChange: d.pokePDev,
-			Logger:   d.log,
-		})
-		if err != nil {
+		if err := d.startLLDP(); err != nil {
 			return err
 		}
 	}
@@ -309,7 +342,7 @@ func (d *Device) start() error {
 	}
 	// DCP last: once the device can be found, everything a controller
 	// talks to is in place.
-	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay})
+	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay, Policy: d.cfg.DCPPolicy})
 	if err != nil {
 		return err
 	}
@@ -319,23 +352,14 @@ func (d *Device) start() error {
 	d.mu.Unlock()
 	d.wg.Add(1)
 	go d.evalPDev()
-	if ls, ok := d.mux.Port().(l2.LinkStater); ok {
+	if d.hasLinkState() {
 		d.wg.Add(1)
-		go d.watchLink(ls)
+		go d.watchLinks()
 	}
 	if d.cfg.Hello != dcp.HelloOff {
 		d.startHello()
 	}
 	return nil
-}
-
-// linkUp reports the link state of the port; a port that does not report
-// it counts as up.
-func (d *Device) linkUp() bool {
-	if ls, ok := d.mux.Port().(l2.LinkStater); ok {
-		return ls.LinkUp()
-	}
-	return true
 }
 
 // helloLinkPoll is how often the device polls the link state of its port
@@ -345,50 +369,17 @@ const helloLinkPoll = 50 * time.Millisecond
 // startHello starts a Hello sequence unless an IO controller is
 // connected or the link is down.
 func (d *Device) startHello() {
-	if ls, ok := d.mux.Port().(l2.LinkStater); ok && !ls.LinkUp() {
+	if !d.anyLinkUp() {
 		return
 	}
 	d.mu.Lock()
-	busy := d.hasIOAR() || d.reservedIO > 0 || d.closed || d.pd.helloBlocked()
+	busy := d.hasIOAR() || d.reservedIO > 0 || d.closed || d.pd.helloBlocked(d.portSubslots())
 	d.mu.Unlock()
 	if busy {
 		return
 	}
 	if err := d.dcpR.StartHello(d.cfg.HelloOptions); err != nil {
 		d.log.Debugf("device: Hello: %v", err)
-	}
-}
-
-// watchLink follows the link of the port: when it goes down the LLDP
-// neighbors are gone; when it comes up a Hello sequence starts (if
-// configured); the port checks are evaluated again either way.
-func (d *Device) watchLink(ls l2.LinkStater) {
-	defer d.wg.Done()
-	t := time.NewTicker(helloLinkPoll)
-	defer t.Stop()
-	up := ls.LinkUp()
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-t.C:
-		}
-		now := ls.LinkUp()
-		switch {
-		case now && !up:
-			d.log.Debugf("device: link up")
-			d.pokePDev()
-			if d.cfg.Hello != dcp.HelloOff {
-				d.startHello()
-			}
-		case !now && up:
-			d.log.Debugf("device: link down")
-			if d.lldpA != nil {
-				d.lldpA.Clear()
-			}
-			d.pokePDev()
-		}
-		up = now
 	}
 }
 
@@ -418,9 +409,7 @@ func (d *Device) Close() error {
 	if d.snmpA != nil {
 		_ = d.snmpA.Close()
 	}
-	if d.lldpA != nil {
-		d.lldpA.Close()
-	}
+	d.closePorts()
 	if d.dcpR != nil {
 		_ = d.dcpR.Close()
 	}
@@ -522,10 +511,12 @@ func (s station) Identity() dcp.Identity {
 	}
 	if !d.ip.IsZero() {
 		id.IPInfo = dcp.IPInfoSet
+		if d.ipDHCP {
+			id.IPInfo = dcp.IPInfoDHCP
+		}
 	}
-	if d.lldpA != nil {
-		id.Alias = d.lldpA.Alias()
-	}
+	id.DHCP = cloneDHCP(d.dhcp)
+	id.Alias = d.alias()
 	return id
 }
 
@@ -574,6 +565,7 @@ func (s station) SetIP(ip dcp.IPSuite, permanent bool) dcp.BlockError {
 	}
 	d.mu.Lock()
 	d.ip = ip
+	d.ipDHCP = false
 	d.mu.Unlock()
 	d.handler.IPChanged(ip, permanent)
 	return dcp.BlockErrorNone
@@ -616,6 +608,7 @@ func (s station) ResetToFactory(mode uint16) dcp.BlockError {
 	resetComm := m >= 2
 	if resetComm {
 		d.name = ""
+		d.dhcp = cloneDHCP(d.cfg.DHCP)
 	}
 	d.mu.Unlock()
 	if resetComm {
@@ -625,12 +618,12 @@ func (s station) ResetToFactory(mode uint16) dcp.BlockError {
 	return dcp.BlockErrorNone
 }
 
-func (d *Device) lldpInfo() lldp.LocalInfo {
+func (d *Device) lldpInfo(p *port) lldp.LocalInfo {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return lldp.LocalInfo{
 		StationName: d.name,
-		PortName:    "port-001",
+		PortName:    p.name(),
 		Description: d.model.Identity.TypeOfStation,
 		IP:          d.ip.Addr,
 		// PDInterfaceAdjust: without NameOfDevice the port ID is the

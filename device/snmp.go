@@ -72,7 +72,7 @@ func (d *Device) startSNMP() error {
 	if err == nil {
 		err = mib.AddSNMPGroup(a.Stats)
 	}
-	if err == nil && d.lldpA != nil {
+	if err == nil && len(d.ports) > 0 && d.ports[0].lldpA != nil {
 		err = mib.AddLLDP(d.snmpLLDPLocal, d.snmpLLDPRemote)
 	}
 	if err != nil {
@@ -88,41 +88,53 @@ func (d *Device) startSNMP() error {
 	return nil
 }
 
-// snmpInterfaces is the ifTable: the device's one Ethernet interface.
+// snmpInterfaces is the ifTable: one row per Ethernet port.
 func (d *Device) snmpInterfaces() []snmp.Interface {
-	mac := d.mux.HardwareAddr()
-	oper := snmp.IfStatusUp
-	if !d.linkUp() {
-		oper = snmp.IfStatusDown
+	out := make([]snmp.Interface, 0, len(d.ports))
+	for _, p := range d.ports {
+		mac := p.mux.HardwareAddr()
+		oper := snmp.IfStatusUp
+		if !p.linkUp() {
+			oper = snmp.IfStatusDown
+		}
+		out = append(out, snmp.Interface{
+			Index: int32(p.n), Descr: p.name(), Type: snmp.IfTypeEthernetCsmacd, MTU: 1500, Speed: ifSpeed,
+			PhysAddress: mac[:], AdminStatus: snmp.IfStatusUp, OperStatus: oper,
+		})
 	}
-	return []snmp.Interface{{
-		Index: 1, Descr: d.lldpInfo().PortName, Type: snmp.IfTypeEthernetCsmacd, MTU: 1500, Speed: ifSpeed,
-		PhysAddress: mac[:], AdminStatus: snmp.IfStatusUp, OperStatus: oper,
-	}}
+	return out
 }
 
 // snmpLLDPLocal is the local system data of the LLDP-MIB: what the LLDP
-// agent sends.
+// agents of the ports send.
 func (d *Device) snmpLLDPLocal() snmp.LLDPLocal {
-	f := d.lldpInfo().Build(d.mux.HardwareAddr(), 0)
-	return snmp.LLDPLocal{
-		ChassisIDSubtype: int32(f.ChassisSubtype), ChassisID: f.ChassisID, SysName: f.SystemName, SysDesc: f.SystemDescription,
-		Ports: []snmp.LLDPLocalPort{{Num: 1, IDSubtype: int32(f.PortSubtype), ID: f.PortID, Desc: f.PortDescription}},
+	var l snmp.LLDPLocal
+	for i, p := range d.ports {
+		f := d.lldpInfo(p).Build(p.mux.HardwareAddr(), 0)
+		if i == 0 {
+			l = snmp.LLDPLocal{ChassisIDSubtype: int32(f.ChassisSubtype), ChassisID: f.ChassisID, SysName: f.SystemName, SysDesc: f.SystemDescription}
+		}
+		l.Ports = append(l.Ports, snmp.LLDPLocalPort{Num: int32(p.n), IDSubtype: int32(f.PortSubtype), ID: f.PortID, Desc: f.PortDescription})
 	}
+	return l
 }
 
-// snmpLLDPRemote is lldpRemTable: the LLDP neighbors of the port, numbered
-// in the order of their chassis and port IDs.
+// snmpLLDPRemote is lldpRemTable: the LLDP neighbors of each port,
+// numbered per port in the order of their chassis and port IDs.
 func (d *Device) snmpLLDPRemote() []snmp.LLDPRemote {
-	ns := d.lldpA.Neighbors()
-	out := make([]snmp.LLDPRemote, 0, len(ns))
-	for i, n := range ns {
-		f := &n.Frame
-		out = append(out, snmp.LLDPRemote{
-			LocalPortNum: 1, Index: int32(i + 1),
-			ChassisIDSubtype: int32(f.ChassisSubtype), ChassisID: f.ChassisID, PortIDSubtype: int32(f.PortSubtype), PortID: f.PortID,
-			PortDesc: f.PortDescription, SysName: f.SystemName, SysDesc: f.SystemDescription,
-		})
+	var out []snmp.LLDPRemote
+	for _, p := range d.ports {
+		if p.lldpA == nil {
+			continue
+		}
+		for i, n := range p.lldpA.Neighbors() {
+			f := &n.Frame
+			out = append(out, snmp.LLDPRemote{
+				LocalPortNum: int32(p.n), Index: int32(i + 1),
+				ChassisIDSubtype: int32(f.ChassisSubtype), ChassisID: f.ChassisID, PortIDSubtype: int32(f.PortSubtype), PortID: f.PortID,
+				PortDesc: f.PortDescription, SysName: f.SystemName, SysDesc: f.SystemDescription,
+			})
+		}
 	}
 	return out
 }

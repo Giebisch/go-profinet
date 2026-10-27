@@ -252,6 +252,12 @@ and experiments only, **—** deferred.
   two-port device can sit in a line or a ring.
 - **Acceptance**: PDRealData and LLDP report each port's own neighbor;
   link events per port; existing single-port behaviour unchanged.
+- **Status (2026-10-27)**: done. `l2/bridge` (learning switch, CPU port,
+  per-port local ports for LLDP and MRP, forwarding/blocked states, DCP
+  boundaries, bounded FDB) and `device.Config.Bridge`; vnet segments carry
+  lines and rings. e2e `TestMultiportLine`: B reached through A's bridge,
+  each port's own neighbor in PDRealData, a peer check per port,
+  `CheckTopology`, a pulled cable takes B offline and A runs on.
 
 ### 4B. MRP — P2
 
@@ -278,13 +284,13 @@ and experiments only, **—** deferred.
 
 | Feature | Priority | Evidence | Plan / blocker |
 |---------|----------|----------|----------------|
-| RT_CLASS_UDP | P3 | RTClass 4, RT payload on UDP 34962, UDP ports in the AR block VERIFIED; p-net validates the fields but has no data path | codecs and Connect validation; behaviour unverifiable: no peer implements it |
+| RT_CLASS_UDP | P3 | RTClass 4, RT payload on UDP 34962, UDP ports in the AR block VERIFIED; p-net validates the fields but has no data path | **done (codecs)**: `rt` UDP payload codec, `pnio` RTClass/LT/AlarmCR transport fields; the device refuses with DB 81 02 07 (IOCRProperties), the controller refuses to build one; tshark and scapy decode our frames. Behaviour unverifiable: no peer implements it |
 | MCR (multicast CRs) | P3 | MCRBlockReq 0x0106 layout VERIFIED in Wireshark; AddressResolutionProperties bits, multicast MAC allocation and the resolution procedure UNVERIFIED; p-net parses but does not implement | codec only until the procedure is substantiated |
 | PTCP | P3 | Delay PDUs and TLVs VERIFIED in Wireshark; the meaning of 0xFF41–0xFF43 and the destination MAC need a capture | decoder; line delay stays "not measured" (p-net does the same) |
-| DHCP | P3 | DCP option 3 suboptions are DHCP option codes (61 client ID, 255 control) and IP BlockInfo bit 1 "set by DHCP" VERIFIED; no PI guidance on DHCP use found; p-net has none | decode the DCP DHCP blocks; addressing stays with the operating system (`ApplyIP`), no DHCP client in the library |
+| DHCP | P3 | DCP option 3 suboptions are DHCP option codes (61 client ID, 255 control) and IP BlockInfo bit 1 "set by DHCP" VERIFIED; no PI guidance on DHCP use found; p-net has none | **done**: `dcp` DHCP block codec (`DHCPParameter`, client ID, control), `Identity.DHCP` and `IPSetByDHCP`, responder Get from `device.Config.DHCP`, Set only through `Config.SetDHCP`; tshark decodes them, scapy has no DCP DHCP block class; addressing stays with the operating system (`ApplyIP`), no DHCP client in the library |
 | SNMP (CC-B features) | P2 | CC-B needs SNMP with MIB-II and the LLDP-MIB (VERIFIED, PI guideline); p-net uses net-snmp; the PNO LLDP extension MIB's text is not public (only its OIDs) | **implemented** (package `snmp`, opt-in `device.Config.SNMP`): a read-only SNMPv1/v2c agent with the MIB-II system, interfaces and snmp groups and the LLDP-MIB local data and lldpRemTable, standard library only; **independently verified**: tshark and Scapy decode a v1/v2c walk without a warning (`interop/snmp_test.go`). No SNMPv3, no traps, no PNO extension MIB |
-| DCP restricted modes, hardening | P2 | DCPBoundary and the device's own policies | configurable read-only DCP (no Set), rate limits, audit events; never called Security Class 1 |
-| GSDX/MRCD | P3 | GSDX is an Open Packaging Conventions container (ISO/IEC 29500-2, Ecma-376 Part 2, public); its PI rules, signing and MRCD are members-only | a generic container inspector (parts, content types, relationships, signature metadata), unknown parts preserved; no PI-specific validation |
+| DCP restricted modes, hardening | P2 | DCPBoundary and the device's own policies | **done**: `dcp.Policy` / `device.Config.DCPPolicy`: read-only DCP (Set refused with "SET not possible by local reasons", Identify/Get answered), per-source rate limits for Identify responses and Set requests in a fixed-size table, audit events (callback and log fields); off by default; e2e and flood tests; not a PROFINET security class |
+| GSDX/MRCD | P3 | GSDX is an Open Packaging Conventions container (ISO/IEC 29500-2, Ecma-376 Part 2, public); its PI rules, signing and MRCD are members-only | a generic container inspector (parts, content types, relationships, signature metadata), unknown parts preserved; no PI-specific validation. **Status: GSDX inspector done** (`gsdml/gsdx`): signatures reported, not verified; MRCD not implemented |
 | GSDML 2.46/2.50 | — | XSDs members-only | unknown elements preserved and reported as unvalidated |
 
 ### Deferred

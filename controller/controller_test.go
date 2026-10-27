@@ -116,7 +116,17 @@ func TestAddDeviceValidation(t *testing.T) {
 	if _, err := c.AddDevice(DeviceConfig{StationName: "dut", Model: bad}); !errors.Is(err, profinet.ErrInvalidConfig) {
 		t.Fatalf("invalid model %v", err)
 	}
-	cd, err := c.AddDevice(DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour})
+	// The controller builds no Connect for an RT class it has no data path
+	// for: RT_CLASS_UDP among them.
+	for _, c2 := range []struct {
+		cls      pnio.RTClass
+		advanced bool
+	}{{pnio.RTClassUDP, false}, {pnio.RTClassUDP, true}, {pnio.RTClass3, true}, {pnio.RTClassStream, true}, {pnio.RTClass2, false}, {pnio.RTClass1, true}} {
+		if _, err := c.AddDevice(DeviceConfig{StationName: "udp", Model: testModel(), RTClass: c2.cls, Advanced: c2.advanced}); !errors.Is(err, profinet.ErrUnsupported) {
+			t.Fatalf("%s (advanced %v): %v", c2.cls, c2.advanced, err)
+		}
+	}
+	cd, err := c.AddDevice(DeviceConfig{StationName: "dut", Model: testModel(), ReconnectMin: time.Hour, RTClass: pnio.RTClass1})
 	if err != nil {
 		t.Fatal(err)
 	}

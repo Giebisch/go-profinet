@@ -27,7 +27,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `New(Config) (*Controller, error)` | start a controller on a `*l2.Mux`; `Config.ListenPacket` opens its UDP sockets (nil: the OS), `RPCPort` its RPC server port (34964), `StationName`, `VendorID`/`DeviceID`/`Instance` (its object UUID), `DCP` options |
 | `(*Controller).AddDevice(DeviceConfig) (*Device, error)` | add a device and start its lifecycle |
 | `(*Controller).Device(name)`, `Devices()`, `DCP()`, `RPC()`, `ObjectUUID()`, `Close()` | access and shutdown |
-| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `PeerChecks` (the expected neighbor of each port, written before PrmEnd), `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
+| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `RTClass` (only the startup mode's class; RT_CLASS_UDP and the others are refused with `ErrUnsupported`), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `PeerChecks` (the expected neighbor of each port, written before PrmEnd), `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
 | `(*Device).WaitState(ctx, State)`, `State()` | the lifecycle: `StateOffline` … `StateRunning`, `StateStopped` |
 | `(*Device).SetOutput(slot, subslot, data, iops)`, `Input(slot, subslot)`, `ConsumerStatus(slot, subslot)` | cyclic process data |
 | `(*Device).ReadRecord`, `WriteRecord`, `WriteMultiple`, `ReadIM0`, `ReadDiagnosis` | acyclic services within the AR |
@@ -42,11 +42,11 @@ v1.0.0 the API may change between minor versions; changes are listed in
 
 | Symbol | Purpose |
 |--------|---------|
-| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`, `SNMP` (an opt-in read-only SNMP agent) |
+| `New(Config) (*Device, error)` | start a device: `Model` and `Mux` required; `StationName`, `IP`, `ListenPacket`, `ApplyIP` (apply a DCP Set IP to the IP stack), `RPCPort`, `Handler`, `IM` (I&M1–4), `DHCP`/`IPFromDHCP`/`SetDHCP` (the DHCP options DCP reports and a handler for their Set), `DCPPolicy` (read-only DCP, rate limits, audit events), `RejectSupervisorAR`, `DisableLLDP`, `LLDPInterval`, `ApplicationReadyTimeout`, `SNMP` (an opt-in read-only SNMP agent); `Bridge` makes it a multiport device (one port submodule, MAC, LLDP agent and link state per bridge port; `Mux` on the bridge's CPU port) |
 | `(*Device).SetInput(slot, subslot, data, iops)`, `Output(slot, subslot)` | process data |
 | `(*Device).SendAlarm(ctx, Alarm)` | a process (or other) alarm to every AR that owns the submodule; waits for the AlarmAck |
 | `(*Device).AddDiagnosis`, `RemoveDiagnosis`, `Diagnoses` | diagnosis records with diagnosis alarms (appears/disappears) |
-| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
+| `(*Device).ARs() []ARInfo`, `StationName()`, `IP()`, `DHCP()`, `ObjectUUID()`, `RPCAddr()`, `Close()` | |
 | `Handler`, `NopHandler` | what the application decides: user records (`ReadRecord`, `WriteRecord`), `PrmEnd`, `StateChanged`, `AlarmAck`, `Signal`, `ResetToFactory`, `NameChanged`, `IPChanged` |
 | `RecordError(code1, code2) error` | a PNIORW error for a Handler to return |
 | `ARState`, `CanTransition`, `RecordRequest`, `IMData`, `Alarm` | |
@@ -72,6 +72,20 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `(*Document).Text(id)`, `DataItemSize`, `ParseUint16/32`, `ParseBool`, `ParseValueList`, `FormatValueList` | helpers |
 | the generated element types (`ISO15745Profile`, `DeviceAccessPointItem`, `ModuleItem`, `VirtualSubmoduleItem`, …) | see [gsdml/SCHEMA.md](gsdml/SCHEMA.md) |
 
+## gsdml/gsdx — GSDX (OPC) containers
+
+A generic Open Packaging Conventions inspector; no PI-specific rule, no
+signature verification ([LIMITATIONS.md](LIMITATIONS.md#gsdx-containers)).
+
+| Symbol | Purpose |
+|--------|---------|
+| `Open(io.ReaderAt, size, Options)`, `OpenFile(path) (*Package, error)` | read the ZIP within `Options` limits (`MaxParts`, `MaxPartSize`, `MaxTotalSize`, `MaxRatio`); hostile or equivalent names are `ErrMalformed`, limits `ErrResourceExhausted` |
+| `Package` | `Parts` (`Name`, resolved `ContentType`, sizes, `CRC32`, `Relationships`), `Defaults`/`Overrides`, package `Relationships` (`ResolvedTarget`), `CoreProperties`, `Signatures`, `Issues` (OPC rules broken) |
+| `(*Package).Part`, `ReadPart`, `Unreachable` | look up a part, read its content, parts no relationship reaches |
+| `Signature` | `SignedInfoReferences`, `PartReferences` (`Digest`: `DigestMatch`/`DigestMismatch`/`DigestNotChecked`), `SignatureTime`, `Certificates` (subject, issuer, validity, serial); `Verified` is always false, `Reason` says why |
+| `(*Package).GSDMLParts`, `GSDML(name)`, `CheckGSDML(name)`, `IsGSDML` | find GSDML parts, read one, parse it and run `gsdml.Check` |
+| `(*Package).WriteTo(io.Writer)` | write every entry back unchanged (name, method, time, content) |
+
 ## dcp — Discovery and Configuration Protocol
 
 | Symbol | Purpose |
@@ -81,6 +95,8 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `NewResponder(*l2.Mux, Station, ResponderOptions) (*Responder, error)` | a responder for a `Station` (the device uses one); `StartHello(HelloOptions)`, `StopHello()` |
 | `HelloFrame(*Identity, xid) *Frame` | the DCP Hello request of an identity; `HelloMode`, `HelloOptions` (`Normalize`) |
 | `Identity`, `ParseIdentity`, `IPSuite`, `Block`, `BlockID`, `SetBlock`, `SetError`, `BlockError`, `ValidateStationName` | |
+| `Policy` (`ReadOnly`, `IdentifyLimit`/`SetLimit` as `RateLimit`, `Sources`, `Audit`) in `ResponderOptions.Policy`; `AuditEvent`, `AuditOutcome`; `ResponderStats.RateLimited`/`Refused` | opt-in DCP restrictions and audit events |
+| `DHCPParameter` (`AppendDHCPParameter`, `DecodeDHCPParameter`, `ClientID`), `DHCPClientIDFromMAC`, `DHCPClientIDArbitrary`, `DHCPControlParameter`, the `DHCPOpt*` codes, `Identity.DHCP`/`IPSetByDHCP`/`IPConflict`/`DHCPOption`, `Client.SetDHCP`, `DHCPSetter` | DCP option 3 (DHCP); no DHCP client |
 | `Decode`, `Frame`, `AppendIPSuite`, `DecodeIPSuite`, `AppendControlResponse`, `DecodeControlResponse` | codec |
 
 ## lldp — Link Layer Discovery Protocol
@@ -109,8 +125,10 @@ The block codecs (`ConnectRequest`, `ConnectResponse`, `ARBlockReq`,
 `PDInterfaceDataReal`, `PDRealData` with `AppendPDRealDataRecord` and
 `DecodePDRealDataRecord`, `AppendMultipleBlockHeader`, …), `ReadBlock`, `SplitBlocks`, NDR (`AppendNDRRequest`,
 `DecodeNDRResponse`), `Status` and `StatusError`, `ObjectUUID`, the
-identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`) and the
-interface UUIDs.
+identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`, `RTClass`) and the
+interface UUIDs. RT_CLASS_UDP fields (codecs only): `LTIP`, `UDPRTPort`,
+`IOCRPropRTClassMask`, `AlarmCRPropTransportUDP`,
+`AlarmCRBlockReq.TransportUDP`, `ConnectRequest.UsesUDP`.
 
 ## mrp and ptcp — codecs
 
@@ -137,7 +155,8 @@ device; nil (the default) runs none.
 
 `rt`: `Frame`, `AppendEthernet`, `Layout`/`ComputeLayout`/`LayoutFromIOCR`,
 `Provider`, `Consumer`, `Dispatcher`, `Scheduler`/`Task`, `DataStatus`,
-`CycleNanos`. `alarm`: `PDU`, `Manager`, `Endpoint` (`Send`, `SendErr`, the `OnData` and
+`CycleNanos`; the RT_CLASS_UDP payload codec `AppendUDPPayload`, `DecodeUDP`,
+`IsUDPFrameID`, `UDPPort`, `MinDataLengthUDP` (no UDP data path). `alarm`: `PDU`, `Manager`, `Endpoint` (`Send`, `SendErr`, the `OnData` and
 `OnErr` callbacks), `EndpointStats`. Applications rarely use them directly; the
 controller and the device do.
 
@@ -146,6 +165,7 @@ controller and the device do.
 | Package | Symbol | Purpose |
 |---------|--------|---------|
 | `l2` | `Port`, `MulticastPort`, `LinkStater`, `NewMux`, `Mux.Subscribe`, `MatchEtherType`, `MatchFrameIDs`, `JoinMulticast` | the frame interface and demultiplexer |
+| `l2/bridge` | `New(Config)`, `Bridge.CPU`, `Port(i)`, `Physical(i)`, `SetState(i, Forwarding\|Blocked)`, `SetBoundary`, `Flush`, `Learned`, `Stats`, `LinkLocal` | the learning switch of a multiport device: the interface on the CPU port, link-local and MRP frames on each port's local port |
 | `l2/osport` | `Open(name, Options)`, `Interfaces()`, `Backend()` | the raw Ethernet backend of the platform |
 | `l2/afpacket`, `l2/bpf`, `l2/npcap` | `Open`, `Port` | the backends themselves (Linux, macOS/BSD, Windows) |
 | `vnet` | `New(seed)`, `Network.NewEndpoint`, `Endpoint.SetFaults(Faults)`, `SetLinkUp`, `Network.AddTap` | the virtual switch |

@@ -61,6 +61,12 @@ type DeviceConfig struct {
 	// Advanced selects the advanced startup mode with RTClass 2;
 	// otherwise the legacy startup with RTClass 1 is used.
 	Advanced bool
+	// RTClass states the RT class of the IOCRs; zero means the class of
+	// the startup mode (RTClass2 with Advanced, RTClass1 without).
+	// AddDevice refuses any other class with profinet.ErrUnsupported:
+	// the controller has a data path for RT_CLASS_1/2 on Ethernet only,
+	// not for RT_CLASS_UDP, RT_CLASS_3 or RT_CLASS_STREAM.
+	RTClass pnio.RTClass
 	// ActivityTimeout is the CM initiator activity timeout; zero means
 	// 10 s.
 	ActivityTimeout time.Duration
@@ -239,6 +245,15 @@ func (a *arState) fail(err error) {
 	})
 }
 
+// startupClass is the RT class of the IOCRs in a startup mode: the legacy
+// encoding RTClass1 in legacy startup, RTClass2 in advanced startup.
+func startupClass(advanced bool) pnio.RTClass {
+	if advanced {
+		return pnio.RTClass2
+	}
+	return pnio.RTClass1
+}
+
 // defaultHoldFactor is the default watchdog and data hold factor.
 const defaultHoldFactor = 10
 
@@ -258,6 +273,9 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 		return nil, err
 	}
 	cfg.Parameters = append(checks, cfg.Parameters...)
+	if want := startupClass(cfg.Advanced); cfg.RTClass != 0 && cfg.RTClass != want {
+		return nil, fmt.Errorf("controller: %w: device %q: %s (this startup mode uses %s)", profinet.ErrUnsupported, cfg.StationName, cfg.RTClass, want)
+	}
 	if cfg.SendClockFactor == 0 {
 		cfg.SendClockFactor = 32
 	}
@@ -779,10 +797,9 @@ var sessionKeys atomic.Uint32
 // machinery of the new AR.
 func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error) {
 	cfg := &d.cfg
-	cls := pnio.RTClass1
+	cls := startupClass(cfg.Advanced)
 	props := pnio.ARPropStateActive | pnio.ARPropPrmServerCMInit
 	if cfg.Advanced {
-		cls = pnio.RTClass2
 		props |= pnio.ARPropStartupAdvanced
 	}
 	subs := d.subIO()

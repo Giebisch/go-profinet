@@ -82,7 +82,7 @@ func TestSNMP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close() }()
-	eventually(t, 5*time.Second, "LLDP neighbor", func() bool { return len(d.lldpA.Neighbors()) == 1 })
+	eventually(t, 5*time.Second, "LLDP neighbor", func() bool { return len(d.ports[0].lldpA.Neighbors()) == 1 })
 	vals := snmpWalk(t, conn)
 	mac := nd.mux.HardwareAddr()
 	for oid, want := range map[string]string{
