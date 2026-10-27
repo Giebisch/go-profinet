@@ -46,7 +46,7 @@ against (see [the matrix](#interop-matrix)).
 | Connect, IOSAR (device access, supervisor) | ✅ | ✅ | profinet-py |
 | ExpectedSubmoduleBlockReq, ModuleDiffBlock | ✅ | ✅ (wrong, substitute, missing; IOPS bad) | p-net, pnio-rs, profinet-py |
 | PrmEnd, ApplicationReady | ✅ | ✅ | p-net, pnio-rs, profinet-py |
-| PrmBegin (re-parameterization in Data) | ◐ (`RecordClient.Control`; not in the lifecycle) | ✅ | |
+| PrmBegin (re-parameterization in Data): PrmBegin, writes, PrmEnd, ApplicationReady | ✅ (`Device.Reparameterize`) | ✅ | profinet-py re-parameterizes go-profinet's device (`TestProfinetPyReparameterize`); p-net (DD 81 14 08: it accepts no DControl but PrmEnd) and pnio-rs (DD 81 3D 03) refuse PrmBegin in Data, their ARs run on (`TestPnetReparameterize`, `TestPnioRsReparameterize`) |
 | Release, abort, CM initiator activity timeout | ✅ | ✅ | p-net, pnio-rs |
 | ARRPCBlockReq (controller RPC port) | ✅ | ✅ | |
 | Several ARs on one device (`MaxARs`) | ✅ | ✅ | profinet-py (IOSAR + IOCAR) |

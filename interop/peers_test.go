@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-profinet/pnio"
 )
 
 // TestPnioRsController: go-profinet as IO-Controller of pnio-rs, with the
@@ -162,6 +164,84 @@ func TestProfinetPyController(t *testing.T) {
 	e.expect("Diagnosis alarm sent to profinet-py and acknowledged", hasEvent(evs, "diagnosis-sent") && last(evs, "diagnosis-sent")["error"] == nil, "%v", last(evs, "diagnosis-sent"))
 	e.oracles(stop(), peerDeviation{Protocol: "PNIO-CM", Message: "Trailing stray characters",
 		Why: "profinet-py writes I&M1 with BlockLength 58 and two padding octets; the standard block is 56 octets (tshark flags the extra octets of its Write request)"})
+}
+
+// TestPnioRsReparameterize: pnio-rs answers PrmBegin in Data with
+// DD 81 3D 03 (CMDEV state conflict): not applicable; its AR runs on.
+func TestPnioRsReparameterize(t *testing.T) {
+	e := newEnv(t)
+	img := image("pnio-rs")
+	e.result.peer("pnio-rs", img, "device")
+	dev := e.start("pniors", img, 30, "device", "--station", "pnio-dut")
+	e.waitEvent(dev, 30*time.Second, "start", named("start"))
+	im1 := hex.EncodeToString((&pnio.IM1{TagFunction: "reparameterized"}).Append(nil))
+	r := report(t, e.otf("ctrl", 2, 90*time.Second, "controller", "-station", "pnio-dut", "-model", "/gsdml-testdata/pnio-rs_sample-16real-32bool.xml",
+		"-advanced", "-reparam", "0:1:0xAFF1:"+im1, "-duration", "2s"))
+	if r["running"] != true {
+		t.Fatalf("not running: %v", r["error"])
+	}
+	var re map[string]any
+	for _, x := range r["records"].([]any) {
+		if m := x.(map[string]any); m["op"] == "reparameterize" {
+			re = m
+		}
+	}
+	if re != nil && re["error"] == nil {
+		e.expect("Re-parameterization in Data (pnio-rs)", re["state"] == "Running", "%v", re)
+		return
+	}
+	e.result.na("Re-parameterization in Data (pnio-rs)", "pnio-rs refuses PrmBegin in Data: "+str(re["error"]))
+	e.expect("A refused PrmBegin leaves the AR running (pnio-rs)", re != nil && re["state"] == "Running" && r["state"] == "Running", "%v %v", re, r["state"])
+}
+
+// TestProfinetPyReparameterize: profinet-py, an independent IO-Controller,
+// re-parameterizes go-profinet's IO-Device in Data: PrmBegin, a record
+// write, PrmEnd; the device answers with ApplicationReady and its AR goes
+// back to Data while cyclic data flows.
+func TestProfinetPyReparameterize(t *testing.T) {
+	e := newEnv(t)
+	img := image("profinet-py")
+	e.result.peer("profinet-py", img, "controller")
+	dev := e.startOTF("dut", 20, "device", "-station", "otf-dut", "-gsdml-out", "/share/otf-dut.xml")
+	e.waitEvent(dev, 30*time.Second, "start", named("start"))
+	stop := e.capture(dev, "profinet-py-reparameterize.pcap")
+	out := e.run("pypn", img, 3, 3*time.Minute, "controller", "--station", "otf-dut", "--gsdml", "/share/otf-dut.xml",
+		"--read-input", "1:1", "--duration", "2", "--reparam", "2:1:0x10:0009")
+	var rep struct {
+		Steps []struct {
+			Step  string `json:"step"`
+			OK    bool   `json:"ok"`
+			Value any    `json:"value"`
+			Error string `json:"error"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal(lastLine(out), &rep); err != nil {
+		t.Fatalf("profinet-py output: %v\n%s", err, out)
+	}
+	res := map[string]string{}
+	for _, st := range rep.Steps {
+		if st.OK {
+			res[st.Step] = "ok"
+		} else {
+			res[st.Step] = st.Error
+		}
+	}
+	e.expect("Cyclic AR (IOCARSingle) by profinet-py", res["start-cyclic"] == "ok", "%v", res)
+	e.expect("PrmBegin in Data accepted (profinet-py)", res["prm-begin"] == "ok", "%s", res["prm-begin"])
+	e.expect("Record write between PrmBegin and PrmEnd (profinet-py)", res["reparam-write 2:1:0x10"] == "ok", "%s", res["reparam-write 2:1:0x10"])
+	e.expect("PrmEnd after re-parameterization (profinet-py)", res["prm-end"] == "ok", "%s", res["prm-end"])
+	e.expect("ApplicationReady after re-parameterization, answered by profinet-py", res["reparam-application-ready"] == "ok", "%s", res["reparam-application-ready"])
+	var path []string
+	for _, ev := range e.events(dev) {
+		if ev["event"] == "ar" && ev["type"] == "IOCARSingle" {
+			path = append(path, str(ev["to"]))
+		}
+	}
+	got := strings.Join(path, ",")
+	e.expect("Device AR: Data, Parameterizing, ApplicationReadyPending, Data", strings.Contains(got, "Data,Parameterizing,ApplicationReadyPending,Data"), "%s", got)
+	e.expect("Cyclic inputs after re-parameterization", res["input 1:1"] == "ok", "%s", res["input 1:1"])
+	e.oracles(stop(), peerDeviation{Protocol: "PNIO-CM", Message: "Trailing stray characters",
+		Why: "profinet-py writes I&M1 with BlockLength 58 and two padding octets (its scenario's write-im1 step)"})
 }
 
 // TestProfinetPyFixtures: profinet-py, an independent GSDML parser and
