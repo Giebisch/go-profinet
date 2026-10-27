@@ -679,10 +679,14 @@ func (e *Entity) sendLinkChange(via int, up bool, about int) {
 	go func() {
 		defer e.wg.Done()
 		for n := 0; n < e.cfg.Profile.LinkRepeat; n++ {
+			// Stop when the link changed again: a newer change started,
+			// or the port's link (read now, not as last polled) is no
+			// longer what this burst reports. A LinkDown that arrives
+			// after the link came back would open a closed ring.
 			e.mu.Lock()
 			stale := e.linkGen != gen
 			e.mu.Unlock()
-			if stale {
+			if stale || e.linkUp(about) != up {
 				return
 			}
 			e.send(via, MACControl, f)
