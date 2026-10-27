@@ -37,6 +37,16 @@ func portMismatch(t *testing.T, cd *controller.Device) []uint16 {
 	return out
 }
 
+func drainAlarms(ch <-chan controller.AlarmEvent) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
 // waitPortAlarm waits for a diagnosis alarm of the first port, appearing
 // or disappearing, with the extended error type ext.
 func waitPortAlarm(t *testing.T, alarms <-chan controller.AlarmEvent, appears bool, ext uint16) {
@@ -76,6 +86,9 @@ func TestPeerCheck(t *testing.T) {
 		OnAlarm:    func(a controller.AlarmEvent) { alarms <- a },
 	})
 	eventually(t, 5*time.Second, "right neighbor", func() bool { return len(portMismatch(t, cd)) == 0 })
+	// The check was evaluated before the device heard its neighbor: drop
+	// the alarms of that.
+	drainAlarms(alarms)
 
 	// The neighbor goes: its LLDP information times out.
 	_ = sw.Close()
@@ -85,11 +98,13 @@ func TestPeerCheck(t *testing.T) {
 		t.Fatalf("diagnosis %#x", got)
 	}
 	// It comes back.
+	drainAlarms(alarms)
 	e.device("sw-1", "192.168.0.12", testModel(), nil)
 	waitPortAlarm(t, alarms, false, 0x8005)
 	eventually(t, 5*time.Second, "cleared", func() bool { return len(portMismatch(t, cd)) == 0 })
 
 	// Parameterization in the Data state: another expected neighbor.
+	drainAlarms(alarms)
 	c := pnio.PDPortDataCheck{Subslot: model.SubslotPort1, Peers: []pnio.CheckPeer{{PortID: "port-001", ChassisID: "sw-9"}}}
 	if err := cd.WriteRecord(context.Background(), controller.Record{Subslot: model.SubslotPort1, Index: pnio.IndexPDPortDataCheck}, c.Append(nil)); err != nil {
 		t.Fatal(err)

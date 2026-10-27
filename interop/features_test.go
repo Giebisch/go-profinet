@@ -125,32 +125,41 @@ func pnetPortMismatch(rep map[string]any) ([]float64, bool) {
 // TestPnetPortCheck: go-profinet's controller writes PDPortDataCheck
 // (CheckPeers) to p-net's port before PrmEnd; p-net, independent of
 // go-profinet, decodes it (its log echoes the wanted peer) and evaluates it
-// against its LLDP neighbor, with the diagnoses go-profinet's device
-// reports in the same situations. On the Docker bridge p-net hears its own
-// LLDP frames reflected and takes itself for its neighbor (go-profinet's
-// agent drops its own frames): its neighbor is "pnet-dut", whatever else is
-// on the segment.
+// against its LLDP neighbor, a go-profinet device, with the diagnoses
+// go-profinet's device reports in the same situations. Docker Desktop's
+// bridge reflects p-net's own LLDP frames back to it, and p-net, which does
+// not drop its own frames, then takes itself for a neighbor too; the check
+// of the right neighbor is not applicable there.
 func TestPnetPortCheck(t *testing.T) {
 	e := newEnv(t)
 	if !e.forwardLLDP() {
 		e.result.na("PDPortDataCheck evaluated by p-net", "the Docker bridge does not forward LLDP here")
 		t.Skip("bridge does not forward LLDP")
 	}
+	e.startOTF("peer", 20, "device", "-station", "otf-peer")
 	dev := pnet(e, "pnet-dut")
-	time.Sleep(6 * time.Second) // p-net hears LLDP (5 s interval)
+	time.Sleep(7 * time.Second) // p-net hears the peer's LLDP (5 s interval)
 	check := func(station, port string) map[string]any {
 		c := pnio.PDPortDataCheck{Subslot: 0x8001, Peers: []pnio.CheckPeer{{PortID: port, ChassisID: station}}}
 		out := e.otf("ctrl-"+station, 2, 90*time.Second, "controller", "-station", "pnet-dut", "-model", "/otfnode-testdata/pnet-model.json",
 			"-param", "0:0x8001:0x802B:"+hex.EncodeToString(c.Append(nil)), "-diag", "-duration", "2s")
 		return report(t, out)
 	}
-	rep := check("pnet-dut", "port-001")
+	pnetLog := func(pattern string) bool {
+		out := string(e.exec(dev, "sh", "-c", "grep -c -F '"+pattern+"' /run/profinet-interop/pn_dev.log || true"))
+		n := strings.TrimSpace(out)
+		return n != "" && n != "0"
+	}
+	rep := check("otf-peer", "port-001")
 	got, ok := pnetPortMismatch(rep)
 	e.expect("PDPortDataCheck accepted by p-net (written before PrmEnd)", rep["running"] == true, "running %v error %v", rep["running"], rep["error"])
-	e.expect("CheckPeers, the neighbor p-net sees: no remote mismatch (p-net)", ok && len(got) == 0, "%v", rep["diagnosis"])
+	if pnetLog(`mismatch diagnosis: "pnet-dut"`) {
+		e.result.na("CheckPeers, the right neighbor: no remote mismatch (p-net)", "this bridge reflects p-net's own LLDP and p-net takes itself for a neighbor")
+	} else {
+		e.expect("CheckPeers, the right neighbor: no remote mismatch (p-net)", ok && len(got) == 0, "%v", rep["diagnosis"])
+	}
 	rep = check("nobody", "port-001")
 	got, ok = pnetPortMismatch(rep)
 	e.expect("CheckPeers, another name of station: remote mismatch 0x8000 (p-net)", ok && len(got) == 1 && got[0] == 0x8000, "%v", rep["diagnosis"])
-	logged := string(e.exec(dev, "sh", "-c", "grep -c 'Wanted first peer station name: nobody Port: port-001' /run/profinet-interop/pn_dev.log || true"))
-	e.expect("CheckPeers decoded by p-net as written (its log)", strings.TrimSpace(logged) != "0" && strings.TrimSpace(logged) != "", "log matches: %q", logged)
+	e.expect("CheckPeers decoded by p-net as written (its log)", pnetLog("Wanted first peer station name: nobody Port: port-001"), "")
 }
