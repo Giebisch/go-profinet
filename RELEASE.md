@@ -4,6 +4,16 @@ go-profinet follows semantic versioning from v1.0.0; before that, minor
 versions may change the API. Releases are tagged by the Release workflow
 (`.github/workflows/release.yml`).
 
+## Unreleased (GSDML validation)
+
+- GSDML validation (roadmap 1C): `gsdml.Check` grades every issue as
+  error, warning or unvalidated and names its rule; semantic rules for IO
+  data that does not fit an RT frame (error), slots against PhysicalSlots
+  and AllowedInSlots, record indexes, module ident numbers, interface and
+  port subslots and reduction ratios (warnings, each with its basis);
+  elements and attributes outside the catalog and newer schema versions
+  are reported as unvalidated. `Validate` still fails on errors only.
+
 ## v0.1.2 (2026-10-26)
 
 Fixes found by soaking every CI job and the interop suite 25 times in
