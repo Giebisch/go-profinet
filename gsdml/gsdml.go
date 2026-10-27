@@ -214,6 +214,10 @@ type Issue struct {
 	// "ISO15745Profile/ProfileBody/DeviceIdentity".
 	Path    string `json:"path"`
 	Message string `json:"message"`
+	// Severity grades the issue; Validate reports only errors.
+	Severity Severity `json:"severity"`
+	// Rule names the rule (Rule*); empty means RuleStructure.
+	Rule string `json:"rule,omitempty"`
 }
 
 func (i Issue) String() string { return i.Path + ": " + i.Message }
@@ -251,12 +255,10 @@ func (v *validator) push(e string) { v.path = append(v.path, e) }
 func (v *validator) pop()          { v.path = v.path[:len(v.path)-1] }
 
 func (v *validator) report(format string, a ...any) {
-	v.issues = append(v.issues, Issue{Path: strings.Join(v.path, "/"), Message: fmt.Sprintf(format, a...)})
+	v.issues = append(v.issues, Issue{Path: strings.Join(v.path, "/"), Message: fmt.Sprintf(format, a...), Rule: RuleStructure})
 }
 
 func (v *validator) missing(child string) { v.report("missing required element %s", child) }
-
-func (v *validator) unknown([]*Node) {}
 
 func (v *validator) attr(name, value, typ string, required bool) {
 	if value == "" {
@@ -304,26 +306,14 @@ func (v *validator) attr(name, value, typ string, required bool) {
 }
 
 // Validate checks the document against the catalog's structural and
-// lexical rules and checks that every ID is unique and every reference
+// lexical rules, checks that every ID is unique and every reference
 // (module, submodule, value item, graphic, category and text references)
-// resolves. It returns nil or a *ValidationError.
+// resolves, and that no submodule's IO data exceed an RT frame. It returns
+// nil or a *ValidationError with the errors; Check reports the warnings
+// and the unvalidated content as well.
 func Validate(doc *Document) error {
-	v := &validator{ids: map[string]string{}, texts: map[string]bool{}}
-	doc.validate(v)
-	for _, r := range v.refs {
-		if _, ok := v.ids[r.id]; !ok {
-			v.issues = append(v.issues, Issue{Path: r.path, Message: fmt.Sprintf("attribute %s: no element with ID %q", r.kind, r.id)})
-		}
-	}
-	for _, r := range v.tids {
-		if !v.texts[r.id] {
-			v.issues = append(v.issues, Issue{Path: r.path, Message: fmt.Sprintf("attribute TextId: no text %q in the ExternalTextList", r.id)})
-		}
-	}
-	if len(v.issues) > 0 {
-		return &ValidationError{Issues: v.issues}
-	}
-	return nil
+	r := Check(doc)
+	return r.Err()
 }
 
 // parseUint parses a decimal or 0x hexadecimal unsigned value of bits

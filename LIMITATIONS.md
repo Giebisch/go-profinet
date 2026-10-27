@@ -38,7 +38,10 @@ structure, attribute types and references that a device model relies on.
 `gengsdml -xsd DIR` compares the catalog with a licensed local copy of the
 XSDs (0 differences against v2.35). `gsdml.Validate` is not PI's GSDML
 checker, and a file it accepts may still fail PI's. Elements and attributes
-outside the catalog are kept verbatim, not validated.
+outside the catalog are kept verbatim and reported as unvalidated by
+`gsdml.Check`; its semantic rules are a small set, each with its basis
+(docs/GSDML.md), several of them local heuristics. Schema versions after 2.45
+(2.46, 2.50) are not in the catalog: their schemas are members-only.
 
 ## Timing
 
