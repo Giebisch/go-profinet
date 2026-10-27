@@ -41,6 +41,14 @@ On a real interface the device uses the OS's UDP stack; a DCP Set IP is
 passed to `ApplyIP`, which must configure the interface (go-profinet does
 not change the OS's addresses).
 
+`Hello: dcp.HelloOnLinkUp` makes the device announce itself with DCP Hello
+when it starts and whenever its link comes up (with a port that reports its
+link state) while no IO controller is connected; `HelloOptions` sets the
+number of Hellos, their interval and, for `dcp.HelloOnLinkUpDelayed`, the
+delay after the link came up. A DCP Set and a Connect end the sequence. Set
+`model.Capabilities.DCPHello` as well so that the generated GSDML declares
+it ([DCP.md](DCP.md#hello)).
+
 ## Process data, records and events
 
 ```go

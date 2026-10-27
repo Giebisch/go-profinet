@@ -10,6 +10,7 @@ addresses and timings differ from run to run).
 |---------|-------|------|
 | [quickstart](quickstart/main.go) | DCP, Connect, a parameter, cyclic data both ways, I&M0 | self-contained |
 | [discovery](discovery/main.go) | DCP Identify, naming and addressing a new device, LLDP neighbors | self-contained |
+| [hello](hello/main.go) | a device announcing itself with DCP Hello; the controller connecting through it without Identify | self-contained |
 | [alarms](alarms/main.go) | a diagnosis alarm, reading the diagnosis, the alarm when it disappears | self-contained |
 | [records](records/main.go) | ReadImplicit (I&M0, real configuration), a device access AR for writes, WriteMultiple and diagnosis in an AR, PNIO errors | self-contained |
 | [topology](topology/main.go) | LLDP between devices, PDRealData read with ReadImplicit | self-contained |
@@ -42,6 +43,19 @@ LLDP neighbor io-1 port port-001.io-1 (02:00:00:00:00:0a)
 LLDP neighbor io-2 port port-001.io-2 (02:00:00:00:00:0b)
 LLDP neighbor io-3 port port-001.io-3 (02:00:00:00:00:0c)
 ```
+
+## hello
+
+```console
+$ go run ./examples/hello
+first attempt: controller: resolve io-1: dcp: station "io-1": profinet: not found
+controller: next attempt in 30 s
+device: started, sending DCP Hello
+controller: Running 4ms after the device started (connections through a Hello: 1)
+```
+
+The time is that of the in-process virtual network; on a real network the
+device's startup, the link and the RPC round trips add to it.
 
 ## alarms
 

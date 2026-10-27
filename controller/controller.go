@@ -52,6 +52,11 @@ type Config struct {
 	VendorID, DeviceID, Instance uint16
 	// DCP configures the DCP requester.
 	DCP dcp.ClientOptions
+	// IgnoreHello stops the controller from using DCP Hello requests. By
+	// default a Hello that names a configured device which is not
+	// connected starts its connection at once, with the MAC and IP
+	// address from the Hello and without an Identify.
+	IgnoreHello bool
 	// Logger receives diagnostics. nil logs nothing.
 	Logger profinet.Logger
 }
@@ -152,7 +157,35 @@ func (c *Controller) start() error {
 		return fmt.Errorf("controller: RPC client socket: %w", err)
 	}
 	c.rpcCli = rpc.NewClient(cli, true, rpc.ClientOptions{Logger: c.log, Activities: 16, Retransmit: 500 * time.Millisecond})
+	if !c.cfg.IgnoreHello {
+		hellos := c.dcp.Hellos(c.ctx, 64)
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			for id := range hellos {
+				c.hello(id)
+			}
+		}()
+	}
 	return nil
+}
+
+// hello passes a DCP Hello to the device it names.
+func (c *Controller) hello(id dcp.Identity) {
+	c.mu.Lock()
+	var d *Device
+	for _, x := range c.devices {
+		if x.cfg.StationName == id.NameOfStation {
+			d = x
+			break
+		}
+	}
+	c.mu.Unlock()
+	if d == nil {
+		c.log.Debugf("controller: Hello from %s (%q): not configured", id.MAC, id.NameOfStation)
+		return
+	}
+	d.offerHello(id)
 }
 
 // DCP returns the controller's DCP requester, for discovery and explicit

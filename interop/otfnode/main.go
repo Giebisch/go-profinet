@@ -222,6 +222,7 @@ func runController(args []string) error {
 	dhf := fs.Uint("dhf", 32, "data hold factor")
 	dur := fs.Duration("duration", 3*time.Second, "how long to run the AR")
 	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for Running")
+	reconnectMin := fs.Duration("reconnect-min", 0, "shortest wait between connection attempts (0: the library's default)")
 	im0 := fs.Bool("im0", false, "read I&M0")
 	diag := fs.Bool("diag", false, "read the device diagnosis")
 	alarms := fs.Int("wait-alarms", 0, "wait for this many alarms")
@@ -254,7 +255,7 @@ func runController(args []string) error {
 	alarmCh := make(chan struct{}, 64)
 	cfg := controller.DeviceConfig{
 		StationName: *station, Model: m, Advanced: *advanced, ReductionRatio: uint16(*rr),
-		DataHoldFactor: uint16(*dhf), WatchdogFactor: uint16(*dhf), ReconnectMax: 2 * time.Second,
+		DataHoldFactor: uint16(*dhf), WatchdogFactor: uint16(*dhf), ReconnectMin: *reconnectMin, ReconnectMax: max(2*time.Second, *reconnectMin),
 		OnState: func(from, to controller.State, err error) {
 			e := map[string]any{"event": "state", "from": from.String(), "to": to.String()}
 			if err != nil {
@@ -517,6 +518,7 @@ func runDevice(args []string) error {
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	alarmAfter := fs.Duration("alarm-after", 0, "raise a diagnosis on slot 1 this long after the AR reaches Data")
 	acceptIP := fs.Bool("apply-ip", true, "apply DCP Set IP to the interface (needs CAP_NET_ADMIN)")
+	hello := fs.Uint("hello", 0, "DCP Hello mode: 0 off, 1 on link up, 2 on link up after a delay")
 	_ = fs.Parse(args)
 	m := defaultModel()
 	if *modelFile != "" {
@@ -525,6 +527,7 @@ func runDevice(args []string) error {
 			return err
 		}
 	}
+	m.Capabilities.DCPHello = *hello != 0
 	if *gsdmlOut != "" {
 		doc, err := gsdml.FromModel(m, gsdml.GenerateOptions{SupervisorAR: true})
 		if err != nil {
@@ -543,7 +546,8 @@ func runDevice(args []string) error {
 		return err
 	}
 	defer closePort()
-	cfg := device.Config{Model: m, Mux: mux, StationName: *station, IP: ifaceSuite(*iface), Handler: otfHandler{}, Logger: profinet.NopLogger()}
+	cfg := device.Config{Model: m, Mux: mux, StationName: *station, IP: ifaceSuite(*iface), Handler: otfHandler{}, Logger: profinet.NopLogger(),
+		Hello: dcp.HelloMode(*hello)}
 	if *acceptIP {
 		cfg.ApplyIP = func(s dcp.IPSuite, _ bool) error { return setIP(*iface, s) }
 	}

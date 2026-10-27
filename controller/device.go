@@ -142,10 +142,13 @@ func CanTransition(from, to State) bool {
 // DeviceStats are the counters of a device.
 type DeviceStats struct {
 	Connects, Aborts uint64
-	Provider         rt.ProviderStats
-	Consumer         rt.ConsumerStats
-	Cycle            rt.TaskStats
-	Alarms           uint64
+	// Hellos is the number of connections that a DCP Hello of the
+	// device started, without an Identify.
+	Hellos   uint64
+	Provider rt.ProviderStats
+	Consumer rt.ConsumerStats
+	Cycle    rt.TaskStats
+	Alarms   uint64
 }
 
 // Device is a device of the controller.
@@ -153,19 +156,26 @@ type Device struct {
 	c   *Controller
 	cfg DeviceConfig
 
-	mu        sync.Mutex
-	state     State
-	lastErr   error
-	mac       ethernet.MAC
-	ip        dcp.IPSuite
-	ar        *arState
-	diff      *pnio.ModuleDiffBlock
-	waiters   []chan struct{}
-	outputs   map[subKey]*ioData
-	inputs    map[subKey]*ioData
-	iocs      map[subKey]uint8
-	connects  atomic.Uint64
-	aborts    atomic.Uint64
+	mu       sync.Mutex
+	state    State
+	lastErr  error
+	mac      ethernet.MAC
+	ip       dcp.IPSuite
+	ar       *arState
+	diff     *pnio.ModuleDiffBlock
+	waiters  []chan struct{}
+	outputs  map[subKey]*ioData
+	inputs   map[subKey]*ioData
+	iocs     map[subKey]uint8
+	connects atomic.Uint64
+	aborts   atomic.Uint64
+	hellos   atomic.Uint64
+	// hello is the identity of the device's last DCP Hello and helloAt
+	// its arrival (guarded by mu); helloWake ends the wait between two
+	// connection attempts.
+	hello     *dcp.Identity
+	helloAt   time.Time
+	helloWake chan struct{}
 	alarmsRx  atomic.Uint64
 	lastStats DeviceStats
 
@@ -262,13 +272,14 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 		cfg.ReconnectMax = 10 * time.Second
 	}
 	d := &Device{
-		c:       c,
-		cfg:     cfg,
-		outputs: map[subKey]*ioData{},
-		inputs:  map[subKey]*ioData{},
-		iocs:    map[subKey]uint8{},
-		stop:    make(chan struct{}),
-		stopped: make(chan struct{}),
+		c:         c,
+		cfg:       cfg,
+		outputs:   map[subKey]*ioData{},
+		inputs:    map[subKey]*ioData{},
+		iocs:      map[subKey]uint8{},
+		stop:      make(chan struct{}),
+		stopped:   make(chan struct{}),
+		helloWake: make(chan struct{}, 1),
 	}
 	cfg.Model.Each(func(p model.PluggedSubmodule) {
 		k := subKey{p.Slot, p.Submodule.Subslot}
@@ -437,6 +448,7 @@ func (d *Device) Stats() DeviceStats {
 	d.mu.Unlock()
 	s.Connects = d.connects.Load()
 	s.Aborts = d.aborts.Load()
+	s.Hellos = d.hellos.Load()
 	s.Alarms = d.alarmsRx.Load()
 	if a != nil {
 		s.Provider = a.provider.Stats()
@@ -574,6 +586,9 @@ func (d *Device) run() {
 		t := time.NewTimer(backoff)
 		select {
 		case <-t.C:
+		case <-d.helloWake:
+			t.Stop()
+			d.c.log.Debugf("controller: %s: Hello: reconnecting now", d.cfg.StationName)
 		case <-d.stop:
 			t.Stop()
 		}
@@ -637,12 +652,46 @@ func (d *Device) session() (ran bool, err error) {
 	}
 }
 
-// resolve finds the device with DCP and makes sure it has the configured
-// IP suite.
+// helloFresh is how long a DCP Hello stands in for an Identify.
+const helloFresh = 3 * time.Second
+
+// offerHello records a Hello of the device and, if it waits between two
+// connection attempts, wakes it.
+func (d *Device) offerHello(id dcp.Identity) {
+	d.mu.Lock()
+	d.hello, d.helloAt = &id, time.Now()
+	d.mu.Unlock()
+	select {
+	case d.helloWake <- struct{}{}:
+	default:
+	}
+}
+
+// takeHello returns the identity of a recent Hello with an IP address and
+// forgets it.
+func (d *Device) takeHello() (dcp.Identity, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	h, at := d.hello, d.helloAt
+	d.hello = nil
+	if h == nil || time.Since(at) > helloFresh || h.IP.IsZero() {
+		return dcp.Identity{}, false
+	}
+	return *h, true
+}
+
+// resolve finds the device with DCP, from a recent Hello or with an
+// Identify, and makes sure it has the configured IP suite.
 func (d *Device) resolve(ctx context.Context) (dcp.Identity, error) {
-	id, err := d.c.dcp.IdentifyName(ctx, d.cfg.StationName, time.Second)
-	if err != nil {
-		return id, fmt.Errorf("controller: resolve %s: %w", d.cfg.StationName, err)
+	id, fromHello := d.takeHello()
+	if fromHello {
+		d.c.log.Infof("controller: %s: resolved by its Hello: %s", d.cfg.StationName, id.MAC)
+		d.hellos.Add(1)
+	} else {
+		var err error
+		if id, err = d.c.dcp.IdentifyName(ctx, d.cfg.StationName, time.Second); err != nil {
+			return id, fmt.Errorf("controller: resolve %s: %w", d.cfg.StationName, err)
+		}
 	}
 	mi := d.cfg.Model.Identity
 	if id.VendorID != mi.VendorID || id.DeviceID != mi.DeviceID {

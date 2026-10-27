@@ -160,6 +160,7 @@ func ToModel(doc *Document, dapID string) (*model.Device, error) {
 			}
 			m.DAP.Submodules = append(m.DAP.Submodules, s)
 			m.Capabilities.SupportedRTClasses = strings.FieldsFunc(it.SupportedRTClasses, func(r rune) bool { return r == ' ' || r == ';' })
+			m.Capabilities.DCPHello = ParseBool(it.DCPHelloSupported, false)
 			if ar := it.ApplicationRelations; ar != nil {
 				if n, err := ParseUint16(ar.NumberOfAR); err == nil && n > 0 {
 					m.Capabilities.MaxARs = int(n)
@@ -569,7 +570,7 @@ func FromModel(m *model.Device, opts GenerateOptions) (*Document, error) {
 			}
 			sd.InterfaceSubmoduleItems = append(sd.InterfaceSubmoduleItems, &InterfaceSubmoduleItem{
 				ID: fmt.Sprintf("IF%d", s.Subslot), SubslotNumber: strconv.Itoa(int(s.Subslot)), TextID: g.text(fmt.Sprintf("T_IF%d", s.Subslot), nonEmpty(s.Name, "Interface")),
-				SubmoduleIdentNumber: hex32(s.IdentNumber), SupportedRTClasses: "RT_CLASS_1", SupportedProtocols: "SNMP;LLDP", DCPHelloSupported: "false",
+				SubmoduleIdentNumber: hex32(s.IdentNumber), SupportedRTClasses: "RT_CLASS_1", SupportedProtocols: "LLDP", DCPHelloSupported: strconv.FormatBool(m.Capabilities.DCPHello),
 				ApplicationRelations: &ApplicationRelations{StartupMode: "Legacy;Advanced", NumberOfAR: strconv.Itoa(max(m.Capabilities.MaxARs, 1)),
 					TimingProperties: &TimingProperties{SendClock: "32", ReductionRatio: rr}},
 			})

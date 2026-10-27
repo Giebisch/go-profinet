@@ -28,7 +28,8 @@ The library provides:
   I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology
 - **DCP** (`dcp`): Identify with filters and response delay, Get, Set
   (station name, IP suite, temporary or permanent), Signal, ResetToFactory,
-  Hello; requester and responder
+  Hello (sent by the device, used by the controller to connect without
+  Identify); requester and responder
 - **LLDP** (`lldp`) with the PROFINET TLVs, an agent and a neighbor table
 - **Connectionless DCE/RPC** (`rpc`) over any `net.PacketConn`: activities,
   fragmentation and reassembly, at-most-once execution, idempotent calls
@@ -79,7 +80,7 @@ is from PI's public pages.
 | IO-Controller | ✅ | — | — | ✅ minimal (cyclic marked experimental) | not documented publicly |
 | IO-Device | ✅ | ✅ | ✅ | — | ✅ |
 | DCP requester | ✅ Identify (all filters), Get, Set, Signal, Reset | — | — | ✅ | — |
-| DCP responder | ✅ incl. filters, response delay, requester lock | ✅ incl. Hello | ◐ Identify by name or all; no Get, Set name, Signal or Reset | — | ✅ |
+| DCP responder | ✅ incl. filters, response delay, requester lock, Hello | ✅ incl. Hello | ◐ Identify by name or all; no Get, Set name, Signal or Reset | — | ✅ |
 | LLDP | ✅ agent and neighbor table | ✅ | — | — (reads PDRealData only) | ✅ |
 | RT_CLASS_1 / RT_CLASS_2 (unsynchronized) | ✅ / ✅ | ✅ / ✅ | ◐ RT_CLASS_2 FrameIDs only | ✅ / — | ✅ |
 | IRT (RT_CLASS_3) | — | — | — | — | ✅ with a hardware driver |
