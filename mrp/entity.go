@@ -149,6 +149,10 @@ type Entity struct {
 	// linkTimer is the client's wait for a TopologyChange after a port
 	// came up; it unblocks the port when it runs out.
 	linkTimer *time.Timer
+	// linkGen numbers a client's link changes: a burst of link change
+	// frames stops when a newer change starts, so that a LinkDown is
+	// never repeated after the link came back.
+	linkGen uint64
 
 	testsSent, testsRecv, topChanges, linkChanges, forwarded, malformed atomic.Uint64
 
@@ -343,6 +347,7 @@ func (e *Entity) managerLink() []func() {
 
 // clientLink: mu held.
 func (e *Entity) clientLink(i int, up bool, other int) []func() {
+	e.linkGen++
 	if !up {
 		e.setBlocked(i, true)
 		if e.up[other] {
@@ -514,7 +519,26 @@ func (e *Entity) managerRecv(port int, f Frame) {
 	case f.Link != nil:
 		e.linkChanges.Add(1)
 		if f.Link.Up {
-			// The tests will close the ring.
+			// A client's port came up: the ring may close now. Block
+			// the secondary port at once rather than wait for the tests
+			// (which reopen the ring if it is not closed), and say so:
+			// no client unblocks into a loop.
+			e.mu.Lock()
+			var closed bool
+			if e.up[0] && e.up[1] && (e.ringOpen || !e.blocked[1]) {
+				e.ringOpen = false
+				e.state = StateChkRC
+				e.misses = 0
+				e.setBlocked(1, true)
+				closed = true
+			}
+			e.mu.Unlock()
+			if closed {
+				e.log.Infof("mrp: manager: ring closing (link up at %s)", f.Link.SA)
+				e.cfg.Switch.Flush()
+				e.sendTopologyChange(e.cfg.Profile.TopChangeInterval)
+				e.changed()
+			}
 			return
 		}
 		e.mu.Lock()
@@ -571,23 +595,30 @@ func (e *Entity) clientRecv(port int, ef ethernet.Frame, f Frame) {
 		e.testsRecv.Add(1)
 		e.mu.Lock()
 		e.ringOpen = f.Test.RingState == RingOpen
+		// The manager reports the ring closed: its secondary port is
+		// blocked, so a port waiting for it may forward.
+		unblocked := e.state == StatePT && !e.ringOpen
+		if unblocked {
+			e.unblockPTLocked()
+		}
 		e.mu.Unlock()
+		if unblocked {
+			e.changed()
+		}
 	case f.TopologyChange != nil:
 		e.topChanges.Add(1)
 		interval := time.Duration(f.TopologyChange.Interval) * time.Millisecond
 		e.mu.Lock()
-		switch e.state {
-		case StatePT:
-			for i := range e.blocked {
-				if e.up[i] {
-					e.setBlocked(i, false)
-				}
-			}
-			e.state = StatePTIdle
-			if e.linkTimer != nil {
-				e.linkTimer.Stop()
-			}
-		case StateDE:
+		// A port waiting for the manager unblocks on a TopologyChange of
+		// a closed ring (this manager sends those with an interval; an
+		// opening one, interval 0, may still be on its way from before
+		// the port came up) or once the manager's tests say closed.
+		closedTC := f.TopologyChange.Interval > 0 || !e.ringOpen
+		switch {
+		case e.state == StatePT && !closedTC:
+		case e.state == StatePT:
+			e.unblockPTLocked()
+		case e.state == StateDE:
 			e.state = StateDEIdle
 		}
 		e.mu.Unlock()
@@ -597,6 +628,20 @@ func (e *Entity) clientRecv(port int, ef ethernet.Frame, f Frame) {
 			time.AfterFunc(interval, e.cfg.Switch.Flush)
 		}
 		e.changed()
+	}
+}
+
+// unblockPTLocked ends a client's wait for the manager: its ports that
+// are up forward (mu held).
+func (e *Entity) unblockPTLocked() {
+	for i := range e.blocked {
+		if e.up[i] {
+			e.setBlocked(i, false)
+		}
+	}
+	e.state = StatePTIdle
+	if e.linkTimer != nil {
+		e.linkTimer.Stop()
 	}
 }
 
@@ -627,10 +672,19 @@ func (e *Entity) sendLinkChange(via int, up bool, about int) {
 	e.linkChanges.Add(1)
 	f := Frame{Link: &LinkChange{Up: up, SA: e.cfg.MAC, PortRole: PortRole(about),
 		Interval: uint16(e.cfg.Profile.LinkInterval / time.Millisecond), Blocked: 1}}
+	e.mu.Lock()
+	gen := e.linkGen
+	e.mu.Unlock()
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
 		for n := 0; n < e.cfg.Profile.LinkRepeat; n++ {
+			e.mu.Lock()
+			stale := e.linkGen != gen
+			e.mu.Unlock()
+			if stale {
+				return
+			}
 			e.send(via, MACControl, f)
 			select {
 			case <-e.ctx.Done():

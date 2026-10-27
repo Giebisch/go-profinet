@@ -124,9 +124,14 @@ func TestRing(t *testing.T) {
 		s := mgr.Status()
 		return !s.RingOpen && s.State == StateChkRC && s.Blocked[1] && !s.Blocked[0]
 	})
-	if s := nodes[1].ent.Status(); s.Blocked[0] || s.Blocked[1] || s.State != StatePTIdle && s.State != StateDEIdle {
-		t.Fatalf("client %+v", s)
-	}
+	eventually(t, 5*time.Second, "clients forwarding", func() bool {
+		for _, nd := range nodes[1:] {
+			if s := nd.ent.Status(); s.Blocked[0] || s.Blocked[1] || s.State != StatePTIdle && s.State != StateDEIdle {
+				return false
+			}
+		}
+		return true
+	})
 	// No loop: one broadcast reaches each other station once.
 	before := [3]int64{nodes[0].got.Load(), nodes[1].got.Load(), nodes[2].got.Load()}
 	broadcast(t, nodes[1])
@@ -169,6 +174,9 @@ func TestRing(t *testing.T) {
 	broadcast(t, nodes[2])
 	time.Sleep(300 * time.Millisecond)
 	if d0, d1 := nodes[0].got.Load()-before[0], nodes[1].got.Load()-before[1]; d0 != 1 || d1 != 1 {
+		for i, nd := range nodes {
+			t.Logf("node %d: %+v bridge %v %v", i, nd.ent.Status(), nd.br.State(0), nd.br.State(1))
+		}
 		t.Fatalf("after closing: %d, %d", d0, d1)
 	}
 	if s := mgr.Status(); s.TestsSent == 0 || s.TestsReceived == 0 || s.TopologyChanges == 0 || s.Role != RoleManager {
