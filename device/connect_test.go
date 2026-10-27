@@ -214,6 +214,7 @@ func TestConnectARLimits(t *testing.T) {
 	c1 := p.ioCAR()
 	p.establish(c1)
 	c2 := p.ioCAR()
+	c2.AR.InitiatorObject[11] ^= 0xFF // another controller: the same one would replace c1
 	resp, err := p.connect(c2)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +228,9 @@ func TestConnectARLimits(t *testing.T) {
 			}
 		}
 	}
-	_, err = p.connect(p.ioCAR())
+	c3 := p.ioCAR()
+	c3.AR.InitiatorObject[11] ^= 0x0F
+	_, err = p.connect(c3)
 	wantStatus(t, err, pnio.Code1CMRPC, pnio.CMRPCOutOfARs)
 	if err := p.release(c2); err != nil {
 		t.Fatal(err)
@@ -769,5 +772,34 @@ func TestConcurrentConnects(t *testing.T) {
 		if o := d.ownerOf(k.slot, k.subslot); o != a1 && o != a2 {
 			t.Fatalf("submodule %v without an owner", k)
 		}
+	}
+}
+
+func TestConnectSameControllerReplaces(t *testing.T) {
+	n := newNet(t)
+	h := newRecHandler()
+	d, _ := n.device(h)
+	p := n.peer(d, "192.168.0.2", true)
+	// A controller that lost its AR connects anew before the device saw the
+	// old one end: the new AR replaces the old one and owns the submodules.
+	c1 := p.ioCAR()
+	p.establish(c1)
+	c2 := p.ioCAR()
+	resp, err := p.connect(c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, api := range resp.ModuleDiff.APIs {
+		for _, m := range api.Modules {
+			for _, sm := range m.Submodules {
+				if sm.State&(0xF<<7) == pnio.SubmStateARInfoCtrlLock {
+					t.Fatalf("slot %d subslot %d locked", m.Slot, sm.Subslot)
+				}
+			}
+		}
+	}
+	h.waitReason(t, c1.AR.ARUUID, pnio.AbortRerun)
+	if _, ok := arState(d, c1.AR.ARUUID); ok {
+		t.Fatal("old AR still there")
 	}
 }
