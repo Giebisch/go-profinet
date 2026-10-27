@@ -13,7 +13,7 @@ and what would lift it.
 | PROFINET security classes 1–3, PROFIsafe | no authentication, integrity protection or safety layer (see [SECURITY.md](SECURITY.md)) |
 | Fast Startup beyond DCP Hello, DHCP | the device sends DCP Hello and the controller connects through it; the rest of Fast Startup (fixed MAU type with autonegotiation off, stored parameters, ARFSUBlock) needs control over the link and persistence that a library on a general-purpose OS does not have |
 | Port checks and adjustments beyond peers and boundaries | the device evaluates CheckPeers and applies PeerToPeerBoundary, DCPBoundary and PDInterfaceAdjust; it refuses CheckMAUType, CheckLinkState, CheckLineDelay (the real MAU type is not known to a library, the line delay is not measured, the link-state diagnosis code is not public) and the domain, multicast, MAU, link-state and preamble adjustments (no frame forwarding with one port; the link belongs to the operating system), with PNIORW "feature not supported" (0xA9), a code PI may define differently |
-| RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | |
+| RT over UDP (RT_CLASS_UDP), RT_CLASS_STREAM (TSN) | RT_CLASS_UDP has codecs only (`rt.AppendUDPPayload`/`DecodeUDP` for the RT payload on UDP port 34962, the RTClass, LT and AlarmCR transport fields in `pnio`), checked by tshark and scapy; the device refuses an RT_CLASS_UDP Connect (PNIO status DB 81 02 07, IOCRProperties) and the controller refuses to build one. No open implementation has a UDP data path to test against (p-net validates the fields only) |
 | GSDX, MRCD | their formats are not public (PI members only): see [docs/research/GSDML.md](docs/research/GSDML.md) |
 
 What of this list can be built without PI membership or PROFINET hardware,

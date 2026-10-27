@@ -54,6 +54,7 @@ against (see [the matrix](#interop-matrix)).
 | Shared input | — | — | not public; p-net does not implement it |
 | IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
 | MRP frames (Test, TopologyChange, LinkDown/Up), PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
+| RT_CLASS_UDP: RT payload on UDP port 34962, RTClass 4 / LT 0x0800 / RTA_CLASS_UDP in Connect (codecs only) | ✅ encode, refused by `AddDevice` | ✅ decode, Connect refused (DB 81 02 07) | tshark and scapy decode both (`TestUDPRTDecoders`); no open implementation of the data path |
 | IOCARSR (system redundancy), MCR, IRInfo, PrmServer, AR vendor blocks | — | — (rejected) | |
 | DCE/RPC: fragmentation, retransmission, at-most-once, idempotent calls, ping/working, big- and little-endian NDR | ✅ | ✅ | all |
 

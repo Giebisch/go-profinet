@@ -27,7 +27,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `New(Config) (*Controller, error)` | start a controller on a `*l2.Mux`; `Config.ListenPacket` opens its UDP sockets (nil: the OS), `RPCPort` its RPC server port (34964), `StationName`, `VendorID`/`DeviceID`/`Instance` (its object UUID), `DCP` options |
 | `(*Controller).AddDevice(DeviceConfig) (*Device, error)` | add a device and start its lifecycle |
 | `(*Controller).Device(name)`, `Devices()`, `DCP()`, `RPC()`, `ObjectUUID()`, `Close()` | access and shutdown |
-| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `PeerChecks` (the expected neighbor of each port, written before PrmEnd), `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
+| `DeviceConfig` | `StationName`, `Model` (required), `IP`/`AssignIP`/`PermanentIP`, `SendClockFactor`, `ReductionRatio`, `WatchdogFactor`, `DataHoldFactor`, `Advanced` (RT_CLASS_2 advanced startup), `RTClass` (only the startup mode's class; RT_CLASS_UDP and the others are refused with `ErrUnsupported`), `ActivityTimeout`, `RTATimeoutFactor`, `RTARetries`, `Parameters`, `PeerChecks` (the expected neighbor of each port, written before PrmEnd), `RPCTimeout`, `ReconnectMin`/`ReconnectMax`, `OnAlarm`, `OnState` |
 | `(*Device).WaitState(ctx, State)`, `State()` | the lifecycle: `StateOffline` … `StateRunning`, `StateStopped` |
 | `(*Device).SetOutput(slot, subslot, data, iops)`, `Input(slot, subslot)`, `ConsumerStatus(slot, subslot)` | cyclic process data |
 | `(*Device).ReadRecord`, `WriteRecord`, `WriteMultiple`, `ReadIM0`, `ReadDiagnosis` | acyclic services within the AR |
@@ -109,8 +109,10 @@ The block codecs (`ConnectRequest`, `ConnectResponse`, `ARBlockReq`,
 `PDInterfaceDataReal`, `PDRealData` with `AppendPDRealDataRecord` and
 `DecodePDRealDataRecord`, `AppendMultipleBlockHeader`, …), `ReadBlock`, `SplitBlocks`, NDR (`AppendNDRRequest`,
 `DecodeNDRResponse`), `Status` and `StatusError`, `ObjectUUID`, the
-identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`) and the
-interface UUIDs.
+identifiers (`Index`, `ARType`, `AlarmType`, `BlockType`, `OpNum`, `RTClass`) and the
+interface UUIDs. RT_CLASS_UDP fields (codecs only): `LTIP`, `UDPRTPort`,
+`IOCRPropRTClassMask`, `AlarmCRPropTransportUDP`,
+`AlarmCRBlockReq.TransportUDP`, `ConnectRequest.UsesUDP`.
 
 ## mrp and ptcp — codecs
 
@@ -123,7 +125,8 @@ FrameIDs. Codecs only: no ring manager or client, no line delay measurement.
 
 `rt`: `Frame`, `AppendEthernet`, `Layout`/`ComputeLayout`/`LayoutFromIOCR`,
 `Provider`, `Consumer`, `Dispatcher`, `Scheduler`/`Task`, `DataStatus`,
-`CycleNanos`. `alarm`: `PDU`, `Manager`, `Endpoint` (`Send`, `SendErr`, the `OnData` and
+`CycleNanos`; the RT_CLASS_UDP payload codec `AppendUDPPayload`, `DecodeUDP`,
+`IsUDPFrameID`, `UDPPort`, `MinDataLengthUDP` (no UDP data path). `alarm`: `PDU`, `Manager`, `Endpoint` (`Send`, `SendErr`, the `OnData` and
 `OnErr` callbacks), `EndpointStats`. Applications rarely use them directly; the
 controller and the device do.
 

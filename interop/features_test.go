@@ -5,8 +5,10 @@
 package interop
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -22,6 +24,7 @@ import (
 	"github.com/otfabric/go-profinet/pnio"
 	"github.com/otfabric/go-profinet/ptcp"
 	"github.com/otfabric/go-profinet/rpc"
+	"github.com/otfabric/go-profinet/rt"
 )
 
 // countHellos returns the DCP Hellos of a capture in the share, by source
@@ -310,4 +313,100 @@ func TestCodecDecoders(t *testing.T) {
 	}
 	e.expect("MRP Test, TopologyChange, LinkDown, LinkUp; PTCP DelayReq, DelayRes; IOCARSR Connect with SRInfoBlock and MCRBlockReq encoded (go-profinet)", true, "")
 	e.oracles("codecs.pcap")
+}
+
+// writeFrames writes Ethernet frames, padded to the minimum size, into a
+// capture in the share.
+func (e *env) writeFrames(file string, frames ...[]byte) {
+	e.t.Helper()
+	f, err := os.Create(filepath.Join(e.share, file))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	w, err := pcap.NewWriter(f)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	for _, fr := range frames {
+		if err := w.WriteFrame(time.Now(), ethernet.Pad(fr, 0)); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+// scapyLayers returns the layer names scapy dissects in each frame of a
+// capture in the share. The scapy adapter counts a UDP datagram as
+// decoded whatever its payload; this looks at the layers themselves.
+func (e *env) scapyLayers(file string) [][]string {
+	e.t.Helper()
+	const script = `import json, sys
+from scapy.all import rdpcap
+from scapy.contrib import pnio, pnio_dcp, pnio_rpc
+out = []
+for p in rdpcap(sys.argv[1]):
+    names, layer = [], p
+    while layer and layer.__class__.__name__ != "NoPayload":
+        names.append(layer.__class__.__name__)
+        layer = layer.payload
+    out.append(names)
+print(json.dumps(out))`
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	out, err := docker(ctx, "run", "--rm", "-v", e.share+":/share", "--entrypoint", "python3", image("scapy"), "-c", script, "/share/"+file)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	var layers [][]string
+	if err := json.Unmarshal(lastLine(out), &layers); err != nil {
+		e.t.Fatalf("scapy layers: %v: %s", err, out)
+	}
+	return layers
+}
+
+// TestUDPRTDecoders: an RT_CLASS_UDP frame (the RT payload in a UDP
+// datagram to port 34962) and an RT_CLASS_UDP Connect request (RTClass 4,
+// LT 0x0800, alarms over UDP), as go-profinet's codecs encode them, are
+// decoded by tshark and scapy, independent of go-profinet, without a
+// malformed frame or an expert warning. No open implementation sends or
+// accepts RT over UDP: this checks the encoding, not the behaviour.
+func TestUDPRTDecoders(t *testing.T) {
+	e := newEnv(t)
+	e.result.peer("tshark/scapy", image("tshark"), "decoder")
+	src, dst := ethernet.MAC{2, 0, 0, 0, 0, 1}, ethernet.MAC{2, 0, 0, 0, 0, 2}
+	sip, dip := [4]byte{10, 0, 0, 1}, [4]byte{10, 0, 0, 2}
+	fr := rt.Frame{FrameID: 0xC000, Data: []byte{0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x80, 0x80}, CycleCounter: 0x0100, DataStatus: rt.DefaultDataStatus}
+	payload, err := rt.AppendUDPPayload(nil, &fr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	udpRT := ipv4UDP(src, dst, sip, dip, rt.UDPPort, rt.UDPPort, payload)
+
+	iocr := func(typ pnio.IOCRType, ref, id uint16) pnio.IOCRBlockReq {
+		return pnio.IOCRBlockReq{Type: typ, Reference: ref, LT: pnio.LTIP, Properties: uint32(pnio.RTClassUDP), DataLength: rt.MinDataLengthUDP, FrameID: id,
+			SendClockFactor: 32, ReductionRatio: 4, Phase: 1, FrameSendOffset: 0xFFFFFFFF, WatchdogFactor: 10, DataHoldFactor: 10, TagHeader: 6 << 13,
+			APIs: []pnio.IOCRAPI{{IODataObjects: []pnio.IODataObject{{Slot: 1, Subslot: 1}}, IOCS: []pnio.IODataObject{{Slot: 2, Subslot: 1, FrameOffset: 10}}}}}
+	}
+	cr := pnio.ConnectRequest{
+		AR: pnio.ARBlockReq{Type: pnio.ARTypeIOCARSingle, ARUUID: rpc.NewRandomUUID(), SessionKey: 1, InitiatorObject: pnio.ObjectUUID(1, 1, 0xF000),
+			Properties: pnio.ARPropStateActive | pnio.ARPropPrmServerCMInit, ActivityTimeoutFactor: 100, UDPRTPort: 0x8000, StationName: "plc"},
+		IOCRs: []pnio.IOCRBlockReq{iocr(pnio.IOCRInput, 1, 0xC000), iocr(pnio.IOCROutput, 2, pnio.FrameIDAssign)},
+		AlarmCR: &pnio.AlarmCRBlockReq{Type: 1, LT: pnio.LTIP, Properties: pnio.AlarmCRPropTransportUDP, RTATimeoutFactor: 5, RTARetries: 3,
+			LocalAlarmReference: 1, MaxAlarmDataLength: 200, TagHeaderHigh: 6 << 13, TagHeaderLow: 5 << 13},
+	}
+	body := pnio.AppendNDRRequest(nil, binary.LittleEndian, pnio.DefaultArgsMaximum, cr.Append(nil))
+	h := rpc.Header{Type: rpc.TypeRequest, Flags1: rpc.FlagIdempotent, DRep: [3]byte{rpc.DRepLittleEndian, 0, 0},
+		Object: pnio.ObjectUUID(1, 2, 0xF000), Iface: pnio.DeviceInterface, Activity: rpc.NewRandomUUID(), IfaceVersion: pnio.InterfaceVersion,
+		OpNum: uint16(pnio.OpConnect), IfaceHint: 0xFFFF, ActivityHint: 0xFFFF, BodyLen: uint16(len(body))}
+	connect := ipv4UDP(src, dst, sip, dip, 49152, rpc.Port, append(h.AppendTo(nil), body...))
+	e.writeFrames("udp-rt.pcap", udpRT, connect)
+	e.expect("RT_CLASS_UDP frame on UDP port 34962 and RT_CLASS_UDP Connect (RTClass 4, LT 0x0800, RTA_CLASS_UDP) encoded (go-profinet)", true, "")
+
+	layers := e.scapyLayers("udp-rt.pcap")
+	rtLayers := strings.Join(layers[0], "/")
+	e.expect("scapy dissects the UDP payload of port 34962 as PROFINET RT (scapy)",
+		strings.Contains(rtLayers, "ProfinetIO") && strings.Contains(rtLayers, "PNIORealTimeCyclicPDU"), "%s", rtLayers)
+	e.oracles("udp-rt.pcap")
 }

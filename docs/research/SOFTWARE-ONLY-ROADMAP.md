@@ -276,7 +276,7 @@ and experiments only, **—** deferred.
 
 | Feature | Priority | Evidence | Plan / blocker |
 |---------|----------|----------|----------------|
-| RT_CLASS_UDP | P3 | RTClass 4, RT payload on UDP 34962, UDP ports in the AR block VERIFIED; p-net validates the fields but has no data path | codecs and Connect validation; behaviour unverifiable: no peer implements it |
+| RT_CLASS_UDP | P3 | RTClass 4, RT payload on UDP 34962, UDP ports in the AR block VERIFIED; p-net validates the fields but has no data path | **done (codecs)**: `rt` UDP payload codec, `pnio` RTClass/LT/AlarmCR transport fields; the device refuses with DB 81 02 07 (IOCRProperties), the controller refuses to build one; tshark and scapy decode our frames. Behaviour unverifiable: no peer implements it |
 | MCR (multicast CRs) | P3 | MCRBlockReq 0x0106 layout VERIFIED in Wireshark; AddressResolutionProperties bits, multicast MAC allocation and the resolution procedure UNVERIFIED; p-net parses but does not implement | codec only until the procedure is substantiated |
 | PTCP | P3 | Delay PDUs and TLVs VERIFIED in Wireshark; the meaning of 0xFF41–0xFF43 and the destination MAC need a capture | decoder; line delay stays "not measured" (p-net does the same) |
 | DHCP | P3 | DCP option 3 suboptions are DHCP option codes (61 client ID, 255 control) and IP BlockInfo bit 1 "set by DHCP" VERIFIED; no PI guidance on DHCP use found; p-net has none | decode the DCP DHCP blocks; addressing stays with the operating system (`ApplyIP`), no DHCP client in the library |
