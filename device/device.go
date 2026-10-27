@@ -32,6 +32,7 @@ import (
 	"github.com/otfabric/go-profinet/rpc"
 	"github.com/otfabric/go-profinet/rt"
 	"github.com/otfabric/go-profinet/snmp"
+	"github.com/otfabric/go-profinet/store"
 )
 
 // ListenPacketFunc opens a UDP socket; net.ListenConfig.ListenPacket and
@@ -128,6 +129,15 @@ type Config struct {
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
+	// Store keeps what the device must remember across a restart: the
+	// station name and IP suite of a permanent DCP Set, DHCP options and
+	// the I&M records (persist.go says what and when). At start its values
+	// replace StationName, IP, DHCP and IM. nil keeps everything in
+	// memory, as before.
+	Store store.Store
+	// StoreKey is the device's key in Store; empty means
+	// DefaultStoreKey. Devices that share a Store need their own keys.
+	StoreKey string
 	// SNMP starts a read-only SNMPv1/v2c agent on UDP port 161 (opened
 	// with ListenPacket) with MIB-II and the LLDP-MIB. nil, the
 	// default, runs none.
@@ -163,6 +173,12 @@ type Device struct {
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
 	snmpA  *snmp.Agent
+	// The persistent state (persist.go): storeMu serializes the saves,
+	// stored is what the store holds, storeErr why it was not used.
+	storeKey string
+	storeMu  sync.Mutex
+	stored   persisted
+	storeErr error
 
 	// mu guards the station state and the ARs.
 	mu   sync.Mutex
@@ -283,6 +299,7 @@ func New(cfg Config) (*Device, error) {
 		frameIDs:  map[uint16]bool{},
 		records:   map[recKey][]byte{},
 		im:        cfg.IM,
+		storeKey:  cfg.StoreKey,
 		diags:     map[key][]pnio.DiagnosisItem{},
 		pd:        pdevState{checks: map[uint16]*pnio.PDPortDataCheck{}, adjusts: map[uint16]*pnio.PDPortDataAdjust{}, active: map[uint16][]uint16{}},
 		pdPoke:    make(chan struct{}, 1),
@@ -312,6 +329,16 @@ func New(cfg Config) (*Device, error) {
 			d.records[recKey{p.Slot, p.Submodule.Subslot, r.Index}] = append([]byte(nil), v...)
 		}
 	})
+	if d.storeKey == "" {
+		d.storeKey = DefaultStoreKey
+	}
+	if cfg.Store != nil {
+		if err := checkStoreKey(d.storeKey); err != nil {
+			cancel()
+			return nil, err
+		}
+		d.loadState()
+	}
 	if err := d.start(); err != nil {
 		_ = d.Close()
 		return nil, err
@@ -550,6 +577,15 @@ func (d *Device) hasIOAR() bool {
 
 func (s station) SetName(name string, permanent bool) dcp.BlockError {
 	d := s.d
+	// A temporary name clears the stored one: the device restarts
+	// without a name.
+	stored := name
+	if !permanent {
+		stored = ""
+	}
+	if err := d.persist(func(p *persisted) { p.Name = &stored }); err != nil {
+		return dcp.BlockErrorResource
+	}
 	d.mu.Lock()
 	changed := d.name != name
 	d.name = name
@@ -576,6 +612,13 @@ func (s station) SetIP(ip dcp.IPSuite, permanent bool) dcp.BlockError {
 		return dcp.BlockErrorSetNotPossible
 	}
 	d.mu.Unlock()
+	stored := ip
+	if !permanent {
+		stored = dcp.IPSuite{}
+	}
+	if err := d.persist(func(p *persisted) { p.IP = toStoredIP(stored) }); err != nil {
+		return dcp.BlockErrorResource
+	}
 	if d.cfg.ApplyIP != nil {
 		if err := d.cfg.ApplyIP(ip, permanent); err != nil {
 			d.log.Warnf("device: apply IP %s: %v", ip, err)
@@ -611,8 +654,20 @@ func (s station) ResetToFactory(mode uint16) dcp.BlockError {
 		d.abort(a, pnio.AbortDCPReset, true)
 	}
 	m := mode >> 1
+	resetApp, resetComm := m == 1 || m >= 3, m >= 2
+	if err := d.persist(func(p *persisted) {
+		if resetApp {
+			p.IM = toStoredIM(IMData{})
+		}
+		if resetComm {
+			empty := ""
+			p.Name, p.IP, p.DHCP = &empty, toStoredIP(dcp.IPSuite{}), nil
+		}
+	}); err != nil {
+		return dcp.BlockErrorResource
+	}
 	d.mu.Lock()
-	if m == 1 || m >= 3 {
+	if resetApp {
 		d.im = IMData{}
 		d.model.Each(func(p model.PluggedSubmodule) {
 			for _, r := range p.Submodule.Records {
@@ -624,7 +679,6 @@ func (s station) ResetToFactory(mode uint16) dcp.BlockError {
 			}
 		})
 	}
-	resetComm := m >= 2
 	if resetComm {
 		d.name = ""
 		d.dhcp = cloneDHCP(d.cfg.DHCP)
