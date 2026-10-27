@@ -511,6 +511,17 @@ func (c *Client) SetIP(ctx context.Context, dst ethernet.MAC, s IPSuite, permane
 	return c.Set(ctx, dst, SetBlock{ID: IPParameter, Qualifier: qualifier(permanent), Data: AppendIPSuite(nil, s)})
 }
 
+// SetDHCP writes one DHCP option (DCP option 3, the option code as
+// suboption). Devices without DHCP support answer "option not supported"
+// (a *SetError matching profinet.ErrUnsupported).
+func (c *Client) SetDHCP(ctx context.Context, dst ethernet.MAC, p DHCPParameter, permanent bool) error {
+	v, err := AppendDHCPParameter(nil, p)
+	if err != nil {
+		return err
+	}
+	return c.Set(ctx, dst, SetBlock{ID: p.BlockID(), Qualifier: qualifier(permanent), Data: v})
+}
+
 // Signal makes the device flash its signal LED.
 func (c *Client) Signal(ctx context.Context, dst ethernet.MAC) error {
 	return c.Set(ctx, dst, SetBlock{ID: CtrlSignal, Data: binary.BigEndian.AppendUint16(nil, SignalFlashOnce)})

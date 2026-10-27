@@ -130,10 +130,10 @@ const (
 	DeviceOEMID  BlockID = 0x0208 // OEM VendorID and DeviceID
 	DeviceGW     BlockID = 0x0209 // StandardGateway
 	DeviceRSI    BlockID = 0x020A // RSIProperties
-	DHCPHostName BlockID = 0x030C
-	DHCPVendor   BlockID = 0x033C
-	DHCPClientID BlockID = 0x033D
-	DHCPControl  BlockID = 0x03FF
+	DHCPHostName BlockID = 0x030C // DHCP option 12, host name
+	DHCPVendor   BlockID = 0x033C // DHCP option 60, (vendor) class identifier
+	DHCPClientID BlockID = 0x033D // DHCP option 61, client identifier
+	DHCPControl  BlockID = 0x03FF // control DHCP for address resolution
 	CtrlStart    BlockID = 0x0501 // start of a Set transaction
 	CtrlStop     BlockID = 0x0502 // end of a Set transaction
 	CtrlSignal   BlockID = 0x0503 // flash the device's signal LED
@@ -188,7 +188,14 @@ func (b BlockID) String() string {
 		return "DeviceInitiative"
 	case AllSelector:
 		return "All"
+	case DHCPClientID:
+		return "DHCP/ClientID"
+	case DHCPControl:
+		return "DHCP/Control"
 	default:
+		if b.Option() == OptionDHCP {
+			return fmt.Sprintf("DHCP/%d", b.Suboption())
+		}
 		return fmt.Sprintf("%d/%d", b.Option(), b.Suboption())
 	}
 }
@@ -247,7 +254,9 @@ const (
 	ResetAndRestoreDevice uint16 = 9 << 1
 )
 
-// BlockInfo bits of IP blocks in responses.
+// BlockInfo bits of IP blocks in responses: 0x0000 no address, 0x0001
+// set, 0x0002 set by DHCP, and with bit 7 the same with an address
+// conflict detected (Wireshark's DCP dissector).
 const (
 	IPInfoSet      uint16 = 0x0001 // an IP address is set
 	IPInfoDHCP     uint16 = 0x0002 // set by DHCP

@@ -52,6 +52,13 @@ do not grant it on shared hosts. The virtual network (`vnet`) needs none.
   loss, duplication, corruption, reordering and delay.
 - The DCP responder ignores other requesters for 3 s after a Get or Set, as
   devices do, and validates station names.
+- Opt-in DCP restrictions (`dcp.Policy`, `device.Config.DCPPolicy`): a
+  read-only mode that refuses every Set that changes the device, rate
+  limits per source MAC address for Identify responses and Set requests in
+  a fixed-size table, and audit events (source, block, outcome) for every
+  Set, ResetToFactory and refused request. They limit accidents and floods;
+  they authenticate nobody (a source address can be forged) and are not a
+  PROFINET security class.
 
 ### Changing devices
 
