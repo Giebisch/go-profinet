@@ -305,9 +305,39 @@ func TestCodecDecoders(t *testing.T) {
 		OpNum: uint16(pnio.OpConnect), IfaceHint: 0xFFFF, ActivityHint: 0xFFFF, BodyLen: uint16(len(body))}
 	payload := append(h.AppendTo(nil), body...)
 	add(ipv4UDP(src, dst, [4]byte{10, 0, 0, 1}, [4]byte{10, 0, 0, 2}, 49152, rpc.Port, payload))
+
+	// The PROFINET MRP records: Write requests of the adjust and check
+	// records, a Read response of PDInterfaceMrpDataReal.
+	rpcPDU := func(typ rpc.PacketType, op pnio.OpNum, body []byte) []byte {
+		h := rpc.Header{Type: typ, Flags1: rpc.FlagIdempotent, DRep: [3]byte{rpc.DRepLittleEndian, 0, 0},
+			Object: pnio.ObjectUUID(1, 2, 0xF000), Iface: pnio.DeviceInterface, Activity: rpc.NewRandomUUID(), IfaceVersion: pnio.InterfaceVersion,
+			OpNum: uint16(op), IfaceHint: 0xFFFF, ActivityHint: 0xFFFF, BodyLen: uint16(len(body))}
+		return append(h.AppendTo(nil), body...)
+	}
+	for i, w := range []struct {
+		sub  uint16
+		idx  pnio.Index
+		data []byte
+	}{
+		{0x8000, pnio.IndexPDInterfaceMrpDataAdjust, (&pnio.PDInterfaceMrpDataAdjust{Domain: mrp.DefaultDomain, Role: pnio.MrpRoleManager, DomainName: "mrpdomain-1",
+			Manager: &pnio.MrpManagerParams{Prio: mrp.DefaultManagerPrio, TopChangeT: 10, TopNRmax: 3, TestShortT: 10, TestDefaultT: 20, TestNRmax: 3}}).Append(nil)},
+		{0x8000, pnio.IndexPDInterfaceMrpDataAdjust, (&pnio.PDInterfaceMrpDataAdjust{Domain: mrp.DefaultDomain, Role: pnio.MrpRoleClient, DomainName: "mrpdomain-1",
+			Client: &pnio.MrpClientParams{LinkDownT: 20, LinkUpT: 20, LinkNRmax: 4}}).Append(nil)},
+		{0x8001, pnio.IndexPDPortMrpDataAdjust, (&pnio.PDPortMrpData{Domain: mrp.DefaultDomain}).Append(nil)},
+		{0x8000, pnio.IndexPDInterfaceMrpDataCheck, (&pnio.PDInterfaceMrpDataCheck{Domain: mrp.DefaultDomain, Check: pnio.MrpCheckManager}).Append(nil)},
+	} {
+		q := pnio.WriteReq{Seq: uint16(i), ARUUID: rpc.NewRandomUUID(), Slot: 0, Subslot: w.sub, Index: w.idx, Length: uint32(len(w.data))}
+		body := pnio.AppendNDRRequest(nil, binary.LittleEndian, pnio.DefaultArgsMaximum, append(q.Append(nil), w.data...))
+		add(ipv4UDP(src, dst, [4]byte{10, 0, 0, 1}, [4]byte{10, 0, 0, 2}, 49152, rpc.Port, rpcPDU(rpc.TypeRequest, pnio.OpWrite, body)))
+	}
+	real := (&pnio.PDInterfaceMrpDataReal{Domain: mrp.DefaultDomain, Role: pnio.MrpRoleManager, DomainName: "mrpdomain-1", Version: 1,
+		RingState: 1, HasRingState: true}).Append(nil)
+	rr := pnio.ReadRes{Seq: 9, ARUUID: rpc.NewRandomUUID(), Slot: 0, Subslot: 0x8000, Index: pnio.IndexPDInterfaceMrpDataReal, Length: uint32(len(real))}
+	rbody := pnio.AppendNDRResponse(nil, binary.LittleEndian, pnio.Status{}, pnio.DefaultArgsMaximum, append(rr.Append(nil), real...))
+	add(ipv4UDP(dst, src, [4]byte{10, 0, 0, 2}, [4]byte{10, 0, 0, 1}, rpc.Port, 49152, rpcPDU(rpc.TypeResponse, pnio.OpRead, rbody)))
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	e.expect("MRP Test, TopologyChange, LinkDown, LinkUp; PTCP DelayReq, DelayRes; IOCARSR Connect with SRInfoBlock and MCRBlockReq encoded (go-profinet)", true, "")
+	e.expect("MRP Test, TopologyChange, LinkDown, LinkUp; PTCP DelayReq, DelayRes; IOCARSR Connect with SRInfoBlock and MCRBlockReq; MRP records (PDInterfaceMrpDataAdjust/Check/Real, PDPortMrpDataAdjust) encoded (go-profinet)", true, "")
 	e.oracles("codecs.pcap")
 }

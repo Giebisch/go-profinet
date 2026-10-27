@@ -45,6 +45,9 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 	if b, ok, err := d.readPDev(q); ok {
 		return b, err
 	}
+	if b, ok, err := d.readMRP(q); ok {
+		return b, err
+	}
 	switch q.Index {
 	case pnio.IndexIM0, pnio.IndexIM1, pnio.IndexIM2, pnio.IndexIM3, pnio.IndexIM4:
 		if !isDAP(q.Slot, q.Subslot) {
@@ -187,6 +190,9 @@ func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data [
 	default:
 	}
 	if handled, err := d.writePDev(q, data); handled {
+		return err
+	}
+	if handled, err := d.writeMRP(q, data); handled {
 		return err
 	}
 	if !q.Index.IsUserIndex() {

@@ -73,6 +73,9 @@ type DeviceConfig struct {
 	// are written (PDPortDataCheck) before Parameters, and the device
 	// reports a remote mismatch diagnosis while a port's neighbor differs.
 	PeerChecks []PeerCheck
+	// MRP gives the device a media redundancy role (MRP records written
+	// after the peer checks, before Parameters); nil writes none.
+	MRP *MRPSetting
 	// RPCTimeout bounds each RPC call; zero means 5 s.
 	RPCTimeout time.Duration
 	// ReconnectMin and ReconnectMax bound the backoff between attempts;
@@ -257,7 +260,11 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.Parameters = append(checks, cfg.Parameters...)
+	mrps, err := mrpParameters(cfg.Model, cfg.MRP)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Parameters = append(append(checks, mrps...), cfg.Parameters...)
 	if cfg.SendClockFactor == 0 {
 		cfg.SendClockFactor = 32
 	}
