@@ -24,4 +24,6 @@ ip link set pnB up
 sysctl -qw net.ipv6.conf.pnA.disable_ipv6=1 net.ipv6.conf.pnB.disable_ipv6=1 2>/dev/null || true
 export PROFINET_L2_IFACE_A=pnA PROFINET_L2_IFACE_B=pnB
 go test -race -count=1 -v "$@" ./l2/afpacket ./l2/osport
+# Allocations are counted without the race detector, which allocates.
+go test -count=1 -v -run 'TestNoAllocations' "$@" ./l2/afpacket
 go test -race -count=1 -v -run 'TestRealL2' "$@" ./e2e
