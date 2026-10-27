@@ -167,8 +167,12 @@ func TestRing(t *testing.T) {
 		return !s.RingOpen && s.Blocked[1]
 	})
 	eventually(t, 5*time.Second, "clients forwarding", func() bool {
-		s := nodes[2].ent.Status()
-		return !s.Blocked[0] && !s.Blocked[1]
+		for _, nd := range nodes[1:] {
+			if s := nd.ent.Status(); s.Blocked[0] || s.Blocked[1] {
+				return false
+			}
+		}
+		return true
 	})
 	before = [3]int64{nodes[0].got.Load(), nodes[1].got.Load(), nodes[2].got.Load()}
 	broadcast(t, nodes[2])

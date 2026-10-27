@@ -153,6 +153,8 @@ type Entity struct {
 	// frames stops when a newer change starts, so that a LinkDown is
 	// never repeated after the link came back.
 	linkGen uint64
+	// testNow asks the manager's loop for a test round now.
+	testNow chan struct{}
 
 	testsSent, testsRecv, topChanges, linkChanges, forwarded, malformed atomic.Uint64
 
@@ -194,7 +196,7 @@ func New(cfg Config) (*Entity, error) {
 		cfg.Logger = profinet.NopLogger()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Entity{cfg: cfg, log: cfg.Logger, state: StateACStat1, ringOpen: true, start: time.Now(), ctx: ctx, cancel: cancel}
+	e := &Entity{cfg: cfg, log: cfg.Logger, state: StateACStat1, ringOpen: true, start: time.Now(), ctx: ctx, cancel: cancel, testNow: make(chan struct{}, 1)}
 	for i, m := range cfg.Ports {
 		s, err := m.Subscribe(l2.MatchEtherType(EtherType), 256)
 		if err != nil {
@@ -273,17 +275,20 @@ func (e *Entity) run() {
 	defer t.Stop()
 	nextTest := time.Now()
 	for {
+		now := false
 		select {
 		case <-e.ctx.Done():
 			return
 		case <-t.C:
+		case <-e.testNow:
+			now = true
 		}
 		for i := range e.up {
 			if now := e.linkUp(i); now != e.upLocked(i) {
 				e.link(i, now)
 			}
 		}
-		if e.cfg.Role == RoleManager && !time.Now().Before(nextTest) {
+		if e.cfg.Role == RoleManager && (now || !time.Now().Before(nextTest)) {
 			nextTest = time.Now().Add(e.cfg.Profile.TestInterval)
 			e.testTick()
 		}
@@ -519,25 +524,13 @@ func (e *Entity) managerRecv(port int, f Frame) {
 	case f.Link != nil:
 		e.linkChanges.Add(1)
 		if f.Link.Up {
-			// A client's port came up: the ring may close now. Block
-			// the secondary port at once rather than wait for the tests
-			// (which reopen the ring if it is not closed), and say so:
-			// no client unblocks into a loop.
-			e.mu.Lock()
-			var closed bool
-			if e.up[0] && e.up[1] && (e.ringOpen || !e.blocked[1]) {
-				e.ringOpen = false
-				e.state = StateChkRC
-				e.misses = 0
-				e.setBlocked(1, true)
-				closed = true
-			}
-			e.mu.Unlock()
-			if closed {
-				e.log.Infof("mrp: manager: ring closing (link up at %s)", f.Link.SA)
-				e.cfg.Switch.Flush()
-				e.sendTopologyChange(e.cfg.Profile.TopChangeInterval)
-				e.changed()
+			// A client's port came up: the ring may close now. Test it
+			// at once rather than at the next interval; a test that
+			// comes around closes it (a LinkUp alone may be a late one
+			// of a ring that is open again).
+			select {
+			case e.testNow <- struct{}{}:
+			default:
 			}
 			return
 		}

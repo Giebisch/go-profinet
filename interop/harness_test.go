@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -409,6 +410,16 @@ func (e *env) oracles(file string, deviations ...peerDeviation) {
 	seen := map[int]bool{}
 	for _, x := range w.Expert {
 		m, _ := x.(map[string]any)
+		if m != nil {
+			// tshark joins the notes of a frame; "Possible traceroute"
+			// is the IP dissector's guess from the TTL of consecutive
+			// packets, not a PROFINET decoding problem.
+			msg := strings.Trim(traceroute.ReplaceAllString(str(m["message"]), ""), ", ")
+			if msg == "" {
+				continue
+			}
+			m["message"] = msg
+		}
 		matched := false
 		for i, d := range deviations {
 			if m != nil && m["protocol"] == d.Protocol && str(m["message"]) == d.Message {
@@ -430,6 +441,9 @@ func (e *env) oracles(file string, deviations ...peerDeviation) {
 		e.t.Errorf("tshark on %s: malformed %v expert %v", file, w.Malformed, w.Expert)
 	}
 }
+
+// traceroute matches the IP dissector's "Possible traceroute" note.
+var traceroute = regexp.MustCompile(`Possible traceroute: hop #\d+, attempt #\d+,?`)
 
 func lastLine(b []byte) []byte {
 	lines := bytes.Split(bytes.TrimSpace(b), []byte("\n"))
