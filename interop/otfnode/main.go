@@ -232,13 +232,14 @@ func runController(args []string) error {
 	alarms := fs.Int("wait-alarms", 0, "wait for this many alarms")
 	pcapFile := fs.String("pcap", "", "write the frames to this pcap file")
 	assignIP := fs.String("assign-ip", "", "assign this IP/prefix with DCP before connecting")
-	var outputs, reads, writes, params, implicit, wm multi
+	var outputs, reads, writes, params, implicit, wm, reparam multi
 	fs.Var(&outputs, "output", "slot:subslot:0:hex output data (repeatable)")
 	fs.Var(&reads, "read", "slot:subslot:index record to read while running (repeatable)")
 	fs.Var(&writes, "write", "slot:subslot:index:hex record to write while running (repeatable)")
 	fs.Var(&params, "param", "slot:subslot:index:hex parameter written before PrmEnd (repeatable)")
 	fs.Var(&implicit, "implicit", "slot:subslot:index record to read with ReadImplicit, outside the AR (repeatable)")
 	fs.Var(&wm, "wm", "slot:subslot:index:hex record of one WriteMultiple call while running (repeatable)")
+	fs.Var(&reparam, "reparam", "slot:subslot:index:hex parameter of one re-parameterization (PrmBegin ... PrmEnd) while running (repeatable)")
 	_ = fs.Parse(args)
 	m, err := loadModel(*modelFile, *dap)
 	if err != nil {
@@ -370,6 +371,26 @@ func runController(args []string) error {
 		report["writeMultiple"] = r
 	}
 	var results []map[string]any
+	if len(reparam) > 0 {
+		var ps []controller.Parameter
+		for _, w := range reparam {
+			slot, sub, idx, data, err := parseAddr(w, 4)
+			if err != nil {
+				return err
+			}
+			ps = append(ps, controller.Parameter{Slot: slot, Subslot: sub, Index: idx, Data: data})
+		}
+		start := time.Now()
+		r := map[string]any{"op": "reparameterize", "parameters": len(ps)}
+		if err := d.Reparameterize(rctx, ps); err != nil {
+			r["error"] = err.Error()
+		} else {
+			r["ms"] = time.Since(start).Milliseconds()
+		}
+		st, _ := d.State()
+		r["state"] = st.String()
+		results = append(results, r)
+	}
 	for _, w := range writes {
 		slot, sub, idx, data, err := parseAddr(w, 4)
 		if err != nil {

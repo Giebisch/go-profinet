@@ -31,6 +31,7 @@ v1.0.0 the API may change between minor versions; changes are listed in
 | `(*Device).WaitState(ctx, State)`, `State()` | the lifecycle: `StateOffline` … `StateRunning`, `StateStopped` |
 | `(*Device).SetOutput(slot, subslot, data, iops)`, `Input(slot, subslot)`, `ConsumerStatus(slot, subslot)` | cyclic process data |
 | `(*Device).ReadRecord`, `WriteRecord`, `WriteMultiple`, `ReadIM0`, `ReadDiagnosis` | acyclic services within the AR |
+| `(*Device).Reparameterize(ctx, []Parameter)` | re-parameterize a running AR: PrmBegin, the writes, PrmEnd, the device's ApplicationReady; the parameters replace those of the configuration for later reconnects |
 | `(*Device).AR() (ARInfo, bool)` | what Connect negotiated: AR UUID, session key, RT class, alarm references, both IOCRs with FrameID, length, cycle and C_SDU layout |
 | `(*Device).ModuleDiff()`, `ARUUID()`, `MAC()`, `IP()`, `Stats()`, `Close()` | |
 | `NewRecordClient(*rpc.Client, addr, object) *RecordClient` | the acyclic services of one device without a controller: `Read` (with a nil AR UUID: ReadImplicit), `Write`, `WriteMultiple`, `Control`, `Connect`, `ReadIM0`, `ReadDiagnosis` |
