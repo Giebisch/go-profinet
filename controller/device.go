@@ -661,6 +661,16 @@ func (d *Device) session() (ran bool, err error) {
 		return false, nil
 	}
 	d.setState(StateRunning, nil)
+	// A Hello that arrived while connecting has served its purpose: it is
+	// not to bring back the device after this AR ends (by then the device
+	// may be another one, or gone).
+	d.mu.Lock()
+	d.hello = nil
+	d.mu.Unlock()
+	select {
+	case <-d.helloWake:
+	default:
+	}
 	a.consumer.Arm(time.Now())
 	d.c.log.Infof("controller: %s: AR %s running", d.cfg.StationName, a.uuid)
 	select {
