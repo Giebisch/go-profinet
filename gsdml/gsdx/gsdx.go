@@ -11,7 +11,7 @@
 // that look like GSDML documents. WriteTo re-emits every part unchanged.
 //
 // What it does not do: the GSDX Container Specification of PROFIBUS &
-// PROFINET International (PI order 2.752), its signing policy and MRCD are
+// PROFINET International, its signing policy and MRCD are
 // published to PI members only. This package applies no PI-specific rule,
 // never says that a file is a valid GSDX, and does not verify signatures:
 // see Signature. Rules of OPC itself that a package breaks without being
