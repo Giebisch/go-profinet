@@ -47,6 +47,16 @@ func TestConnectIOCRValidation(t *testing.T) {
 		{"LT", in(func(c *pnio.IOCRBlockReq) { c.LT = 0x0800 }), pnio.Code1IOCRBlock, 6},
 		{"RT class 3", both(func(c *pnio.IOCRBlockReq) { c.Properties = uint32(pnio.RTClass3) }), pnio.Code1IOCRBlock, 7},
 		{"RT class UDP", both(func(c *pnio.IOCRBlockReq) { c.Properties = uint32(pnio.RTClassUDP) }), pnio.Code1IOCRBlock, 7},
+		// A complete RT_CLASS_UDP request as p-net would validate it (LT
+		// 0x0800, a C_SDU below 40 octets, no initiator MAC address, alarms
+		// over UDP): refused for its IOCRProperties, never accepted.
+		{"RT_CLASS_UDP connect", func(r *pnio.ConnectRequest) {
+			for i := range r.IOCRs {
+				r.IOCRs[i].Properties, r.IOCRs[i].LT, r.IOCRs[i].DataLength = uint32(pnio.RTClassUDP), pnio.LTIP, 12
+			}
+			r.AR.InitiatorMAC, r.AR.UDPRTPort = ethernet.MAC{}, 0x8000
+			r.AlarmCR.Properties, r.AlarmCR.LT = pnio.AlarmCRPropTransportUDP, pnio.LTIP
+		}, pnio.Code1IOCRBlock, 7},
 		{"DataLength short", in(func(c *pnio.IOCRBlockReq) { c.DataLength = 39 }), pnio.Code1IOCRBlock, 8},
 		{"DataLength long", in(func(c *pnio.IOCRBlockReq) { c.DataLength = 1441 }), pnio.Code1IOCRBlock, 8},
 		{"input FrameID of class 2", in(func(c *pnio.IOCRBlockReq) { c.FrameID = 0x8000 }), pnio.Code1IOCRBlock, 9},
@@ -81,6 +91,9 @@ func TestConnectIOCRValidation(t *testing.T) {
 		{"AlarmCR type", func(r *pnio.ConnectRequest) { r.AlarmCR.Type = 2 }, pnio.Code1AlarmCR, 4},
 		{"AlarmCR LT", func(r *pnio.ConnectRequest) { r.AlarmCR.LT = 0x0800 }, pnio.Code1AlarmCR, 5},
 		{"AlarmCR over UDP", func(r *pnio.ConnectRequest) { r.AlarmCR.Properties = 2 }, pnio.Code1AlarmCR, 6},
+		{"AlarmCR over UDP with LT 0x0800", func(r *pnio.ConnectRequest) {
+			r.AlarmCR.Properties, r.AlarmCR.LT = pnio.AlarmCRPropTransportUDP, pnio.LTIP
+		}, pnio.Code1AlarmCR, 6},
 		{"RTA timeout zero", func(r *pnio.ConnectRequest) { r.AlarmCR.RTATimeoutFactor = 0 }, pnio.Code1AlarmCR, 7},
 		{"RTA timeout too big", func(r *pnio.ConnectRequest) { r.AlarmCR.RTATimeoutFactor = 101 }, pnio.Code1AlarmCR, 7},
 		{"RTA retries few", func(r *pnio.ConnectRequest) { r.AlarmCR.RTARetries = 2 }, pnio.Code1AlarmCR, 8},

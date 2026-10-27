@@ -160,12 +160,18 @@ func (d *Device) validateIOCR(c *pnio.IOCRBlockReq) *pnio.Status {
 	if c.Type != pnio.IOCRInput && c.Type != pnio.IOCROutput {
 		return bad(4)
 	}
-	if c.LT != pnio.LT {
-		return bad(6)
-	}
+	// The RT class goes before LT: an RT_CLASS_UDP IOCR carries LT 0x0800
+	// consistently, and what the device refuses is its RTClass. ErrorCode2
+	// 7 is "Error in Parameter IOCRProperties" (Wireshark's checking rules
+	// for IOCRBlockReq, pn_io_error_code2_pnio_2 in packet-pn.c), so a
+	// Connect for RT_CLASS_UDP, RT_CLASS_3 or RT_CLASS_STREAM is answered
+	// DB 81 02 07: this device has a data path for RT_CLASS_1/2 only.
 	cls := c.RTClass()
 	if cls != pnio.RTClass1 && cls != pnio.RTClass2 {
 		return bad(7)
+	}
+	if c.LT != pnio.LT {
+		return bad(6)
 	}
 	if c.DataLength < rt.MinDataLength || c.DataLength > rt.MaxDataLength {
 		return bad(8)
@@ -208,10 +214,13 @@ func (d *Device) validateAlarmCR(a *pnio.AlarmCRBlockReq) *pnio.Status {
 	switch {
 	case a.Type != 1:
 		return bad(4)
+	case a.TransportUDP():
+		// Alarms over UDP (RTA_CLASS_UDP), before LT, which is then 0x0800:
+		// ErrorCode2 6 is "Error in Parameter AlarmCRProperties" (Wireshark,
+		// pn_io_error_code2_pnio_4).
+		return bad(6)
 	case a.LT != pnio.LT:
 		return bad(5)
-	case a.Properties&0x2 != 0: // alarms over UDP
-		return bad(6)
 	case a.RTATimeoutFactor == 0 || a.RTATimeoutFactor > 100:
 		return bad(7)
 	case a.RTARetries < 3 || a.RTARetries > 15:

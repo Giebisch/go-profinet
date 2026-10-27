@@ -166,7 +166,7 @@ func TestStrings(t *testing.T) {
 		DeviceRSI: "Device/RSIProperties", CtrlStart: "Control/Start", CtrlStop: "Control/Stop",
 		CtrlSignal: "Control/Signal", CtrlResponse: "Control/Response", CtrlFactory: "Control/FactoryReset",
 		CtrlReset: "Control/ResetToFactory", Initiative: "DeviceInitiative", AllSelector: "All",
-		DHCPHostName: "3/12", NewBlockID(OptionNMEDomain, 2): "7/2",
+		DHCPHostName: "DHCP/12", NewBlockID(OptionNMEDomain, 2): "7/2",
 	}
 	for b, want := range blocks {
 		if got := b.String(); got != want {

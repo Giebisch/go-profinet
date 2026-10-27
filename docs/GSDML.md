@@ -97,4 +97,7 @@ known ones are not preserved.
 ## Not supported
 
 GSDX (the packaged GSDML with graphics) and MRCD: their formats are not
-public. See [research/GSDML.md](research/GSDML.md).
+public. See [research/GSDML.md](research/GSDML.md). `gsdml/gsdx` inspects
+the public OPC layer of a `.gsdx` (parts, content types, relationships,
+signature metadata, the GSDML parts) without PI's rules and without
+verifying signatures.

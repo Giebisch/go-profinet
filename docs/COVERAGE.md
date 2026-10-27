@@ -40,5 +40,5 @@ nil-receiver guards, error paths of the operating system (`l2/osport` on
 interfaces it cannot open), and errors the XSD reader of `internal/xsd`
 only meets in malformed schemas.
 
-Fuzzing complements coverage for the decoders: 17 fuzz targets run in CI
+Fuzzing complements coverage for the decoders: 25 fuzz targets run in CI
 (`make fuzz FUZZTIME=10s`) and locally for longer.

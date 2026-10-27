@@ -19,11 +19,12 @@ import (
 	"github.com/otfabric/go-profinet/netstack"
 	"github.com/otfabric/go-profinet/pnio"
 	"github.com/otfabric/go-profinet/rpc"
+	"github.com/otfabric/go-profinet/snmp"
 	"github.com/otfabric/go-profinet/vnet"
 )
 
 // TestNoLeaks runs every component through a full session (an AR with
-// cyclic data, records, an alarm, a device access AR, DCP and LLDP) several
+// cyclic data, records, an alarm, a device access AR, DCP, LLDP and SNMP) several
 // times, closes everything, and checks that the goroutines return to the
 // count before the first run: nothing is left running or blocked on a
 // socket.
@@ -81,7 +82,8 @@ func session(t *testing.T, seed uint64) {
 	dn := newNode(10, "192.168.0.10")
 	defer closeNode(dn)
 	dev, err := device.New(device.Config{Model: testModel(), Mux: dn.mux, StationName: "dut", IP: suite("192.168.0.10"),
-		ListenPacket: dn.st.ListenPacket, NoResponseDelay: true, LLDPInterval: 50 * time.Millisecond})
+		ListenPacket: dn.st.ListenPacket, NoResponseDelay: true, LLDPInterval: 50 * time.Millisecond,
+		SNMP: &device.SNMPConfig{Community: "public"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,6 +125,13 @@ func session(t *testing.T, seed uint64) {
 	if err := sar.Release(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// An SNMP walk of the device.
+	sc, err := cn.st.ListenPacket(ctx, "udp4", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	(&snmpClient{t: t, conn: sc, dst: &net.UDPAddr{IP: net.IPv4(192, 168, 0, 10), Port: snmp.Port}}).walkBulk()
+	_ = sc.Close()
 	ag.Close()
 	if err := ctrl.Close(); err != nil {
 		t.Fatal(err)
