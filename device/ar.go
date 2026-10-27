@@ -76,6 +76,8 @@ type ar struct {
 	// heir is the AR of the same controller that replaces this one; it
 	// takes over its submodules (guarded by the device's imgMu).
 	heir *ar
+	// sr is set for an IOCARSR (system redundancy, sr.go).
+	sr *srFields
 }
 
 func (a *ar) info() ARInfo {
@@ -320,6 +322,10 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	}
 	switch arb.Type {
 	case pnio.ARTypeIOCARSingle:
+	case pnio.ARTypeIOCARSR:
+		if d.cfg.SystemRedundancy == nil {
+			return fail(pnio.Code1ARBlock, 4)
+		}
 	case pnio.ARTypeIOSAR:
 		if d.cfg.RejectSupervisorAR {
 			return fail(pnio.Code1ARBlock, 4)
@@ -467,6 +473,11 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 		d.setHeir(rerun, a)
 		d.abort(rerun, pnio.AbortRerun, true)
 	}
+	if arb.Type == pnio.ARTypeIOCARSR {
+		if err := d.srJoin(a, req); err != nil {
+			return nil, err
+		}
+	}
 	var locked map[key]bool
 	if !iosar {
 		locked = d.claimOwnership(a)
@@ -477,6 +488,7 @@ func (d *Device) connect(ctx context.Context, from net.Addr, req *pnio.ConnectRe
 	defer func() {
 		if !established && !iosar {
 			d.releaseOwnership(a)
+			d.srLeave(a)
 		}
 	}()
 
@@ -638,7 +650,7 @@ func (d *Device) fillInputs(a *ar, c []byte) {
 		k := key{o.Slot, o.Subslot}
 		in := d.inputs[k]
 		dst := c[o.Offset : o.Offset+o.Length]
-		if in == nil || d.owner[k] != a || len(in.data) != int(o.Length) {
+		if in == nil || !owns(d.owner[k], a) || len(in.data) != int(o.Length) {
 			clear(dst)
 			c[o.IOPSOffset()] = pnio.IOxSBad
 			continue
@@ -647,7 +659,7 @@ func (d *Device) fillInputs(a *ar, c []byte) {
 		c[o.IOPSOffset()] = in.iops
 	}
 	for _, s := range a.inLayout.IOCS {
-		if d.owner[key{s.Slot, s.Subslot}] == a {
+		if owns(d.owner[key{s.Slot, s.Subslot}], a) {
 			c[s.Offset] = pnio.IOxSGood
 		} else {
 			c[s.Offset] = pnio.IOxSBad
@@ -661,11 +673,15 @@ func (d *Device) storeOutputs(a *ar, c []byte, s rt.DataStatus) {
 	if !s.Valid() {
 		return
 	}
+	// Of an AR set, the primary's outputs alone are applied.
+	if a.sr != nil && !d.srOutput(a, s) {
+		return
+	}
 	d.imgMu.Lock()
 	for _, o := range a.outLayout.Objects {
 		k := key{o.Slot, o.Subslot}
 		out := d.outputs[k]
-		if out == nil || d.owner[k] != a || len(out.data) != int(o.Length) {
+		if out == nil || !owns(d.owner[k], a) || len(out.data) != int(o.Length) {
 			continue
 		}
 		copy(out.data, c[o.Offset:o.Offset+o.Length])
@@ -761,6 +777,7 @@ func (d *Device) abort(a *ar, reason pnio.AbortReason, notify bool) {
 	// go to the next AR that expects them.
 	if a.typ != pnio.ARTypeIOSAR {
 		d.releaseOwnership(a)
+		d.srLeave(a)
 	}
 	if reason == 0 {
 		d.log.Infof("device: AR %s released", a.uuid)
@@ -787,6 +804,10 @@ func (d *Device) prmEnd(a *ar) {
 		}
 		// Submodules that match are now owned; the provider runs.
 		a.provider.SetDataStatus(rt.DefaultDataStatus)
+		if a.sr != nil {
+			// Primary or backup acknowledge (once in Data).
+			defer d.srStatus(a.sr.set)
+		}
 		if err := d.applicationReady(ctx, a); err != nil {
 			if a.currentState() == ARStateClosed {
 				return

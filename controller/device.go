@@ -79,6 +79,9 @@ type DeviceConfig struct {
 	// are written (PDPortDataCheck) before Parameters, and the device
 	// reports a remote mismatch diagnosis while a port's neighbor differs.
 	PeerChecks []PeerCheck
+	// SystemRedundancy makes the AR an IOCARSR of an S2 AR set:
+	// EXPERIMENTAL, not interoperable (sr.go).
+	SystemRedundancy *SRSetting
 	// RPCTimeout bounds each RPC call; zero means 5 s.
 	RPCTimeout time.Duration
 	// ReconnectMin and ReconnectMax bound the backoff between attempts;
@@ -173,7 +176,12 @@ type Device struct {
 	ip      dcp.IPSuite
 	ar      *arState
 	diff    *pnio.ModuleDiffBlock
-	waiters []chan struct{}
+	// srPrimary is the IOCARSR's primary request, srAck the device's
+	// last redundancy acknowledge (sr.go).
+	srPrimary bool
+	srAck     rt.DataStatus
+	srAckSeen bool
+	waiters   []chan struct{}
 	// notified is the last state whose OnState callback has run: WaitState
 	// waits for it. setMu orders the transitions and their callbacks.
 	notified State
@@ -268,6 +276,11 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if err := cfg.Model.Validate(); err != nil {
 		return nil, err
 	}
+	if cfg.SystemRedundancy != nil {
+		if err := cfg.SystemRedundancy.validate(); err != nil {
+			return nil, err
+		}
+	}
 	checks, err := peerCheckParameters(cfg.Model, cfg.PeerChecks)
 	if err != nil {
 		return nil, err
@@ -309,6 +322,7 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	d := &Device{
 		c:         c,
 		cfg:       cfg,
+		srPrimary: cfg.SystemRedundancy != nil && cfg.SystemRedundancy.Primary,
 		outputs:   map[subKey]*ioData{},
 		inputs:    map[subKey]*ioData{},
 		iocs:      map[subKey]uint8{},
@@ -837,9 +851,19 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 			WatchdogFactor: cfg.WatchdogFactor, DataHoldFactor: cfg.DataHoldFactor, TagHeader: tag, APIs: l.IOCRAPIs(),
 		}
 	}
+	arType := pnio.ARTypeIOCARSingle
+	var srBlocks []pnio.RawBlock
+	if sr := cfg.SystemRedundancy; sr != nil {
+		id, blk, err := sr.srBlocks()
+		if err != nil {
+			return nil, err
+		}
+		arType, a.uuid, srBlocks = pnio.ARTypeIOCARSR, id.UUID(), []pnio.RawBlock{blk}
+	}
 	req := &pnio.ConnectRequest{
+		Other: srBlocks,
 		AR: pnio.ARBlockReq{
-			Type: pnio.ARTypeIOCARSingle, ARUUID: a.uuid, SessionKey: a.sessionKey,
+			Type: arType, ARUUID: a.uuid, SessionKey: a.sessionKey,
 			InitiatorMAC: d.c.mux.HardwareAddr(), InitiatorObject: d.c.object, Properties: props,
 			ActivityTimeoutFactor: timeoutFactor, UDPRTPort: pnio.LT, StationName: d.c.cfg.StationName,
 		},
@@ -1031,6 +1055,12 @@ func (d *Device) startCyclic(a *arState, mac ethernet.MAC) {
 		CounterStep: cfg.SendClockFactor * cfg.ReductionRatio, Send: d.c.mux.Send,
 		Fill: func(c []byte) { d.fillOutputs(a, c) },
 	})
+	if cfg.SystemRedundancy != nil {
+		d.mu.Lock()
+		primary := d.srPrimary
+		d.mu.Unlock()
+		a.provider.SetDataStatus(srDataStatus(primary))
+	}
 	a.consumer = rt.NewConsumer(rt.ConsumerConfig{
 		FrameID: a.inFrameID, DataLength: a.inLayout.DataLength, Src: mac,
 		Watchdog:     time.Duration(cfg.DataHoldFactor) * cycle,
@@ -1072,6 +1102,11 @@ func (d *Device) fillOutputs(a *arState, c []byte) {
 }
 
 func (d *Device) storeInputs(a *arState, c []byte, s rt.DataStatus) {
+	if d.cfg.SystemRedundancy != nil {
+		d.mu.Lock()
+		d.srAck, d.srAckSeen = s&(rt.RedundancyMask|rt.Redundancy), true
+		d.mu.Unlock()
+	}
 	if !s.Valid() {
 		return
 	}

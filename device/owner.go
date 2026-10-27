@@ -38,12 +38,20 @@ func (d *Device) claimOwnership(a *ar) map[key]bool {
 	d.claimers[a] = true
 	for k := range a.match {
 		if o := d.owner[k]; o != nil && o != a {
-			locked[k] = true
+			if !sameSet(o, a) {
+				locked[k] = true
+			}
 			continue
 		}
 		d.owner[k] = a
 	}
 	return locked
+}
+
+// owns reports whether the owner o of a submodule lets a use it: o is a,
+// or both are ARs of one AR set (system redundancy).
+func owns(o, a *ar) bool {
+	return o == a || sameSet(o, a)
 }
 
 // setHeir makes an AR the heir of the one it replaces.
@@ -59,7 +67,12 @@ func (d *Device) setHeir(old, heir *ar) {
 // with a "Released" alarm.
 func (d *Device) releaseOwnership(a *ar) {
 	var handed []handover
+	// The other AR of a set takes the submodules over silently.
+	heir := d.srOther(a)
 	d.imgMu.Lock()
+	if a.heir == nil && heir != nil {
+		a.heir = heir
+	}
 	delete(d.claimers, a)
 	var others []*ar
 	for o := range d.claimers {
@@ -182,7 +195,7 @@ func (d *Device) lockedFor(a *ar) map[key]bool {
 	d.imgMu.RLock()
 	defer d.imgMu.RUnlock()
 	for k := range a.match {
-		if o := d.owner[k]; o != nil && o != a {
+		if o := d.owner[k]; o != nil && !owns(o, a) {
 			locked[k] = true
 		}
 	}

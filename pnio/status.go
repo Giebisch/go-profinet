@@ -48,6 +48,7 @@ const (
 	Code1ExpSubm   uint8 = 0x03
 	Code1AlarmCR   uint8 = 0x04
 	Code1ARRPC     uint8 = 0x07
+	Code1SRInfo    uint8 = 0x0A // faulty SRInfoBlock
 )
 
 // ErrorCode1 values of ErrorDecode PNIORW (Read and Write).
@@ -125,10 +126,27 @@ const (
 	AbortDCPNameChanged   AbortReason = 0x1F
 	AbortDCPReset         AbortReason = 0x20
 	AbortPDEVCheck        AbortReason = 0x24
+	// System redundancy (IOCARSR), as Wireshark names them
+	// (docs/research/EVIDENCE-AR-SR-MCR-UDP.md, B.1).
+	AbortSRRDHTExpired    AbortReason = 0x26
+	AbortSRPDevImpossible AbortReason = 0x27
+	AbortSRInterfaceLost  AbortReason = 0x29
+	AbortSRMTOTExpired    AbortReason = 0x2A
+	AbortSRProtocol       AbortReason = 0x2B
 )
 
 func (r AbortReason) String() string {
 	switch r {
+	case AbortSRRDHTExpired:
+		return "IOCARSR RDHT expired"
+	case AbortSRPDevImpossible:
+		return "IOCARSR PDEV parameterization impossible"
+	case AbortSRInterfaceLost:
+		return "redundant interface lost or no access to the peripherals"
+	case AbortSRMTOTExpired:
+		return "IOCARSR MTOT expired"
+	case AbortSRProtocol:
+		return "IOCARSR AR protocol violation"
 	case AbortSequence:
 		return "sequence number error"
 	case AbortInstanceClosed:
@@ -368,6 +386,8 @@ func code1Name(c uint8) string {
 		return "faulty AlarmCRBlockReq"
 	case Code1ARRPC:
 		return "faulty ARRPCBlockReq"
+	case Code1SRInfo:
+		return "faulty SRInfoBlock"
 	case Code1RWRecord:
 		return "faulty record"
 	case Code1PrmEnd:

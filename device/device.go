@@ -58,6 +58,9 @@ type Config struct {
 	// and link state. nil: the device has one port, Mux's. The caller
 	// owns the bridge and closes it after the device.
 	Bridge *bridge.Bridge
+	// SystemRedundancy accepts the IOCARSRs of S2 AR sets: EXPERIMENTAL,
+	// not interoperable (sr.go). nil refuses IOCARSR, as before.
+	SystemRedundancy *SRConfig
 	// StationName and IP are the initial station name and IP suite.
 	StationName string
 	IP          dcp.IPSuite
@@ -185,6 +188,8 @@ type Device struct {
 	// that may (shared device, owner.go).
 	owner    map[key]*ar
 	claimers map[*ar]bool
+	// srSets are the AR sets of system redundancy, guarded by mu.
+	srSets map[[14]byte]*srSet
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -272,6 +277,7 @@ func New(cfg Config) (*Device, error) {
 		inputs:   map[key]*ioData{},
 		owner:    map[key]*ar{},
 		claimers: map[*ar]bool{},
+		srSets:   map[[14]byte]*srSet{},
 		outputs:  map[key]*ioData{},
 		ctx:      ctx,
 		cancel:   cancel,

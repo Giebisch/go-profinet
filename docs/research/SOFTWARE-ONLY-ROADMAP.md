@@ -240,6 +240,15 @@ and experiments only, **—** deferred.
   primary request); a vnet scenario that measures detection and failover.
   Documented as experimental and not interoperable until an independent
   S2 implementation or normative text is available.
+- **Status (2026-10-27)**: the gated experiment is done
+  (`device.Config.SystemRedundancy`, `controller.DeviceConfig.SystemRedundancy`,
+  `Device.SetPrimary`). e2e on vnet: both IOCARSRs of a set run, the
+  outputs come from the primary and the inputs reach both (primary/backup
+  acknowledge), the backup cannot write, a switchover hands the outputs
+  over in about 5 ms, a failed primary is noticed when its data hold
+  expires and the backup takes over before RDHT runs out, and without a
+  primary the set is aborted with reason 38. Not interoperable: no
+  independent S2 implementation exists.
 
 ### 4A. Multiport devices — P2
 
