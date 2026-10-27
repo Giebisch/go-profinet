@@ -211,7 +211,9 @@ func (d *Device) srStatus(s *srSet) {
 	}
 	s.mu.Unlock()
 	for _, a := range ars {
-		if a.provider == nil || a.currentState() != ARStateData {
+		// The state first: read under the AR's lock, it orders the read
+		// of the provider after its creation.
+		if a.currentState() != ARStateData || a.provider == nil {
 			continue
 		}
 		st := rt.ProviderRun | rt.StationOK

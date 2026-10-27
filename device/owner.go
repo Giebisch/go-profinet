@@ -84,7 +84,9 @@ func (d *Device) releaseOwnership(a *ar) {
 			continue
 		}
 		delete(d.owner, k)
-		if out := d.outputs[k]; out != nil {
+		if out := d.outputs[k]; out != nil && !sameSet(a, a.heir) {
+			// The other AR of a set inherits the outputs as they are:
+			// they are held for the redundancy data hold time.
 			out.iops = pnio.IOxSBad
 		}
 		if h := a.heir; h != nil && h.match[k] {

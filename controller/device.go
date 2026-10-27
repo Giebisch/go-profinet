@@ -1235,11 +1235,15 @@ func (d *Device) teardown(a *arState) {
 		a.alarmLow.Close()
 	}
 	d.c.unregisterAR(a.uuid)
+	// The statistics before d.mu: a frame still being handled holds the
+	// consumer's lock and waits for d.mu (storeInputs).
+	var last DeviceStats
+	if a.provider != nil {
+		last.Provider, last.Consumer, last.Cycle = a.provider.Stats(), a.consumer.Stats(), a.provTask.Stats()
+	}
 	d.mu.Lock()
 	if a.provider != nil {
-		d.lastStats.Provider = a.provider.Stats()
-		d.lastStats.Consumer = a.consumer.Stats()
-		d.lastStats.Cycle = a.provTask.Stats()
+		d.lastStats.Provider, d.lastStats.Consumer, d.lastStats.Cycle = last.Provider, last.Consumer, last.Cycle
 	}
 	if d.ar == a {
 		d.ar = nil
