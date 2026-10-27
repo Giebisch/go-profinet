@@ -30,6 +30,7 @@ import (
 	"github.com/otfabric/go-profinet/pnio"
 	"github.com/otfabric/go-profinet/rpc"
 	"github.com/otfabric/go-profinet/rt"
+	"github.com/otfabric/go-profinet/snmp"
 )
 
 // ListenPacketFunc opens a UDP socket; net.ListenConfig.ListenPacket and
@@ -95,6 +96,10 @@ type Config struct {
 	// ApplicationReadyTimeout bounds the ApplicationReady call. Zero
 	// means 6 s (p-net's 3 tries of 2 s).
 	ApplicationReadyTimeout time.Duration
+	// SNMP starts a read-only SNMPv1/v2c agent on UDP port 161 (opened
+	// with ListenPacket) with MIB-II and the LLDP-MIB. nil, the
+	// default, runs none.
+	SNMP *SNMPConfig
 	// Logger receives diagnostics. nil logs nothing.
 	Logger profinet.Logger
 }
@@ -124,6 +129,7 @@ type Device struct {
 	lldpA  *lldp.Agent
 	rpcSrv *rpc.Server
 	rpcCli *rpc.Client
+	snmpA  *snmp.Agent
 
 	// mu guards the station state and the ARs.
 	mu   sync.Mutex
@@ -296,6 +302,11 @@ func (d *Device) start() error {
 	}
 	d.rpcSrv = rpc.NewServer(conn, true, rpc.ServerOptions{Logger: d.log})
 	d.rpcSrv.Register(pnio.DeviceInterface, pnio.InterfaceVersion, rpc.HandlerFunc(d.serveRPC))
+	if d.cfg.SNMP != nil {
+		if err := d.startSNMP(); err != nil {
+			return err
+		}
+	}
 	// DCP last: once the device can be found, everything a controller
 	// talks to is in place.
 	r, err := dcp.NewResponder(d.mux, station{d}, dcp.ResponderOptions{Logger: d.log, NoResponseDelay: d.cfg.NoResponseDelay})
@@ -403,6 +414,9 @@ func (d *Device) Close() error {
 	}
 	if d.rpcCli != nil {
 		_ = d.rpcCli.Close()
+	}
+	if d.snmpA != nil {
+		_ = d.snmpA.Close()
 	}
 	if d.lldpA != nil {
 		d.lldpA.Close()
