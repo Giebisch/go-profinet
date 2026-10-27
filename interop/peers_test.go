@@ -8,10 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/otfabric/go-profinet/pnio"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-profinet/pnio"
 )
 
 // TestPnioRsController: go-profinet as IO-Controller of pnio-rs, with the
