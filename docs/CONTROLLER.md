@@ -100,6 +100,18 @@ owner leaves, the device hands it over with a "Released" alarm; the
 controller writes the submodule's `Parameters`, sends PrmEnd (plug) and,
 on the device's ApplicationReady (plug), exchanges its data from then on.
 
+## Re-parameterization, port checks and MRP
+
+`cd.Reparameterize(ctx, params)` re-parameterizes a running AR: PrmBegin,
+the record writes, PrmEnd and the device's ApplicationReady while cyclic
+data goes on; the parameters replace the device's `Parameters` for later
+reconnects. Devices that refuse PrmBegin (p-net, pnio-rs) keep running
+with their old parameters. `DeviceConfig.PeerChecks` writes CheckPeers
+(the expected neighbor of a port) before PrmEnd, and `DeviceConfig.MRP`
+(`MRPSetting`) the MRP role of a multiport device (client, manager or
+off). `DeviceConfig.SystemRedundancy` connects an S2 AR set: an
+experiment, not interoperable ([LIMITATIONS.md](../LIMITATIONS.md)).
+
 ## Discovery and addressing
 
 `ctrl.DCP()` is the controller's DCP requester ([DCP.md](DCP.md)): Identify,

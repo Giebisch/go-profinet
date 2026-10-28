@@ -28,8 +28,8 @@ The library provides:
   I&M0–4, RealIdentificationData, ModuleDiff, port data for the topology,
   port checks (CheckPeers) and adjustments (LLDP and DCP boundaries),
   shared device (several controllers, one owner per submodule), multiport
-  devices on a software switch (`l2/bridge`), media redundancy (MRP client
-  and manager), an opt-in read-only SNMP agent (MIB-II, LLDP-MIB), an
+  devices on a software switch (`l2/bridge`), media redundancy (MRP client,
+  manager and automatic manager), an opt-in read-only SNMP agent (MIB-II, LLDP-MIB), an
   opt-in DCP policy (read-only, rate limits, audit) and, as an experiment
   off by default, system redundancy S2
 - **DCP** (`dcp`): Identify with filters and response delay, Get, Set
@@ -54,12 +54,13 @@ The library provides:
   (`netstack`), so that a controller and devices run in one process without
   privileges
 - **Verified against independent implementations**: rt-labs p-net,
-  pnio-rs, profinet-py and pnio-dcp (PROFINET), umrp (MRP rings), Net-SNMP
-  (the SNMP agent), with every capture decoded by Wireshark and scapy, in
+  pnio-rs, profinet-py and pnio-dcp (PROFINET), umrp and microchip-ung/mrp
+  on the Linux kernel's bridge MRP (MRP rings), Net-SNMP (the SNMP agent),
+  with every capture decoded by Wireshark and scapy, in
   the containers of
   [otfabric/profinet-interop](https://github.com/otfabric/profinet-interop)
-  (see [INTEROPERABILITY.md](INTEROPERABILITY.md) and, feature by feature,
-  [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md))
+  (see [INTEROPERABILITY.md](INTEROPERABILITY.md) and the support, feature
+  and interop matrix, [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md))
 - **Persistence and re-parameterization**: an optional store keeps a
   device's permanent name, address and I&M records across restarts
   (`store`, `device.Config.Store`); a controller re-parameterizes a running
@@ -88,7 +89,7 @@ is from PI's public pages.
 |---|:---:|:---:|:---:|:---:|:---:|
 | Language | Go | C | Rust | Python | C |
 | Licence | MIT | GPL-3.0-only or commercial | MIT OR Apache-2.0 | GPL-3.0-only or commercial | PNO Community Source Code License (members only; no combination with copyleft) |
-| Status | pre-1.0 | maintained privately; public tree is an evaluation snapshot without ports (v1.0.2, 2025) | young, single author (v0.1.0, 2026) | active, one maintainer (0.6.6, 2026) | maintained by PI |
+| Status | pre-1.0 (v0.5.0) | maintained privately; public tree is an evaluation snapshot without ports (v1.0.2, 2025) | young, single author (v0.1.0, 2026) | active, one maintainer (0.6.6, 2026) | maintained by PI |
 | IO-Controller | ✅ | — | — | ✅ minimal (cyclic marked experimental) | not documented publicly |
 | IO-Device | ✅ | ✅ | ✅ | — | ✅ |
 | DCP requester | ✅ Identify (all filters), Get, Set, Signal, Reset | — | — | ✅ | — |
@@ -106,10 +107,13 @@ is from PI's public pages.
 | ReadImplicit, WriteMultiple | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ |
 | PDPortDataReal / PDRealData (topology) | ✅ serve and decode | ✅ | — | ✅ read | ✅ |
 | PDPortDataCheck (CheckPeers) / PDPortDataAdjust (boundaries) | ✅ device and controller | ◐ CheckPeers, PeerToPeerBoundary bit 0 | — | — | ✅ |
+| Re-parameterization in Data (PrmBegin) | ✅ device and controller | — (refuses PrmBegin) | — (refuses PrmBegin) | ✅ controller | ✅ |
+| Media redundancy (MRP) | ✅ client, manager, automatic manager (multiport device) | — | — | n/a | not documented |
+| SNMP agent | ✅ v1/v2c, MIB-II, LLDP-MIB | ◐ optional, through Net-SNMP | — | n/a | not documented |
 | GSDML | ✅ parse, validate (catalog), generate, model conversion | — (static file) | ◐ generate | ◐ parse for cyclic | — |
 | Platforms | Linux, macOS/BSD, Windows (Npcap) | Linux, RTOS ports (not in the public tree) | Linux | Linux | Linux (Raspberry Pi demo) |
 | Runs without privileges in tests | ✅ virtual Ethernet in process | — | — | — | — |
-| Tested against other stacks in CI | ✅ p-net, pnio-rs, profinet-py, pnio-dcp; scapy and Wireshark decode every capture | not documented | golden frames from p-net and an S7-1500 | p-net (integration tests) | not documented |
+| Tested against other stacks in CI | ✅ p-net, pnio-rs, profinet-py, pnio-dcp; umrp and microchip-ung/mrp (MRP); Net-SNMP; scapy and Wireshark decode every capture | not documented | golden frames from p-net and an S7-1500 | p-net (integration tests) | not documented |
 | PI certification | — (not certified) | v1.0.2 release notes: "PROFINET Test Bundle 2.45.0.2 PASS" | — | — | basis for certified products |
 
 ✅ = available · ◐ = partly (the cell says what) · — = not available. For
@@ -143,7 +147,7 @@ Requires Go 1.23 or later.
 | `pnio` | PNIO blocks, NDR, status, identifiers |
 | `rt` | cyclic frames, layout, provider, consumer, scheduler |
 | `alarm` | RTA alarm transport |
-| `mrp` | MRP frame codec and the ring client and manager (`mrp.New`) on a switch |
+| `mrp` | MRP frame codec and the ring client, manager and automatic manager (`mrp.New`) on a switch |
 | `snmp` | read-only SNMPv1/v2c agent: MIB-II system, interfaces, snmp group, LLDP-MIB |
 | `ptcp` | PTCP delay frame codec (DelayReq, DelayRes); no line delay measurement |
 | `ethernet` | Ethernet and VLAN frame codec, MAC addresses |
@@ -153,7 +157,7 @@ Requires Go 1.23 or later.
 | `vnet` | virtual Ethernet switch with loss, duplication, corruption, reordering, delay and jitter |
 | `netstack` | ARP, IPv4 and UDP over a `l2.Mux` |
 | `pcap` | pcap reader and writer |
-| `examples/` | quickstart, discovery, alarms, records, topology, chaos, GSDML generation and import, a device and a controller on a real interface ([outputs](examples/README.md)) |
+| `examples/` | quickstart, discovery, DCP Hello, alarms, records, topology, chaos, GSDML generation and import, GSDX inspection, a device and a controller on a real interface ([outputs](examples/README.md)) |
 | `e2e/` | end-to-end and chaos tests on vnet; real Layer 2 tests |
 | `interop/` | the interop suite against profinet-interop (build tag `interop`) |
 
@@ -249,13 +253,16 @@ make interop-images && make interop   # the interop suite (Docker), see INTEROPE
 
 The features of conformance class A as controller and device (RT_CLASS_1
 and RT_CLASS_2 without synchronization), shared device, multiport devices,
-MRP (client and manager, no MRPD) and a read-only SNMP agent; system
+MRP (client, manager and automatic manager; no MRPD, no interconnection)
+and a read-only SNMP agent; system
 redundancy S2 is an experiment that is not interoperable. This is feature
 coverage, not conformance: go-profinet is not certified for any class, and
 no time measured on the virtual network is a real-time claim. No IRT,
 PROFIsafe or PROFINET security classes. What was built without PI
 membership or hardware, how it was verified and what it does not do is in
-[docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md),
+[docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md) (the support, feature and
+interop matrix), [LIMITATIONS.md](LIMITATIONS.md), the release notes
+([RELEASE.md](RELEASE.md)),
 [docs/research/NEXT-PROGRAM-REPORT.md](docs/research/NEXT-PROGRAM-REPORT.md)
 and, for the previous round,
 [docs/research/FEATURE-COMPLETION-REPORT.md](docs/research/FEATURE-COMPLETION-REPORT.md). OT Fabric is not a PI

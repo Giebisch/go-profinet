@@ -398,7 +398,7 @@ func TestNetSNMPFlood(t *testing.T) {
 // change does not find it; one before does.
 func TestNetSNMPLLDP(t *testing.T) {
 	e := newEnv(t)
-	e.result.peer("Net-SNMP", image("netsnmp"), "SNMP manager (go-profinet: SNMP agent and LLDP of the IO-Device)")
+	e.result.peer("Net-SNMP", image("netsnmp"), "SNMP manager (go-profinet: SNMP agent of the IO-Device)")
 	if !e.forwardLLDP() {
 		e.result.na("SNMP lldpRemTable with changing neighbors (Net-SNMP)", "the Docker bridge does not forward LLDP and its group_fwd_mask cannot be set here")
 		t.Skip("bridge does not forward LLDP")

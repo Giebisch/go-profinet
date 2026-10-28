@@ -136,8 +136,12 @@ interface UUIDs. RT_CLASS_UDP fields (codecs only): `LTIP`, `UDPRTPort`,
 `mrp`: `Frame` (`Test`, `TopologyChange`, `LinkChange`, `Common`, `Option`, other
 TLVs), `AppendTo`, `Decode`, `EtherType`, the destination addresses, `PortRole`,
 `RingState`, `DefaultDomain`; the ring entity `New(Config)` (`RoleClient`,
-`RoleManager`, two ring ports of a `Switch` such as `l2/bridge`, `Profile200`,
-`Profile500`), `Entity.Status`, `Close`. `device.Config.MRP` (`MRPConfig`) runs it on
+`RoleManager`, `RoleAuto`, two ring ports of a `Switch` such as `l2/bridge`,
+`Profile200`, `Profile500`), `Entity.Status` (`Acting`, `Manager`,
+`ManagerPrio` for an automatic manager), `Close`. The automatic manager's
+options: `ManagerOption`, `NewManagerOption`, `Option.ManagerOption`,
+`SubType` (`SubTestMgrNAck`, `SubTestPropagate`, `SubAutoMgr`), `OUISiemens`,
+`DefaultAutoPrio`, and `Better`, the order of two managers. `device.Config.MRP` (`MRPConfig`) runs it on
 a multiport device, `Device.MRPStatus` reports it, and the records
 PDInterfaceMrpDataAdjust/Real/Check and PDPortMrpDataAdjust/Real (`pnio`) configure
 and report it; `controller.DeviceConfig.MRP` (`MRPSetting`) writes them.
