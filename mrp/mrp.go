@@ -11,6 +11,7 @@
 package mrp
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -331,4 +332,85 @@ func Decode(b []byte) (Frame, error) {
 			}
 		}
 	}
+}
+
+// The manager options of MRA (the automatic manager), carried in an
+// MRP_Option after the OUI: an Ed1Type octet, two octets of manufacturer
+// data (Ed1Type 0x00 or 0x04), then one sub-TLV, as Wireshark's MRP
+// dissector reads it and microchip-ung/mrp writes it. microchip-ung/mrp,
+// umrp and the Linux bridge send the OUI 00-00-00, and read the sub-TLV
+// at its offset whatever the OUI; Wireshark decodes the sub-TLVs only
+// after the Siemens OUI 08-00-06. NewManagerOption writes 08-00-06 with
+// Ed1Type 0x00, which both read; ManagerOption accepts any OUI
+// (UNVERIFIED against IEC 62439-2).
+
+// SubType is the type of a manager option's sub-TLV.
+type SubType uint8
+
+// Manager option sub-TLV types.
+const (
+	SubTestMgrNAck   SubType = 0x01
+	SubTestPropagate SubType = 0x02
+	SubAutoMgr       SubType = 0x03
+)
+
+// DefaultAutoPrio is the default priority of an automatic manager (MRA):
+// lower than a configured manager's.
+const DefaultAutoPrio uint16 = 0xA000
+
+// ManagerOption is MRP_TestMgrNAck (a manager tells another, OtherSA, to
+// stop managing: it is the better one) or MRP_TestPropagate (a manager
+// that gave up announces the manager that won, Other*).
+type ManagerOption struct {
+	Type      SubType
+	Prio      uint16
+	SA        ethernet.MAC
+	OtherPrio uint16
+	OtherSA   ethernet.MAC
+}
+
+// NewManagerOption returns the MRP_Option of m.
+func NewManagerOption(m ManagerOption) Option {
+	be := binary.BigEndian
+	d := []byte{0x00, 0, 0, byte(m.Type), 0x12}
+	d = be.AppendUint16(d, m.Prio)
+	d = append(d, m.SA[:]...)
+	d = be.AppendUint16(d, m.OtherPrio)
+	d = append(d, m.OtherSA[:]...)
+	return Option{OUI: OUISiemens, Data: d}
+}
+
+// OUISiemens is the OUI of the manager options Wireshark decodes.
+var OUISiemens = [3]byte{0x08, 0x00, 0x06}
+
+// ManagerOption decodes a manager option (TestMgrNAck or TestPropagate);
+// false for any other option.
+func (o Option) ManagerOption() (ManagerOption, bool) {
+	d := o.Data
+	if len(d) < 1 {
+		return ManagerOption{}, false
+	}
+	off := 1
+	if d[0] == 0x00 || d[0] == 0x04 {
+		off += 2
+	}
+	if len(d) < off+2+16 {
+		return ManagerOption{}, false
+	}
+	t := SubType(d[off])
+	if t != SubTestMgrNAck && t != SubTestPropagate {
+		return ManagerOption{}, false
+	}
+	v := d[off+2:]
+	be := binary.BigEndian
+	return ManagerOption{Type: t, Prio: be.Uint16(v), SA: ethernet.MAC(v[2:8]), OtherPrio: be.Uint16(v[8:]), OtherSA: ethernet.MAC(v[10:16])}, true
+}
+
+// Better reports whether a manager of priority p and address a beats one
+// of q and b: the lower priority, then the lower address.
+func Better(p uint16, a ethernet.MAC, q uint16, b ethernet.MAC) bool {
+	if p != q {
+		return p < q
+	}
+	return bytes.Compare(a[:], b[:]) < 0
 }

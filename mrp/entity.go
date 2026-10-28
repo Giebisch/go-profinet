@@ -36,6 +36,17 @@ import (
 // ports, reports its port links with MRP_LinkDown/LinkUp, and keeps a port
 // that comes up blocked until the manager's TopologyChange (or its link
 // timers run out), so that a closing ring never loops.
+//
+// An automatic manager (MRA, RoleAuto) starts as a manager. Of two
+// managers that see each other's tests, the better one (the lower
+// priority, then the lower address: Better) answers with
+// MRP_TestMgrNAck, and the other becomes a client of it, announcing the
+// winner with MRP_TestPropagate. As a client it watches the tests of the
+// managers better than itself; when TSTNRmax test intervals pass without
+// one, it manages the ring again. That is what microchip-ung/mrp and umrp
+// do (UNVERIFIED against IEC 62439-2), except that a port the MRA unblocks
+// on giving up waits, like a client's port that comes up, for the
+// winner's closed ring.
 
 // Role is the MRP role of an entity.
 type Role int
@@ -45,6 +56,9 @@ const (
 	RoleDisabled Role = 0
 	RoleClient   Role = 1
 	RoleManager  Role = 2
+	// RoleAuto is the automatic manager (MRA). PROFINET's MRP_Role has no
+	// value for it: package device does not offer it.
+	RoleAuto Role = 3
 )
 
 func (r Role) String() string {
@@ -53,6 +67,8 @@ func (r Role) String() string {
 		return "client"
 	case RoleManager:
 		return "manager"
+	case RoleAuto:
+		return "auto"
 	default:
 		return "disabled"
 	}
@@ -106,7 +122,8 @@ type Config struct {
 	MAC ethernet.MAC
 	// Domain is the MRP domain UUID; zero means DefaultDomain.
 	Domain [16]byte
-	// Prio is the manager priority; zero means DefaultManagerPrio.
+	// Prio is the manager priority; zero means DefaultManagerPrio
+	// (DefaultAutoPrio for RoleAuto).
 	Prio uint16
 	// Profile is the timer profile; zero means Profile200.
 	Profile Profile
@@ -118,8 +135,15 @@ type Config struct {
 
 // Status is the state of an entity.
 type Status struct {
-	Role  Role
-	State string
+	Role Role
+	// Acting is what the entity is now: RoleManager or RoleClient (an
+	// automatic manager is either).
+	Acting Role
+	// Manager is the better manager an automatic manager acting as a
+	// client follows (zero otherwise), ManagerPrio its priority.
+	Manager     ethernet.MAC
+	ManagerPrio uint16
+	State       string
 	// RingOpen is the ring state the manager determined (a client: as
 	// the manager last reported it).
 	RingOpen bool
@@ -137,15 +161,24 @@ type Entity struct {
 	log  profinet.Logger
 	subs [2]*l2.Subscription
 
-	mu          sync.Mutex
-	state       string
-	up          [2]bool
-	blocked     [2]bool
-	ringOpen    bool
-	transitions uint16
-	misses      int
-	seq         uint16
-	start       time.Time
+	mu sync.Mutex
+	// acting is RoleManager or RoleClient: an automatic manager changes
+	// it; ringMAC and ringPrio are the manager it gave way to, and
+	// monitorMisses counts the test intervals without a test of a better
+	// manager.
+	acting        Role
+	ringMAC       ethernet.MAC
+	ringPrio      uint16
+	ringSeen      time.Time
+	monitorMisses int
+	state         string
+	up            [2]bool
+	blocked       [2]bool
+	ringOpen      bool
+	transitions   uint16
+	misses        int
+	seq           uint16
+	start         time.Time
 	// linkTimer is the client's wait for a TopologyChange after a port
 	// came up; it unblocks the port when it runs out.
 	linkTimer *time.Timer
@@ -177,7 +210,7 @@ const (
 
 // New starts an entity.
 func New(cfg Config) (*Entity, error) {
-	if cfg.Role != RoleClient && cfg.Role != RoleManager {
+	if cfg.Role != RoleClient && cfg.Role != RoleManager && cfg.Role != RoleAuto {
 		return nil, fmt.Errorf("mrp: role %s: %w", cfg.Role, profinet.ErrInvalidConfig)
 	}
 	if cfg.Ports[0] == nil || cfg.Ports[1] == nil || cfg.Switch == nil || cfg.MAC.IsZero() || cfg.Index[0] == cfg.Index[1] {
@@ -188,6 +221,9 @@ func New(cfg Config) (*Entity, error) {
 	}
 	if cfg.Prio == 0 {
 		cfg.Prio = DefaultManagerPrio
+		if cfg.Role == RoleAuto {
+			cfg.Prio = DefaultAutoPrio
+		}
 	}
 	if cfg.Profile.TestInterval == 0 {
 		cfg.Profile = Profile200
@@ -196,7 +232,11 @@ func New(cfg Config) (*Entity, error) {
 		cfg.Logger = profinet.NopLogger()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Entity{cfg: cfg, log: cfg.Logger, state: StateACStat1, ringOpen: true, start: time.Now(), ctx: ctx, cancel: cancel, testNow: make(chan struct{}, 1)}
+	acting := RoleClient
+	if cfg.Role != RoleClient {
+		acting = RoleManager
+	}
+	e := &Entity{cfg: cfg, acting: acting, log: cfg.Logger, state: StateACStat1, ringOpen: true, start: time.Now(), ctx: ctx, cancel: cancel, testNow: make(chan struct{}, 1)}
 	for i, m := range cfg.Ports {
 		s, err := m.Subscribe(l2.MatchEtherType(EtherType), 256)
 		if err != nil {
@@ -213,7 +253,7 @@ func New(cfg Config) (*Entity, error) {
 	// Until the state machine decides, a manager blocks its secondary
 	// port and a client the port that is not up yet: no loop at start.
 	e.setBlocked(0, false)
-	e.setBlocked(1, cfg.Role == RoleManager)
+	e.setBlocked(1, acting == RoleManager)
 	for i := range e.subs {
 		e.wg.Add(1)
 		go e.recv(i)
@@ -242,7 +282,7 @@ func (e *Entity) Close() error {
 func (e *Entity) Status() Status {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return Status{Role: e.cfg.Role, State: e.state, RingOpen: e.ringOpen, Blocked: e.blocked, Transitions: e.transitions,
+	return Status{Role: e.cfg.Role, Acting: e.acting, Manager: e.ringMAC, ManagerPrio: e.ringPrio, State: e.state, RingOpen: e.ringOpen, Blocked: e.blocked, Transitions: e.transitions,
 		TestsSent: e.testsSent.Load(), TestsReceived: e.testsRecv.Load(), TopologyChanges: e.topChanges.Load(),
 		LinkChanges: e.linkChanges.Load(), Forwarded: e.forwarded.Load(), Malformed: e.malformed.Load()}
 }
@@ -288,11 +328,24 @@ func (e *Entity) run() {
 				e.link(i, now)
 			}
 		}
-		if e.cfg.Role == RoleManager && (now || !time.Now().Before(nextTest)) {
+		if now || !time.Now().Before(nextTest) {
 			nextTest = time.Now().Add(e.cfg.Profile.TestInterval)
-			e.testTick()
+			switch e.actingRole() {
+			case RoleManager:
+				e.testTick()
+			default:
+				if e.cfg.Role == RoleAuto {
+					e.monitorTick()
+				}
+			}
 		}
 	}
+}
+
+func (e *Entity) actingRole() Role {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.acting
 }
 
 func (e *Entity) upLocked(i int) bool {
@@ -307,13 +360,13 @@ func (e *Entity) link(i int, up bool) {
 	e.up[i] = up
 	other := 1 - i
 	var notify []func()
-	if e.cfg.Role == RoleManager {
+	if e.acting == RoleManager {
 		notify = e.managerLink()
 	} else {
 		notify = e.clientLink(i, up, other)
 	}
 	e.mu.Unlock()
-	e.log.Debugf("mrp: %s: port %d link %v", e.cfg.Role, i+1, up)
+	e.log.Debugf("mrp: %s: port %d link %v", e.actingRole(), i+1, up)
 	for _, f := range notify {
 		f()
 	}
@@ -475,7 +528,7 @@ func (e *Entity) recv(i int) {
 		if port < 0 {
 			continue
 		}
-		if e.cfg.Role == RoleManager {
+		if e.actingRole() == RoleManager {
 			e.managerRecv(port, f)
 		} else {
 			e.clientRecv(port, ef, f)
@@ -500,7 +553,12 @@ func (e *Entity) managerRecv(port int, f Frame) {
 	switch {
 	case f.Test != nil:
 		if f.Test.SA != e.cfg.MAC {
-			// Another manager's test: one manager per ring here.
+			// Another manager's test. An automatic manager that is the
+			// better one tells it to give way; the worse one waits for
+			// that. A configured manager ignores it.
+			if e.cfg.Role == RoleAuto && !Better(f.Test.Prio, f.Test.SA, e.cfg.Prio, e.cfg.MAC) {
+				e.sendManagerOption(ManagerOption{Type: SubTestMgrNAck, Prio: e.cfg.Prio, SA: e.cfg.MAC, OtherSA: f.Test.SA})
+			}
 			return
 		}
 		e.testsRecv.Add(1)
@@ -527,6 +585,20 @@ func (e *Entity) managerRecv(port int, f Frame) {
 			e.cfg.Switch.Flush()
 			e.sendTopologyChange(e.cfg.Profile.TopChangeInterval)
 			e.changed()
+		}
+	case len(f.Options) > 0:
+		for _, o := range f.Options {
+			if m, ok := o.ManagerOption(); ok && m.Type == SubTestMgrNAck && e.cfg.Role == RoleAuto &&
+				m.OtherSA == e.cfg.MAC && m.SA != e.cfg.MAC {
+				e.yield(m)
+				return
+			}
+		}
+	case f.TopologyChange != nil:
+		if f.TopologyChange.SA != e.cfg.MAC && e.cfg.Role == RoleAuto {
+			// Another manager's, while the two settle who manages.
+			e.topChanges.Add(1)
+			e.cfg.Switch.Flush()
 		}
 	case f.Link != nil:
 		e.linkChanges.Add(1)
@@ -571,6 +643,11 @@ func (f *Frame) sa() (ethernet.MAC, bool) {
 	case f.Link != nil:
 		return f.Link.SA, true
 	}
+	for _, o := range f.Options {
+		if m, ok := o.ManagerOption(); ok {
+			return m.SA, true
+		}
+	}
 	return ethernet.MAC{}, false
 }
 
@@ -594,6 +671,19 @@ func (e *Entity) clientRecv(port int, ef ethernet.Frame, f Frame) {
 	case f.Test != nil:
 		e.testsRecv.Add(1)
 		e.mu.Lock()
+		if e.cfg.Role == RoleAuto && Better(f.Test.Prio, f.Test.SA, e.cfg.Prio, e.cfg.MAC) {
+			// A better manager is there: keep giving way.
+			// It follows the best of them, or the one it hears when that
+			// is gone (no test for TSTNRmax intervals).
+			e.monitorMisses = 0
+			stale := time.Since(e.ringSeen) > e.cfg.Profile.TestInterval*time.Duration(e.cfg.Profile.TestMax)
+			switch {
+			case f.Test.SA == e.ringMAC:
+				e.ringSeen = time.Now()
+			case e.ringMAC.IsZero() || stale || Better(f.Test.Prio, f.Test.SA, e.ringPrio, e.ringMAC):
+				e.ringMAC, e.ringPrio, e.ringSeen = f.Test.SA, f.Test.Prio, time.Now()
+			}
+		}
 		e.ringOpen = f.Test.RingState == RingOpen
 		// The manager reports the ring closed: its secondary port is
 		// blocked, so a port waiting for it may forward.
@@ -628,6 +718,90 @@ func (e *Entity) clientRecv(port int, ef ethernet.Frame, f Frame) {
 			time.AfterFunc(interval, e.cfg.Switch.Flush)
 		}
 		e.changed()
+	}
+}
+
+// yield makes an automatic manager acting as a manager a client of the
+// better manager that told it to give way (MRP_TestMgrNAck m).
+func (e *Entity) yield(m ManagerOption) {
+	e.mu.Lock()
+	if e.acting != RoleManager {
+		e.mu.Unlock()
+		return
+	}
+	e.acting = RoleClient
+	e.ringMAC, e.ringPrio, e.ringSeen = m.SA, m.Prio, time.Now()
+	e.monitorMisses = 0
+	switch {
+	case e.up[0] && e.up[1] && e.blocked[1]:
+		// The blocked port forwards once the winner reports its ring
+		// closed (its own secondary port blocked), or when the link
+		// timers run out, as a client's port that comes up.
+		e.state = StatePT
+		if e.linkTimer != nil {
+			e.linkTimer.Stop()
+		}
+		e.linkTimer = time.AfterFunc(e.cfg.Profile.LinkInterval*time.Duration(e.cfg.Profile.LinkRepeat), func() { e.unblockAfterWait(1) })
+	case e.up[0] && e.up[1]:
+		e.state = StatePTIdle
+	case e.up[0] || e.up[1]:
+		e.state = StateDEIdle
+	default:
+		e.state = StateACStat1
+	}
+	e.mu.Unlock()
+	e.log.Infof("mrp: auto: giving way to the manager %s (priority 0x%04X)", m.SA, m.Prio)
+	e.sendManagerOption(ManagerOption{Type: SubTestPropagate, Prio: e.cfg.Prio, SA: e.cfg.MAC, OtherPrio: m.Prio, OtherSA: m.SA})
+	e.changed()
+}
+
+// monitorTick counts, for an automatic manager acting as a client, a
+// test interval; after TSTNRmax of them without a test of a better
+// manager it manages the ring again.
+func (e *Entity) monitorTick() {
+	e.mu.Lock()
+	if e.acting != RoleClient || !e.up[0] && !e.up[1] {
+		e.monitorMisses = 0
+		e.mu.Unlock()
+		return
+	}
+	e.monitorMisses++
+	if e.monitorMisses <= e.cfg.Profile.TestMax {
+		e.mu.Unlock()
+		return
+	}
+	missed := e.monitorMisses - 1
+	e.acting = RoleManager
+	e.ringMAC, e.ringPrio = ethernet.MAC{}, 0
+	e.monitorMisses = 0
+	if e.linkTimer != nil {
+		e.linkTimer.Stop()
+	}
+	// As a manager that starts: the ring is open until its tests come
+	// around, and with both ports up the secondary one blocks meanwhile.
+	e.ringOpen = true
+	e.state = StateACStat1
+	notify := e.managerLink()
+	e.mu.Unlock()
+	e.log.Infof("mrp: auto: no test of a better manager for %d intervals: managing the ring", missed)
+	for _, f := range notify {
+		f()
+	}
+	select {
+	case e.testNow <- struct{}{}:
+	default:
+	}
+	e.changed()
+}
+
+// sendManagerOption sends an MRP_TestMgrNAck or MRP_TestPropagate on the
+// ring ports that are up.
+func (e *Entity) sendManagerOption(m ManagerOption) {
+	f := Frame{Options: []Option{NewManagerOption(m)}}
+	for i := range e.cfg.Ports {
+		if e.upLocked(i) {
+			e.send(i, MACTest, f)
+		}
 	}
 }
 
