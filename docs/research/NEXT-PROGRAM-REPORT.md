@@ -131,7 +131,9 @@ Platform:
 1. **Run the CODESYS recipe** on a Linux host with a NIC and a Windows PC;
    record the GSDML import and the AR in the evidence files. This is the
    only path to a second independent controller and to S2 evidence.
-2. **A micro-VM ring for microchip-ung/mrp**: a kernel with `BRIDGE_MRP=y`
+2. **Done (2026-10-28): a micro-VM ring for microchip-ung/mrp**: the
+   Kernel MRP workflow builds Linux 6.12 without switchdev and runs the
+   MRP and MRA tests in one micro-VM boot each: all pass. The plan was: a kernel with `BRIDGE_MRP=y`
    and `NET_SWITCHDEV` unset, booted with KVM on an amd64 hosted runner
    (arm64 runners have no `/dev/kvm`), to add the kernel implementation as
    a second MRP peer. go-canbus already boots virtme-ng micro-VMs in CI
@@ -141,7 +143,7 @@ Platform:
    kernel (`vng --build` with a minimal config plus `BRIDGE_MRP`). The ring
    then runs in network namespaces inside the guest rather than in Docker
    containers.
-3. **MRA** (manager auto-negotiation) against umrp, which implements it.
+3. **Done (2026-10-28): MRA** (`mrp.RoleAuto`) against umrp and the kernel.
 4. **Engineering-tool imports** of the fixtures (CODESYS free, TIA Portal
    trial) into `evidence.json`.
 5. Measurements of the transport on bare metal and with PREEMPT_RT; only

@@ -54,12 +54,14 @@ Resume from here after an interruption.
 - B0 PI membership postponed by the owner (2026-10-26); impact in
   docs/PI-MEMBERSHIP.md (XSDs, GSDX, MRCD, test specifications).
 - B1 Kernel MRP (microchip-ung/mrp) needs a kernel without switchdev: not
-  on Docker Desktop or the hosted runners (NEXT-PROGRAM-REPORT.md).
+  on Docker Desktop or the hosted runners; resolved by the Kernel MRP
+  workflow (own Linux 6.12 in virtme-ng micro-VMs, one boot per test).
 - B2 No second independent IO-Controller in CI: CODESYS only by hand
   (research/INDEPENDENT-CONTROLLER.md).
 
 ## Next actions
 
 The evidence-based roadmap of docs/research/NEXT-PROGRAM-REPORT.md: run the
-CODESYS recipe, a micro-VM ring for kernel MRP, MRA against umrp,
-engineering-tool imports of the GSDML fixtures, measurements on bare metal.
+CODESYS recipe, engineering-tool imports of the GSDML fixtures,
+measurements on bare metal (the micro-VM ring for kernel MRP and MRA are
+done: Kernel MRP workflow, `mrp.RoleAuto`).
