@@ -244,7 +244,10 @@ func TestHelloNoStorm(t *testing.T) {
 	var last time.Time
 	n := 0
 	for at := range arrivals {
-		if !last.IsZero() && at.Sub(last) < interval-15*time.Millisecond {
+		// Arrival times carry the receiver's scheduling delay: a late
+		// first arrival shortens the next gap. A storm would be the 2 ms
+		// of the restarts apart.
+		if !last.IsZero() && at.Sub(last) < interval/2 {
 			t.Errorf("Hellos %s apart", at.Sub(last))
 		}
 		last = at

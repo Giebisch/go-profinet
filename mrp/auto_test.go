@@ -75,6 +75,11 @@ func TestBetter(t *testing.T) {
 	}
 }
 
+// The automatic managers run the 500 ms profile here: a client takes over
+// after TSTNRmax test intervals without a better manager's test, which in
+// the 200 ms profile is 80 ms, less than a loaded test runner may delay a
+// goroutine.
+
 func autos(n int) []Role {
 	r := make([]Role, n)
 	for i := range r {
@@ -122,7 +127,7 @@ func noLoop(t *testing.T, nodes []*node, from int, to []int) {
 // address at equal priority) as the manager; the ring closes without a
 // loop or a hole.
 func TestAutoRing(t *testing.T) {
-	nodes, _ := ringOf(t, autos(3), nil, Profile200)
+	nodes, _ := ringOf(t, autos(3), nil, Profile500)
 	settled(t, nodes, 0, []int{1, 2})
 	if s := nodes[1].ent.Status(); s.Role != RoleAuto || s.ManagerPrio != DefaultAutoPrio {
 		t.Fatalf("%+v", s)
@@ -133,7 +138,7 @@ func TestAutoRing(t *testing.T) {
 // TestAutoPriority: the lower priority wins over the lower address, and a
 // configured client takes part.
 func TestAutoPriority(t *testing.T) {
-	nodes, _ := ringOf(t, []Role{RoleAuto, RoleClient, RoleAuto}, []uint16{0, 0, 0x9000}, Profile200)
+	nodes, _ := ringOf(t, []Role{RoleAuto, RoleClient, RoleAuto}, []uint16{0, 0, 0x9000}, Profile500)
 	settled(t, nodes, 2, []int{0})
 	// The configured client forwards once the manager reports the ring
 	// closed.
@@ -147,7 +152,7 @@ func TestAutoPriority(t *testing.T) {
 // TestAutoTakeOver: when the manager fails, the next best automatic
 // manager stops seeing its tests and manages the ring.
 func TestAutoTakeOver(t *testing.T) {
-	nodes, _ := ringOf(t, autos(4), nil, Profile200)
+	nodes, _ := ringOf(t, autos(4), nil, Profile500)
 	settled(t, nodes, 0, []int{1, 2, 3})
 	// Station 0 fails: both its cables go down.
 	_ = nodes[0].ent.Close()
@@ -160,18 +165,22 @@ func TestAutoTakeOver(t *testing.T) {
 			}
 		}
 	}()
+	// Stations 1 to 3 all miss the tests and manage, then give way to
+	// station 1; a station that gave way with a blocked port keeps it
+	// blocked until the ring closes or its link timers run out (a line
+	// never closes): wait for the clients' ports that are up to forward.
 	eventually(t, 5*time.Second, "station 1 manages", func() bool {
 		s := nodes[1].ent.Status()
 		c2, c3 := nodes[2].ent.Status(), nodes[3].ent.Status()
 		return s.Acting == RoleManager && c2.Acting == RoleClient && c2.Manager == nodes[1].cpuMAC &&
-			c3.Acting == RoleClient && c3.Manager == nodes[1].cpuMAC
+			c3.Acting == RoleClient && c3.Manager == nodes[1].cpuMAC && !c2.Blocked[0] && !c2.Blocked[1] && !c3.Blocked[0]
 	})
 	noLoop(t, nodes, 2, []int{1, 3})
 	// Station 0 comes back as a fresh automatic manager: it is the best,
 	// and the others give way to it.
 	cut(nodes, 0, true)
 	cut(nodes, 3, true)
-	ent, err := New(Config{Role: RoleAuto, Ports: nodes[0].ent.cfg.Ports, Index: nodes[0].ent.cfg.Index, Switch: nodes[0].br, MAC: nodes[0].cpuMAC, Profile: Profile200})
+	ent, err := New(Config{Role: RoleAuto, Ports: nodes[0].ent.cfg.Ports, Index: nodes[0].ent.cfg.Index, Switch: nodes[0].br, MAC: nodes[0].cpuMAC, Profile: Profile500})
 	if err != nil {
 		t.Fatal(err)
 	}
