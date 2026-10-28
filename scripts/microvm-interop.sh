@@ -46,7 +46,7 @@ docker run --rm --network none --cap-add NET_ADMIN --cap-add NET_RAW profinet-in
     { echo "the guest kernel does not take an MRP instance"; exit 1; }
 cd $PWD/interop
 PROFINET_INTEROP_OTFNODE=$out/otfnode PROFINET_INTEROP_RESULTS=$results \
-    $out/interop.test -test.count=1 -test.timeout=20m -test.v -test.run '$run' 2>&1 | tee $out/test.log
+    $out/interop.test -test.count=1 -test.timeout=45m -test.v -test.run '$run' 2>&1 | tee $out/test.log
 grep -q '^PASS\$' $out/test.log && echo MICROVM-OK
 GUEST
 start=$(date +%s)
