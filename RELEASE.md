@@ -24,6 +24,63 @@ section ending with a `---` line and no `---` line inside a section.
 
 ---
 
+## v0.4.0
+
+**Date:** 2026-10-28
+**Previous release:** v0.3.0
+
+Independent interoperability and production readiness: MRP and the SNMP
+agent tested against independent implementations, persistence,
+re-parameterization of a running AR, an allocation-free Linux transport, and
+synthetic GSDML fixtures. What each feature covers, how it is tested and
+what limits it is in [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md); the
+program's outcome, blockers and roadmap in
+[docs/research/NEXT-PROGRAM-REPORT.md](docs/research/NEXT-PROGRAM-REPORT.md).
+Feature coverage is not conformance: go-profinet is not certified, and no
+measured time is a real-time claim.
+
+No incompatible API change (apidiff against v0.3.0). One behaviour change:
+`snmp.LLDPRemote.TimeMark` is the time of a row's last change; walks list
+every row at TimeFilter 0 and a Get answers any filter value up to it
+(before, a row appeared at its TimeMark only).
+
+- Persistence: package `store` (`Store`; `Memory`; `Dir`: CRC-32C-checked
+  files replaced atomically, the previous version kept and used after a
+  crash or corruption) and `device.Config.Store`/`StoreKey`: the permanent
+  station name and IP suite, DHCP options, I&M1–4 and resets survive a
+  restart; a temporary DCP Set clears the stored value; a failing store
+  refuses the change; `Device.StoreError`.
+- `controller.Device.Reparameterize`: PrmBegin, writes, PrmEnd and the
+  device's ApplicationReady on a running AR; the parameters are kept for
+  reconnects. Verified with profinet-py re-parameterizing go-profinet's
+  device; p-net and pnio-rs refuse PrmBegin in Data.
+- SNMP: lldpRemIndex is kept per neighbor (`lldp.Neighbor.Index`,
+  `Changed`); lldpRemTimeMark is a TimeFilter. Verified with Net-SNMP:
+  walks, errors, limits, malformed datagrams, a flood, changing neighbors.
+- MRP verified against umrp as manager and as client (profinet-interop
+  v0.3.0); microchip-ung/mrp could not run (the kernels available refuse
+  MRP on a software bridge); the interop suite builds MRP rings of veth
+  cables (`otfnode mrp`).
+- `l2/afpacket`: reads, writes and `LinkUp` allocate nothing; flood
+  throughput ×11, losses gone, 35 → 1 garbage collection per 30 s of a 1 ms
+  exchange (docs/BENCHMARKS.md, `scripts/l2-bench.sh`); the cyclic intervals
+  in a VM are unchanged.
+- GSDML: synthetic MIT fixtures (`gsdml/testdata/fixtures`: two device
+  access points with one and two ports, shared device, a compact device),
+  run as devices and controllers and parsed by profinet-py; an evidence file
+  for engineering-tool imports (none run yet).
+- Fixes: `device`: a Connect counted twice against MaxARs while its AR was
+  being established, so a second IO controller connecting at that moment was
+  refused "out of AR resources"; `l2/bridge`: statistics counted a frame
+  after it could be read.
+- Docs: `docs/research/INDEPENDENT-CONTROLLER.md` (CODESYS manual recipe),
+  `docs/research/GSDML-TOOLS.md`; a correction of v0.3.0's report: scapy has
+  no MRP dissector.
+- Interop: profinet-interop v0.3.0 (193 pass, 0 fail, 8 n/a, 8 attributed
+  deviations).
+
+---
+
 ## v0.3.0
 
 **Date:** 2026-10-27
