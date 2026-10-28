@@ -489,10 +489,11 @@ func testAuto(t *testing.T, peer string) {
 		e.expect("MRA: go-profinet (best priority) manages, "+peer+" MRAs give way", ok, "otfnode %+v, n2 %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n2), e.peerStatus(r.n3))
 		if ok {
 			r.exact("MRA ring closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
+			mark := r.marks()
 			time.Sleep(3 * time.Second)
 			r.exact("MRA ring still closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
 			e.expect("MRA: go-profinet stays the manager", actingChanges(e.events(r.n1)) == 0, "acting changes %d", actingChanges(e.events(r.n1)))
-			r.flapping()
+			r.flapping(mark)
 		}
 		stop()
 		e.oracles(pcap)
@@ -513,13 +514,14 @@ func testAuto(t *testing.T, peer string) {
 			return
 		}
 		r.exact("MRA ring closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
+		mark := r.marks()
 		time.Sleep(3 * time.Second)
 		r.exact("MRA ring still closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
 		// At most the one change from manager to client (none when it
 		// gave way before its first ring event).
 		e.expect("MRA: go-profinet stays a client of the better "+peer+" MRA", actingChanges(e.events(r.n1)) <= 1 && e.otfRing(r.n1).Acting == "client",
 			"acting changes %d, %+v", actingChanges(e.events(r.n1)), e.otfRing(r.n1))
-		r.flapping()
+		r.flapping(mark)
 
 		// The manager fails: both its cables down.
 		e.setLink(r.n2, "ringA", false)
@@ -564,19 +566,30 @@ func changes(evs []map[string]any, field string) int {
 // actingChanges counts otfnode's changes between manager and client.
 func actingChanges(evs []map[string]any) int { return changes(evs, "acting") }
 
-// flapping records peer nodes that keep changing role in a ring that
-// settled: umrp's MRA, as a client, ignores the tests of the manager it
-// gave way to (its ring_mac) in its test monitor, takes the manager role
-// back after TSTNRmax intervals and gives way again on the next NAck,
-// whoever the manager is (two umrp nodes alike).
-func (r *ring) flapping() {
+// marks returns how many events each peer node printed so far.
+func (r *ring) marks() [2]int {
+	return [2]int{len(r.e.events(r.n2)), len(r.e.events(r.n3))}
+}
+
+// flapping records peer nodes that changed role in a ring that had
+// settled (since mark). umrp's MRA, as a client, ignores the tests of the
+// manager it gave way to (its ring_mac) in its test monitor, takes the
+// manager role back after TSTNRmax intervals and gives way again on the
+// next NAck, whoever the manager is (two umrp nodes alike).
+func (r *ring) flapping(mark [2]int) {
 	e := r.e
-	for _, n := range []string{r.n2, r.n3} {
-		if c := changes(e.events(n), "role"); c > 2 {
-			e.result.deviation("MRA: "+r.peer+" MRA as a client keeps taking the manager role back",
-				fmt.Sprintf("%d role changes on %s: umrp's MRC test monitor ignores the tests of the manager it gave way to "+
-					"(state_machine.c, mrp_mra_recv_ring_test) and reclaims the role after TSTNRmax intervals; seen with a umrp manager too", c, n[strings.LastIndex(n, "-")+1:]))
-			return
+	for i, n := range []string{r.n2, r.n3} {
+		evs := e.events(n)
+		c := changes(evs[min(mark[i], len(evs)):], "role")
+		if c == 0 {
+			continue
 		}
+		why := fmt.Sprintf("%d role changes on %s in 3 s of a settled ring", c, n[strings.LastIndex(n, "-")+1:])
+		if r.peer == "umrp" {
+			why += ": umrp's MRC test monitor ignores the tests of the manager it gave way to " +
+				"(state_machine.c, mrp_mra_recv_ring_test) and reclaims the role after TSTNRmax intervals; seen with a umrp manager too"
+		}
+		e.result.deviation("MRA: "+r.peer+" MRA as a client keeps taking the manager role back", why)
+		return
 	}
 }
