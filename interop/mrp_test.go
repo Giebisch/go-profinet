@@ -87,6 +87,7 @@ func (e *env) ringNode(name, img string, args ...string) string {
 	}
 	e.mu.Lock()
 	e.containers = append(e.containers, full)
+	e.ringNodes = append(e.ringNodes, full)
 	e.mu.Unlock()
 	return full
 }

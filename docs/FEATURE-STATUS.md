@@ -1,7 +1,7 @@
 # Feature status
 
 What go-profinet implements, how each feature is tested, and what limits
-it. Status: go-profinet v0.4.0, profinet-interop v0.3.0, 2026-10-28.
+it. Status: go-profinet v0.5.0, profinet-interop v0.4.0, 2026-10-28.
 
 The columns keep four things apart that are easily conflated:
 
@@ -39,8 +39,8 @@ comes from when the IEC/PI text is not available to the project
 | Shared device (several IOCARs, one owner per submodule, handover) | yes | yes | p-net with two go-profinet controllers | no | Wireshark; p-net | shared input not implemented (not public) |
 | Port checks (CheckPeers), boundaries, PDInterfaceAdjust, topology check | yes | yes | p-net evaluates go-profinet's records | no | Wireshark; p-net | MAU, link state, line delay checks refused |
 | Multiport device (`l2/bridge`) | yes | yes | n/a (no open multiport PROFINET device); umrp and microchip-ung/mrp nodes forward through it | no | IEEE 802.1D behaviour (learning bridge) | software forwarding, not deterministic |
-| MRP client and manager (MRC, MRM), PROFINET MRP records | yes | yes | **umrp** (MRM against umrp MRCs, MRC next to a umrp MRM: ring closed, opened, flushed, no loop or hole, seeded faults); tshark decodes every frame; microchip-ung/mrp not applicable (kernel) | no | microchip-ung/mrp, umrp and the Linux bridge (IEC 62439-2 not read) | 200/500 ms profiles only; no interconnection, MRPD, diagnoses |
-| MRP automatic manager (MRA) | yes | yes | **umrp** (go-profinet manages with the best priority; gives way to a better umrp MRA, manages when it fails, gives way again: no loop or hole after each change); umrp's MRA as a client keeps reclaiming the role (a umrp bug, recorded as its deviation) | no | microchip-ung/mrp and umrp (NAck/Propagate, priorities), Wireshark (option layout) | a role of the device configuration only (no PROFINET MRP_Role value); OUI 08-00-06 where the open implementations send 00-00-00 |
+| MRP client and manager (MRC, MRM), PROFINET MRP records | yes | yes | **umrp** (MRM against umrp MRCs, MRC next to a umrp MRM: ring closed, opened, flushed, no loop or hole, seeded faults); **microchip-ung/mrp** on the kernel's bridge MRP, the same tests in a micro-VM (Linux 6.12 without switchdev; FDB flush not observable); tshark decodes every frame | no | microchip-ung/mrp, umrp and the Linux bridge (IEC 62439-2 not read) | 200/500 ms profiles only; no interconnection, MRPD, diagnoses |
+| MRP automatic manager (MRA) | yes | yes | **umrp** and **microchip-ung/mrp** (kernel, micro-VM) (go-profinet manages with the best priority; gives way to a better peer MRA, manages when it fails, gives way again: no loop or hole after each change); umrp's MRA as a client keeps reclaiming the role (a umrp bug, recorded as its deviation) | no | microchip-ung/mrp and umrp (NAck/Propagate, priorities), Wireshark (option layout) | a role of the device configuration only (no PROFINET MRP_Role value); OUI 08-00-06 where the open implementations send 00-00-00 |
 | SNMP agent (v1/v2c, MIB-II system/interfaces/snmp, LLDP-MIB) | yes | yes | **Net-SNMP** (walks, errors, limits, malformed datagrams, flood, changing LLDP neighbors); tshark, scapy | no | RFC 1157/3416/3418/1213, IEEE 802.1AB LLDP-MIB, RFC 2021 TimeFilter | no v3, no traps, no PNO LLDP extension MIB |
 | Persistence (`store`, `Config.Store`): permanent name and IP, DHCP options, I&M, resets | yes | yes (restart, failure, corruption) | n/a (local) | no | temporary vs permanent as p-net reads the CMINA state table | port/interface/MRP adjustments not stored |
 | System redundancy S2 (IOCARSR AR sets, primary/backup) | yes | yes | none exists (p-net and pnio-rs refuse IOCARSR; CODESYS has S2, manual and untried: [INDEPENDENT-CONTROLLER.md](research/INDEPENDENT-CONTROLLER.md)) | **yes** | Wireshark's elements; p-net's comment for the RDHT unit | not interoperable; R1/R2, MTOT, backup re-parameterization not implemented |

@@ -96,6 +96,13 @@ func setup(t *testing.T) {
 			setupErr = err
 			return
 		}
+		// A prebuilt otfnode and runner image (PROFINET_INTEROP_OTFNODE):
+		// where the tests run without a Go toolchain or a network, as in
+		// the micro-VM of scripts/microvm-interop.sh.
+		if p := os.Getenv("PROFINET_INTEROP_OTFNODE"); p != "" {
+			otfnode = p
+			return
+		}
 		cmd := exec.Command("go", "build", "-o", otfnode, "./otfnode")
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOWORK=off")
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -118,6 +125,9 @@ type env struct {
 	prefix     string
 	share      string
 	containers []string
+	// ringNodes are the MRP ring nodes among them: stopped with SIGTERM
+	// before they are removed, so that they delete their ring instances.
+	ringNodes []string
 	// outputs are what the otfnode runs printed, logged when the test fails.
 	outputs []string
 	mu      sync.Mutex
@@ -158,6 +168,20 @@ func newEnv(t *testing.T) *env {
 			}
 			e.keepCaptures()
 		}
+		// The results first: a removal that hangs (a kernel tearing down
+		// a namespace) must not lose them.
+		e.result.write()
+		// In a disposable micro-VM nothing is torn down: the kernel's
+		// teardown of a bridge with an MRP instance can hang there
+		// (scripts/microvm-interop.sh).
+		if os.Getenv("PROFINET_INTEROP_KEEP_CONTAINERS") != "" {
+			return
+		}
+		if len(e.ringNodes) > 0 {
+			stopCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_, _ = docker(stopCtx, append([]string{"stop", "-t", "5"}, e.ringNodes...)...)
+			cancel()
+		}
 		for _, c := range e.containers {
 			if t.Failed() {
 				if out, err := docker(ctx, "logs", "--tail", "60", c); err == nil {
@@ -169,10 +193,13 @@ func newEnv(t *testing.T) *env {
 					t.Logf("raw log of %s:\n%s", c, out)
 				}
 			}
-			_, _ = docker(ctx, "rm", "-f", c)
+			rmCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			if _, err := docker(rmCtx, "rm", "-f", c); err != nil {
+				t.Logf("remove %s: %v", c, err)
+			}
+			cancel()
 		}
 		_, _ = docker(ctx, "network", "rm", e.network)
-		e.result.write()
 	})
 	return e
 }

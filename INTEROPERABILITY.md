@@ -54,7 +54,7 @@ against (see [the matrix](#interop-matrix)).
 | Hand-over: Released alarm, PrmEnd (plug), ApplicationReady (plug), one submodule at a time | ✅ | ✅ | p-net (`TestPnetSharedDevice`) |
 | Shared input | — | — | not public; p-net does not implement it |
 | IOCARSR blocks: ARUUID selector, SRInfoBlock; MCRBlockReq (codecs only) | ✅ encode | ✅ decode (refused) | tshark and scapy decode a Connect with them (`TestCodecDecoders`); no open implementation of the behaviour |
-| MRP: client and manager on a multiport device (test frames, ring open/closed, blocked secondary, TopologyChange, link change frames) | — | ✅ (`Config.MRP`) | umrp as manager and as clients in rings of veth cables with go-profinet: closed, opened, FDB flushed, no loop or hole, seeded faults (`TestMRPOtfManager`, `TestMRPOtfClient`, `TestMRPRingFaults`); microchip-ung/mrp not applicable (the kernel refuses MRP on a software bridge with switchdev built in); tshark decodes every frame, scapy has no MRP dissector |
+| MRP: client and manager on a multiport device (test frames, ring open/closed, blocked secondary, TopologyChange, link change frames) | — | ✅ (`Config.MRP`) | umrp as manager and as clients in rings of veth cables with go-profinet: closed, opened, FDB flushed, no loop or hole, seeded faults (`TestMRPOtfManager`, `TestMRPOtfClient`, `TestMRPRingFaults`); microchip-ung/mrp on the kernel's bridge MRP, the same tests and `TestMRPAuto`, in the Kernel MRP workflow's micro-VMs (Linux 6.12 built without switchdev: the hosted runners' kernel refuses MRP on a software bridge); tshark decodes every frame, scapy has no MRP dissector |
 | PTCP delay frames (codecs only) | ✅ | ✅ | tshark and scapy (`TestCodecDecoders`) |
 | RT_CLASS_UDP: RT payload on UDP port 34962, RTClass 4 / LT 0x0800 / RTA_CLASS_UDP in Connect (codecs only) | ✅ encode, refused by `AddDevice` | ✅ decode, Connect refused (DB 81 02 07) | tshark and scapy decode both (`TestUDPRTDecoders`); no open implementation of the data path |
 | IOCARSR (system redundancy S2): AR sets of two IOCARSRs, primary by DataStatus request, outputs held for RDHT, abort reason 38 (EXPERIMENT, off by default) | ✅ (`SystemRedundancy`, `SetPrimary`) | ✅ (`Config.SystemRedundancy`) | none: no open S2 implementation exists (p-net and pnio-rs refuse IOCARSR); own e2e only (`TestSystemRedundancy*`) |
@@ -125,29 +125,30 @@ is an attributed deviation of the peer.
 
 | Peer | Version | go-profinet as | pass | fail | n/a | peer deviation |
 |------|---------|----------------|-----:|-----:|----:|---------------:|
-| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 55 | 0 | 2 | 0 |
+| rt-labs p-net | `ea5e554` | IO-Controller, DCP requester, LLDP agent | 56 | 0 | 1 | 0 |
 | pnio-rs | v0.1.0 | IO-Controller, DCP requester | 13 | 0 | 3 | 0 |
-| profinet-py | 0.6.6 | IO-Device, DCP responder | 29 | 0 | 0 | 3 |
+| profinet-py | 0.6.6 | IO-Device, DCP responder | 32 | 0 | 1 | 3 |
 | pnio-dcp | 1.2.0 | DCP responder | 8 | 0 | 0 | 0 |
-| umrp | v4.0 | MRP manager and client | 20 | 0 | 0 | 0 |
-| microchip-ung/mrp | `177717e` | MRP manager and client | 0 | 0 | 3 | 0 |
+| umrp | v4.0 | MRP manager, client and MRA | 32 | 0 | 0 | 2 |
+| microchip-ung/mrp | `177717e` | MRP manager, client and MRA (kernel, micro-VM) | 31 | 0 | 1 | 0 |
 | Net-SNMP | 5.9.3 | SNMP agent of the IO-Device | 29 | 0 | 0 | 0 |
-| scapy | 2.6.1 | (decoder of every capture) | 16 | 0 | 0 | 3 |
-| tshark | 4.0.17 | (decoder of every capture) | 15 | 0 | 0 | 0 |
+| scapy | 2.6.1 | (decoder of every capture) | 20 | 0 | 0 | 7 |
+| tshark | 4.0.17 | (decoder of every capture) | 19 | 0 | 0 | 0 |
 | tshark and scapy | | (decoders of our Hello, SNMP, UDP-RT and DHCP frames) | 8 | 0 | 0 | 2 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.3.0/docs/MATRIX.md)
-(193 pass, 0 fail, 8 n/a, 8 deviations; run on Docker Desktop, arm64);
-the notes on each peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.3.0/docs/INTEROPERABILITY.md).
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.4.0/docs/MATRIX.md)
+(248 pass, 0 fail, 6 n/a, 14 deviations; the Interop workflow on amd64,
+the mrp rows from the Kernel MRP workflow's micro-VMs); the notes on each
+peer are in its
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.4.0/docs/INTEROPERABILITY.md).
 The "n/a" are peer limits: pnio-rs has no diagnosis records and no DCP Set,
-p-net and pnio-rs refuse PrmBegin in Data, and microchip-ung/mrp needs a
-kernel that accepts MRP on a software bridge. The deviations are
-profinet-py's I&M1 write with BlockLength 58 and decoder limits: scapy has
-no MRP and no DCP DHCP block class, and Wireshark decodes the data of DHCP
-options 61 and 255 only. Tests added since (profinet-py with the GSDML
-fixtures) enter the matrix at its next regeneration.
+p-net and pnio-rs refuse PrmBegin in Data, profinet-py ignores the GSDML's
+UsedInSlots, and the kernel flushes its FDB where the mrp adapter cannot
+observe it. The deviations are profinet-py's I&M1 write with BlockLength
+58, umrp's MRA reclaiming the manager role as a client, and decoder
+limits: scapy has no MRP and no DCP DHCP block class, and Wireshark
+decodes the data of DHCP options 61 and 255 only.
 
 ### Run it
 
