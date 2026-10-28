@@ -24,6 +24,46 @@ section ending with a `---` line and no `---` line inside a section.
 
 ---
 
+## v0.5.0
+
+**Date:** 2026-10-28
+**Previous release:** v0.4.0
+
+The MRP automatic manager (MRA), and MRP verified against the Linux
+kernel's bridge MRP: microchip-ung/mrp runs as a peer in micro-VMs booted
+with a kernel built without switchdev. Feature coverage is not
+conformance: go-profinet is not certified, and no measured time is a
+real-time claim.
+
+No incompatible API change (apidiff against v0.4.0: additions only).
+
+- `mrp.RoleAuto` (MRA): starts as a manager; the better of two managers
+  (lower priority, then lower address: `mrp.Better`) answers the other's
+  tests with MRP_TestMgrNAck, the other gives way (MRP_TestPropagate) and
+  monitors the better managers' tests, managing again after TSTNRmax
+  intervals without one. `Status.Acting`, `Manager`, `ManagerPrio`;
+  `ManagerOption`, `NewManagerOption` (Siemens OUI, which Wireshark
+  decodes; any OUI read). `device.MRPConfig.Role` may be `mrp.RoleAuto`
+  (configuration only: PROFINET's MRP_Role has no value for it);
+  PDInterfaceMrpDataReal reports the acting role.
+- `mrp.Decode` accepts the Linux bridge's MRA test frames, whose last
+  MRP_Option claims five octets more than the frame has.
+- Verified against umrp and microchip-ung/mrp (kernel): manager, client,
+  seeded cable faults, MRA with go-profinet and with the peer the best
+  (failure and return of the manager): no loop or hole after any change;
+  measured outages 10–20 ms on the kernel ring, 200 ms profile. umrp's MRA
+  as a client keeps reclaiming the manager role (its monitor ignores the
+  manager it gave way to): recorded as its deviation.
+- Kernel MRP workflow: `scripts/mrp-kernel.sh` builds Linux 6.12 with
+  `BRIDGE_MRP` and without `NET_SWITCHDEV`; `scripts/microvm-interop.sh`
+  runs each interop test in its own virtme-ng micro-VM with a Docker daemon
+  inside (amd64, KVM). Interop harness: results written before teardown,
+  ring nodes stopped before removal, bounded removal.
+- Interop: profinet-interop v0.4.0, contract 1.2 (248 pass, 0 fail, 6 n/a,
+  14 attributed deviations).
+
+---
+
 ## v0.4.0
 
 **Date:** 2026-10-28
