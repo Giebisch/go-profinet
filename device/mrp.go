@@ -25,6 +25,9 @@ import (
 // MRPConfig configures media redundancy.
 type MRPConfig struct {
 	// Role is the initial role; a controller may change it.
+	// mrp.RoleAuto (MRA) is a role of this configuration only: PROFINET's
+	// MRP_Role has no value for it, and PDInterfaceMrpDataReal reports
+	// what the entity acts as (client or manager).
 	Role mrp.Role
 	// Domain is the MRP domain UUID (zero: mrp.DefaultDomain) and
 	// DomainName its name.
@@ -175,10 +178,18 @@ func (d *Device) readMRP(q pnio.ReadReq) (b []byte, handled bool, err error) {
 	}
 	switch q.Index {
 	case pnio.IndexPDInterfaceMrpDataReal:
-		r := pnio.PDInterfaceMrpDataReal{Domain: st.cfg.Domain, Role: uint16(st.cfg.Role), DomainName: st.cfg.DomainName, Version: mrp.Version}
-		if st.ent != nil && st.cfg.Role == mrp.RoleManager {
+		role := st.cfg.Role
+		var es mrp.Status
+		if st.ent != nil {
+			es = st.ent.Status()
+			if role == mrp.RoleAuto {
+				role = es.Acting
+			}
+		}
+		r := pnio.PDInterfaceMrpDataReal{Domain: st.cfg.Domain, Role: uint16(role), DomainName: st.cfg.DomainName, Version: mrp.Version}
+		if st.ent != nil && role == mrp.RoleManager {
 			r.HasRingState = true
-			if !st.ent.Status().RingOpen {
+			if !es.RingOpen {
 				r.RingState = uint16(mrp.RingClosed)
 			}
 		}
