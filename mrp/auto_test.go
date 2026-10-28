@@ -165,11 +165,15 @@ func TestAutoTakeOver(t *testing.T) {
 			}
 		}
 	}()
+	// Stations 1 to 3 all miss the tests and manage, then give way to
+	// station 1; a station that gave way with a blocked port keeps it
+	// blocked until the ring closes or its link timers run out (a line
+	// never closes): wait for the clients' ports that are up to forward.
 	eventually(t, 5*time.Second, "station 1 manages", func() bool {
 		s := nodes[1].ent.Status()
 		c2, c3 := nodes[2].ent.Status(), nodes[3].ent.Status()
 		return s.Acting == RoleManager && c2.Acting == RoleClient && c2.Manager == nodes[1].cpuMAC &&
-			c3.Acting == RoleClient && c3.Manager == nodes[1].cpuMAC
+			c3.Acting == RoleClient && c3.Manager == nodes[1].cpuMAC && !c2.Blocked[0] && !c2.Blocked[1] && !c3.Blocked[0]
 	})
 	noLoop(t, nodes, 2, []int{1, 3})
 	// Station 0 comes back as a fresh automatic manager: it is the best,
