@@ -1,5 +1,11 @@
 # Software-only feature completion: report
 
+> **Corrections (2026-10-28).** scapy has no MRP dissector: it read the MRP
+> frames of this round without decoding them, so the "tshark and scapy
+> decode" claims for MRP below hold for tshark only. MRP has since been
+> tested against an independent implementation (umrp), and the SNMP agent
+> against Net-SNMP: see [NEXT-PROGRAM-REPORT.md](NEXT-PROGRAM-REPORT.md).
+
 Status: 2026-10-27, go-profinet v0.3.0 (before: v0.1.2), profinet-interop
 v0.2.1, profinetctl v0.2.0. The plan, its evidence and its order are in
 [SOFTWARE-ONLY-ROADMAP.md](SOFTWARE-ONLY-ROADMAP.md).
