@@ -25,4 +25,7 @@ jobs:
       bump: ${{ inputs.bump }}
       release-name-prefix: go-profinet
       update-major-tag: false
+      # As in CI: the shared workflow tests with -timeout=120s, which the
+      # end-to-end suite outgrows; CI's e2e job and the soak cover it.
+      test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/e2e$)"
     secrets: inherit
