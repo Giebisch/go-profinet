@@ -261,7 +261,7 @@ func runController(args []string) error {
 		return err
 	}
 	defer closePort()
-	ctrl, err := controller.New(controller.Config{Mux: mux, StationName: "otf-controller"})
+	ctrl, err := controller.New(controller.Config{Mux: mux, StationName: "otf-controller", ListenPacket: listenPacket(*iface)})
 	if err != nil {
 		return err
 	}
@@ -585,7 +585,7 @@ func runDevice(args []string) error {
 		return err
 	}
 	defer closePort()
-	cfg := device.Config{Model: m, Mux: mux, StationName: *station, IP: ifaceSuite(*iface), Handler: otfHandler{}, Logger: profinet.NopLogger(),
+	cfg := device.Config{Model: m, Mux: mux, StationName: *station, IP: ifaceSuite(*iface), Handler: otfHandler{}, Logger: profinet.NopLogger(), ListenPacket: listenPacket(*iface),
 		Hello: dcp.HelloMode(*hello), LLDPInterval: *lldpEvery}
 	if *community != "" {
 		cfg.SNMP = &device.SNMPConfig{Community: *community, Contact: "otfabric interop", Location: "profinet-interop"}
