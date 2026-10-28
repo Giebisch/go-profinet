@@ -317,12 +317,40 @@ func (s Status) describe() string {
 		if s.Code1 == Code1RTAAbort {
 			return svc + ": abort: " + AbortReason(s.Code2).String()
 		}
+		if s.Code1 == Code1CMRPC {
+			if n := cmrpcName(s.Code2); n != "" {
+				return svc + ": CMRPC: " + n
+			}
+		}
 		return fmt.Sprintf("%s: %s, code %d", svc, code1Name(s.Code1), s.Code2)
 	case DecodeVendor:
 		return svc + ": manufacturer specific"
 	default:
 		return svc
 	}
+}
+
+// cmrpcName names an ErrorCode2 of ErrorCode1 CMRPC; empty when unknown.
+func cmrpcName(c uint8) string {
+	switch c {
+	case CMRPCArgsLength:
+		return "invalid argument length"
+	case CMRPCUnknownBlocks:
+		return "unknown blocks"
+	case CMRPCIOCRMissing:
+		return "IOCR missing"
+	case CMRPCAlarmCRCount:
+		return "wrong AlarmCRBlock count"
+	case CMRPCOutOfARs:
+		return "out of AR resources"
+	case CMRPCARUUIDUnknown:
+		return "AR UUID unknown"
+	case CMRPCStateConflict:
+		return "state conflict"
+	case CMRPCOutOfMemory:
+		return "out of memory"
+	}
+	return ""
 }
 
 func rwName(c uint8) string {
