@@ -3,6 +3,7 @@
 package device
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -141,6 +142,7 @@ func (d *Device) loadState() {
 		return
 	}
 	d.stored = p
+	d.savedRaw = b
 	if p.Name != nil {
 		d.name = *p.Name
 	}
@@ -177,11 +179,18 @@ func (d *Device) saveLocked(change func(p *persisted)) error {
 	if err != nil {
 		return err
 	}
+	// An unchanged state is not saved again: a repeated request (a DCP
+	// Set retransmitted) keeps the previous version a store holds for
+	// recovery.
+	if bytes.Equal(b, d.savedRaw) {
+		return nil
+	}
 	if err := d.cfg.Store.Save(context.Background(), d.storeKey, b); err != nil {
 		d.log.Warnf("device: save state %q: %v", d.storeKey, err)
 		return fmt.Errorf("device: save state: %w", err)
 	}
 	d.stored = p
+	d.savedRaw = b
 	return nil
 }
 

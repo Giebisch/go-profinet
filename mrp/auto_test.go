@@ -135,9 +135,12 @@ func TestAutoRing(t *testing.T) {
 func TestAutoPriority(t *testing.T) {
 	nodes, _ := ringOf(t, []Role{RoleAuto, RoleClient, RoleAuto}, []uint16{0, 0, 0x9000}, Profile200)
 	settled(t, nodes, 2, []int{0})
-	if s := nodes[1].ent.Status(); s.Acting != RoleClient || s.Blocked[0] || s.Blocked[1] {
-		t.Fatalf("client %+v", s)
-	}
+	// The configured client forwards once the manager reports the ring
+	// closed.
+	eventually(t, 5*time.Second, "the client forwarding", func() bool {
+		s := nodes[1].ent.Status()
+		return s.Acting == RoleClient && !s.Blocked[0] && !s.Blocked[1]
+	})
 	noLoop(t, nodes, 1, []int{0, 2})
 }
 
