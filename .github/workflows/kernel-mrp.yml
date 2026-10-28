@@ -70,7 +70,7 @@ jobs:
           make -C "$RUNNER_TEMP/profinet-interop" image-mrp image-umrp image-scapy image-tshark
 
       - name: MRP tests in the micro-VM
-        run: scripts/microvm-interop.sh "$RUNNER_TEMP/kernel/bzImage" 'TestMRP.*/mrp$'
+        run: scripts/microvm-interop.sh "$RUNNER_TEMP/kernel/bzImage" 'TestMRP.*/^mrp$'
 
       - name: Upload results
         if: always()
