@@ -174,6 +174,10 @@ func TestTimeoutAndCancel(t *testing.T) {
 	if !errors.Is(err, profinet.ErrTimeout) {
 		t.Fatalf("err %v", err)
 	}
+	// Cancel and Close with a timeout far beyond them, so only they can end
+	// the calls on a slow runner.
+	_ = c.Close()
+	c = NewClient(listen(t), true, ClientOptions{Timeout: time.Minute, Retransmit: 20 * time.Millisecond, Activities: 1})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		time.Sleep(20 * time.Millisecond)
