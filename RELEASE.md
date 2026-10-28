@@ -48,6 +48,9 @@ Documentation and pins; no library change (apidiff against v0.5.0: none).
 - Interop: profinet-interop v0.4.1 (contract 1.2; 248 pass, 0 fail, 6 n/a,
   14 attributed deviations), pinned in the Makefile and both interop
   workflows.
+- Tests: three timing assumptions that a loaded runner broke (the
+  automatic manager tests run the 500 ms profile; the DCP Hello spacing and
+  an RPC counter are checked without a receiver's scheduling delay).
 
 ---
 

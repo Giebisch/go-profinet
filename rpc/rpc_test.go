@@ -292,7 +292,10 @@ func TestServerControlPackets(t *testing.T) {
 	c := listen(t)
 	_, _ = c.WriteTo([]byte{1, 2, 3}, srv.LocalAddr())
 	_ = c.Close()
-	time.Sleep(20 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
+	for srv.Stats().Malformed != 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 	if srv.Stats().Malformed != 1 {
 		t.Fatalf("stats %+v", srv.Stats())
 	}

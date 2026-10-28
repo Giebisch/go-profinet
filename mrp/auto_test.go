@@ -75,6 +75,11 @@ func TestBetter(t *testing.T) {
 	}
 }
 
+// The automatic managers run the 500 ms profile here: a client takes over
+// after TSTNRmax test intervals without a better manager's test, which in
+// the 200 ms profile is 80 ms, less than a loaded test runner may delay a
+// goroutine.
+
 func autos(n int) []Role {
 	r := make([]Role, n)
 	for i := range r {
@@ -122,7 +127,7 @@ func noLoop(t *testing.T, nodes []*node, from int, to []int) {
 // address at equal priority) as the manager; the ring closes without a
 // loop or a hole.
 func TestAutoRing(t *testing.T) {
-	nodes, _ := ringOf(t, autos(3), nil, Profile200)
+	nodes, _ := ringOf(t, autos(3), nil, Profile500)
 	settled(t, nodes, 0, []int{1, 2})
 	if s := nodes[1].ent.Status(); s.Role != RoleAuto || s.ManagerPrio != DefaultAutoPrio {
 		t.Fatalf("%+v", s)
@@ -133,7 +138,7 @@ func TestAutoRing(t *testing.T) {
 // TestAutoPriority: the lower priority wins over the lower address, and a
 // configured client takes part.
 func TestAutoPriority(t *testing.T) {
-	nodes, _ := ringOf(t, []Role{RoleAuto, RoleClient, RoleAuto}, []uint16{0, 0, 0x9000}, Profile200)
+	nodes, _ := ringOf(t, []Role{RoleAuto, RoleClient, RoleAuto}, []uint16{0, 0, 0x9000}, Profile500)
 	settled(t, nodes, 2, []int{0})
 	// The configured client forwards once the manager reports the ring
 	// closed.
@@ -147,7 +152,7 @@ func TestAutoPriority(t *testing.T) {
 // TestAutoTakeOver: when the manager fails, the next best automatic
 // manager stops seeing its tests and manages the ring.
 func TestAutoTakeOver(t *testing.T) {
-	nodes, _ := ringOf(t, autos(4), nil, Profile200)
+	nodes, _ := ringOf(t, autos(4), nil, Profile500)
 	settled(t, nodes, 0, []int{1, 2, 3})
 	// Station 0 fails: both its cables go down.
 	_ = nodes[0].ent.Close()
@@ -171,7 +176,7 @@ func TestAutoTakeOver(t *testing.T) {
 	// and the others give way to it.
 	cut(nodes, 0, true)
 	cut(nodes, 3, true)
-	ent, err := New(Config{Role: RoleAuto, Ports: nodes[0].ent.cfg.Ports, Index: nodes[0].ent.cfg.Index, Switch: nodes[0].br, MAC: nodes[0].cpuMAC, Profile: Profile200})
+	ent, err := New(Config{Role: RoleAuto, Ports: nodes[0].ent.cfg.Ports, Index: nodes[0].ent.cfg.Index, Switch: nodes[0].br, MAC: nodes[0].cpuMAC, Profile: Profile500})
 	if err != nil {
 		t.Fatal(err)
 	}
