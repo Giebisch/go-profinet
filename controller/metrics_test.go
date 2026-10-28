@@ -15,7 +15,9 @@ import (
 	"github.com/otfabric/go-profinet/pnio"
 )
 
-// recorder is a profinet.Metrics that records its calls as text.
+// recorder is a profinet.Metrics that records its calls as text. A
+// duration may be zero: Windows' clock can measure an in-process Connect
+// as no time at all.
 type recorder struct {
 	profinet.NopMetrics
 	mu     sync.Mutex
@@ -37,7 +39,7 @@ func (r *recorder) OnStateChange(station, from, to string, err error) {
 }
 
 func (r *recorder) OnConnect(station string, d time.Duration, err error) {
-	r.add(err, "connect %s %v", station, err == nil && d > 0)
+	r.add(err, "connect %s %v", station, err == nil && d >= 0)
 }
 
 func (r *recorder) OnAbort(station string, err error) {
@@ -45,7 +47,7 @@ func (r *recorder) OnAbort(station string, err error) {
 }
 
 func (r *recorder) OnRecord(station, op string, index uint16, d time.Duration, err error) {
-	r.add(err, "record %s %s %#x %v", station, op, index, err == nil && d > 0)
+	r.add(err, "record %s %s %#x %v", station, op, index, err == nil && d >= 0)
 }
 
 func (r *recorder) OnAlarm(station, typ string, high bool) {
