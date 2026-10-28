@@ -171,6 +171,12 @@ func newEnv(t *testing.T) *env {
 		// The results first: a removal that hangs (a kernel tearing down
 		// a namespace) must not lose them.
 		e.result.write()
+		// In a disposable micro-VM nothing is torn down: the kernel's
+		// teardown of a bridge with an MRP instance can hang there
+		// (scripts/microvm-interop.sh).
+		if os.Getenv("PROFINET_INTEROP_KEEP_CONTAINERS") != "" {
+			return
+		}
 		if len(e.ringNodes) > 0 {
 			stopCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			_, _ = docker(stopCtx, append([]string{"stop", "-t", "5"}, e.ringNodes...)...)

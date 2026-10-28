@@ -31,7 +31,12 @@ sysctl -qw kernel.hung_task_timeout_secs=20 kernel.hung_task_panic=0 2>/dev/null
     for p in \$(ps -eo pid=,stat= | awk '\$2 ~ /^D/ {print \$1}'); do
         echo "blocked \$p: \$(cat /proc/\$p/cmdline | tr '\\0' ' ')"; cat /proc/\$p/stack 2>/dev/null
     done
-    dmesg -c 2>/dev/null | grep -E -A40 'blocked for more than|WARNING:|BUG:' || true
+    for p in \$(pgrep -x 'mrp_server|mrp|ip|dockerd|containerd-shim-runc-v2' 2>/dev/null); do
+        if grep -q . /proc/\$p/stack 2>/dev/null && ! grep -qE 'ep_poll|do_select|hrtimer_nanosleep|futex|do_wait|pipe_read' /proc/\$p/stack; then
+            echo "task \$p \$(cat /proc/\$p/comm) \$(awk '{print \$3}' /proc/\$p/stat):"; cat /proc/\$p/stack
+        fi
+    done
+    dmesg -c 2>/dev/null | grep -E -A40 'blocked for more than|WARNING:|BUG:|unregister_netdevice|waiting for' || true
 done ) &
 mountpoint -q /sys/fs/cgroup || mount -t cgroup2 none /sys/fs/cgroup
 d=\$(mktemp -d)
@@ -45,7 +50,7 @@ docker load -q -i $out/images.tar
 docker run --rm --network none --cap-add NET_ADMIN --cap-add NET_RAW profinet-interop-mrp:dev kernel-mrp ||
     { echo "the guest kernel does not take an MRP instance"; exit 1; }
 cd $PWD/interop
-PROFINET_INTEROP_OTFNODE=$out/otfnode PROFINET_INTEROP_RESULTS=$results \
+PROFINET_INTEROP_OTFNODE=$out/otfnode PROFINET_INTEROP_RESULTS=$results PROFINET_INTEROP_KEEP_CONTAINERS=1 \
     $out/interop.test -test.count=1 -test.timeout=45m -test.v -test.run '$run' 2>&1 | tee $out/test.log
 grep -q '^PASS\$' $out/test.log && echo MICROVM-OK
 GUEST
