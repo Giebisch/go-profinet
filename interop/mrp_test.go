@@ -490,10 +490,11 @@ func testAuto(t *testing.T, peer string) {
 		e.expect("MRA: go-profinet (best priority) manages, "+peer+" MRAs give way", ok, "otfnode %+v, n2 %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n2), e.peerStatus(r.n3))
 		if ok {
 			r.exactMRA("MRA ring closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
-			mark := r.marks()
+			mark, own := r.marks(), r.otfMark()
 			time.Sleep(3 * time.Second)
 			r.exactMRA("MRA ring still closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
-			e.expect("MRA: go-profinet stays the manager", actingChanges(e.events(r.n1)) == 0, "acting changes %d", actingChanges(e.events(r.n1)))
+			c := r.otfActingChanges(own)
+			e.expect("MRA: go-profinet stays the manager", c == 0 && e.otfRing(r.n1).Acting == "manager", "acting changes %d in 3 s of the settled ring", c)
 			r.flapping(mark)
 		}
 		stop()
@@ -515,13 +516,12 @@ func testAuto(t *testing.T, peer string) {
 			return
 		}
 		r.exactMRA("MRA ring closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
-		mark := r.marks()
+		mark, own := r.marks(), r.otfMark()
 		time.Sleep(3 * time.Second)
 		r.exactMRA("MRA ring still closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
-		// At most the one change from manager to client (none when it
-		// gave way before its first ring event).
-		e.expect("MRA: go-profinet stays a client of the better "+peer+" MRA", actingChanges(e.events(r.n1)) <= 1 && e.otfRing(r.n1).Acting == "client",
-			"acting changes %d, %+v", actingChanges(e.events(r.n1)), e.otfRing(r.n1))
+		c := r.otfActingChanges(own)
+		e.expect("MRA: go-profinet stays a client of the better "+peer+" MRA", c == 0 && e.otfRing(r.n1).Acting == "client",
+			"acting changes %d in 3 s of the settled ring, %+v", c, e.otfRing(r.n1))
 		r.flapping(mark)
 
 		// The manager fails: both its cables down.
@@ -564,8 +564,15 @@ func changes(evs []map[string]any, field string) int {
 	return n
 }
 
-// actingChanges counts otfnode's changes between manager and client.
-func actingChanges(evs []map[string]any) int { return changes(evs, "acting") }
+// otfMark returns how many events otfnode printed so far.
+func (r *ring) otfMark() int { return len(r.e.events(r.n1)) }
+
+// otfActingChanges counts otfnode's changes between manager and client
+// since mark (from the last event before it).
+func (r *ring) otfActingChanges(mark int) int {
+	evs := r.e.events(r.n1)
+	return changes(evs[min(max(mark-1, 0), len(evs)):], "acting")
+}
 
 // exactMRA is exact for a ring of automatic managers: probes counted
 // twice while a peer node changed role during the burst are that peer's
