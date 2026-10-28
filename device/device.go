@@ -176,10 +176,12 @@ type Device struct {
 	// snmpStart is when the SNMP agent started (sysUpTime 0).
 	snmpStart time.Time
 	// The persistent state (persist.go): storeMu serializes the saves,
-	// stored is what the store holds, storeErr why it was not used.
+	// stored is what the store holds (savedRaw its encoding, when this
+	// device saved or loaded it), storeErr why it was not used.
 	storeKey string
 	storeMu  sync.Mutex
 	stored   persisted
+	savedRaw []byte
 	storeErr error
 
 	// mu guards the station state and the ARs.
