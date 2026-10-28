@@ -106,7 +106,8 @@ func TestReparameterizeRefused(t *testing.T) {
 }
 
 func TestReparameterizeTimeout(t *testing.T) {
-	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ActivityTimeout: 300 * time.Millisecond, ReconnectMin: time.Hour})
+	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ActivityTimeout: 300 * time.Millisecond, ReconnectMin: time.Hour,
+		DataHoldFactor: 1000, WatchdogFactor: 1000})
 	start := time.Now()
 	err := cd.Reparameterize(context.Background(), nil)
 	if !errors.Is(err, profinet.ErrTimeout) && !errors.Is(err, profinet.ErrAborted) || time.Since(start) > 3*time.Second {
@@ -115,7 +116,9 @@ func TestReparameterizeTimeout(t *testing.T) {
 }
 
 func TestReparameterizeContext(t *testing.T) {
-	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ReconnectMin: time.Hour})
+	// A long data hold: a starved runner must not end the AR before the
+	// context does.
+	cd, _ := runningWith(t, &prmHandler{delay: 1500 * time.Millisecond}, DeviceConfig{ReconnectMin: time.Hour, DataHoldFactor: 1000, WatchdogFactor: 1000})
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	if err := cd.Reparameterize(ctx, nil); !errors.Is(err, context.DeadlineExceeded) {

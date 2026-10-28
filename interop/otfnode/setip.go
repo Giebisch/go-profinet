@@ -3,9 +3,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
+	"syscall"
 
 	"github.com/otfabric/go-profinet/dcp"
 )
@@ -32,4 +35,27 @@ func setLinkUp(iface string) error {
 		return fmt.Errorf("ip link set up: %v: %s", err, out)
 	}
 	return nil
+}
+
+// listenPacket opens a UDP socket like net.ListenConfig, and when a
+// wildcard address is taken it binds the interface's address instead:
+// Docker's embedded DNS server listens in every container of a
+// user-defined network on 127.0.0.11 at a random ephemeral port, which can
+// be the PROFINET RPC port 34964 (seen once in a soak of a few thousand
+// containers).
+func listenPacket(iface string) func(ctx context.Context, network, address string) (net.PacketConn, error) {
+	return func(ctx context.Context, network, address string) (net.PacketConn, error) {
+		var lc net.ListenConfig
+		c, err := lc.ListenPacket(ctx, network, address)
+		if err == nil || !errors.Is(err, syscall.EADDRINUSE) {
+			return c, err
+		}
+		host, port, serr := net.SplitHostPort(address)
+		ip := ifaceSuite(iface).Addr
+		if serr != nil || host != "" || !ip.IsValid() {
+			return nil, err
+		}
+		emit(map[string]any{"event": "bind-fallback", "address": address, "error": err.Error(), "to": ip.String()})
+		return lc.ListenPacket(ctx, network, net.JoinHostPort(ip.String(), port))
+	}
 }
