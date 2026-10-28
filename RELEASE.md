@@ -59,6 +59,9 @@ No incompatible API change (apidiff against v0.4.0: additions only).
   runs each interop test in its own virtme-ng micro-VM with a Docker daemon
   inside (amd64, KVM). Interop harness: results written before teardown,
   ring nodes stopped before removal, bounded removal.
+- `device`: a state that did not change is not saved again (a DCP Set
+  retransmitted by a tool), so a store keeps the previous version it
+  recovers from after a torn write.
 - Interop: profinet-interop v0.4.0, contract 1.2 (248 pass, 0 fail, 6 n/a,
   14 attributed deviations).
 
