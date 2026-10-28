@@ -96,6 +96,13 @@ func setup(t *testing.T) {
 			setupErr = err
 			return
 		}
+		// A prebuilt otfnode and runner image (PROFINET_INTEROP_OTFNODE):
+		// where the tests run without a Go toolchain or a network, as in
+		// the micro-VM of scripts/microvm-interop.sh.
+		if p := os.Getenv("PROFINET_INTEROP_OTFNODE"); p != "" {
+			otfnode = p
+			return
+		}
 		cmd := exec.Command("go", "build", "-o", otfnode, "./otfnode")
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOWORK=off")
 		if out, err := cmd.CombinedOutput(); err != nil {
