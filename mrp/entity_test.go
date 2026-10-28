@@ -30,6 +30,19 @@ type node struct {
 // station i+1's port 1. Station 0 is the manager.
 func ring(t *testing.T, n int, profile Profile) ([]*node, []*vnet.Network) {
 	t.Helper()
+	roles := make([]Role, n)
+	for i := range roles {
+		roles[i] = RoleClient
+	}
+	roles[0] = RoleManager
+	return ringOf(t, roles, nil, profile)
+}
+
+// ringOf builds a ring of stations with the given roles and priorities
+// (nil: the defaults).
+func ringOf(t *testing.T, roles []Role, prios []uint16, profile Profile) ([]*node, []*vnet.Network) {
+	t.Helper()
+	n := len(roles)
 	segs := make([]*vnet.Network, n)
 	for i := range segs {
 		segs[i] = vnet.New(uint64(i + 1))
@@ -56,11 +69,11 @@ func ring(t *testing.T, n int, profile Profile) ([]*node, []*vnet.Network) {
 		nd.br = br
 		m0, m1 := l2.NewMux(br.Port(0)), l2.NewMux(br.Port(1))
 		nd.cpu = l2.NewMux(br.CPU())
-		role := RoleClient
-		if i == 0 {
-			role = RoleManager
+		var prio uint16
+		if prios != nil {
+			prio = prios[i]
 		}
-		ent, err := New(Config{Role: role, Ports: [2]*l2.Mux{m0, m1}, Index: [2]int{0, 1}, Switch: br, MAC: nd.cpuMAC, Profile: profile})
+		ent, err := New(Config{Role: roles[i], Prio: prio, Ports: [2]*l2.Mux{m0, m1}, Index: [2]int{0, 1}, Switch: br, MAC: nd.cpuMAC, Profile: profile})
 		if err != nil {
 			t.Fatal(err)
 		}

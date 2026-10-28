@@ -34,7 +34,7 @@ const ProbeType = 0x88B5
 // harness moves into the container): a node of a ring with independent
 // MRP implementations.
 //
-//	otfnode mrp -role manager|client [-ports ringA,ringB] [-profile 200|500]
+//	otfnode mrp -role manager|client|auto [-prio N] [-ports ringA,ringB] [-profile 200|500]
 //
 // It prints a "ring" event whenever its MRP state changes and a "stats"
 // event every second. SIGUSR1 sends a burst of -burst probe frames, 1 ms
@@ -43,7 +43,8 @@ const ProbeType = 0x88B5
 // how long the ring carries no traffic during a fault.
 func runMRP(args []string) error {
 	fs := flag.NewFlagSet("mrp", flag.ExitOnError)
-	role := fs.String("role", "client", "MRP role: manager or client")
+	role := fs.String("role", "client", "MRP role: manager, client or auto (MRA)")
+	prio := fs.Uint("prio", 0, "manager priority (0: the role's default)")
 	portList := fs.String("ports", "ringA,ringB", "the two ring ports")
 	station := fs.String("station", "otf-ring", "station name")
 	profile := fs.Int("profile", 200, "MRP recovery profile in ms: 200 or 500")
@@ -55,10 +56,16 @@ func runMRP(args []string) error {
 	switch *role {
 	case "manager":
 		cfg.Role = mrp.RoleManager
+	case "auto":
+		cfg.Role = mrp.RoleAuto
 	case "client":
 	default:
 		return fmt.Errorf("unknown role %q", *role)
 	}
+	if *prio > 0xFFFF {
+		return fmt.Errorf("-prio %d out of range", *prio)
+	}
+	cfg.Prio = uint16(*prio)
 	switch *profile {
 	case 200:
 	case 500:
@@ -139,7 +146,11 @@ func runMRP(args []string) error {
 		st, _ := dev.MRPStatus()
 		ev := map[string]any{"state": st.State, "open": st.RingOpen, "blocked": []bool{st.Blocked[0], st.Blocked[1]},
 			"transitions": st.Transitions, "testsSent": st.TestsSent, "testsReceived": st.TestsReceived,
-			"topologyChanges": st.TopologyChanges, "linkChanges": st.LinkChanges, "forwarded": st.Forwarded, "malformed": st.Malformed}
+			"topologyChanges": st.TopologyChanges, "linkChanges": st.LinkChanges, "forwarded": st.Forwarded, "malformed": st.Malformed,
+			"acting": st.Acting.String()}
+		if !st.Manager.IsZero() {
+			ev["manager"] = st.Manager.String()
+		}
 		var ps []map[string]any
 		for i := range ports {
 			s := br.Stats(i)
@@ -186,7 +197,7 @@ func runMRP(args []string) error {
 			streamSent++
 		case <-tick.C:
 			st := status()
-			k := fmt.Sprint(st["state"], st["open"], st["blocked"])
+			k := fmt.Sprint(st["state"], st["open"], st["blocked"], st["acting"], st["manager"])
 			if k != last {
 				last = k
 				st["event"] = "ring"

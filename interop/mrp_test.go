@@ -141,7 +141,9 @@ func (e *env) setLink(container, port string, up bool) {
 // peerStatus is the status document of a peer node (Flushes -1: not
 // observable).
 type peerStatus struct {
-	Ring    string `json:"ring"`
+	Ring string `json:"ring"`
+	// Role is what the node acts as, MRM or MRC (contract 1.2).
+	Role    string `json:"role"`
 	Flushes int    `json:"flushes"`
 	Probes  int    `json:"probes"`
 	Ports   []struct {
@@ -163,7 +165,11 @@ func (e *env) peerStatus(container string) peerStatus {
 
 // otfRing is otfnode's last ring or stats event.
 type otfRing struct {
-	State           string `json:"state"`
+	State string `json:"state"`
+	// Acting is what otfnode acts as (manager or client), Manager the
+	// manager an automatic manager follows.
+	Acting          string `json:"acting"`
+	Manager         string `json:"manager"`
 	Open            bool   `json:"open"`
 	Blocked         []bool `json:"blocked"`
 	TopologyChanges int    `json:"topologyChanges"`
@@ -195,12 +201,18 @@ type ring struct {
 // newRing starts the ring: otfnode with role otfRole, n2 with peerRole,
 // n3 a client.
 func newRing(t *testing.T, peer, otfRole, peerRole string) *ring {
+	return newRingArgs(t, peer, "MRP "+peerRole+" and client (go-profinet: MRP "+otfRole+")",
+		[]string{"-role", otfRole}, []string{"--role", peerRole}, []string{"--role", "mrc"})
+}
+
+// newRingArgs starts a ring with otfnode's and the peer nodes' flags.
+func newRingArgs(t *testing.T, peer, roles string, otf, n2, n3 []string) *ring {
 	e := newEnv(t)
-	e.result.peer(peer, image(peer), "MRP "+peerRole+" and client (go-profinet: MRP "+otfRole+")")
+	e.result.peer(peer, image(peer), roles)
 	r := &ring{e: e, peer: peer}
-	r.n1 = e.ringNode("n1", runnerImage, "/otfnode", "mrp", "-role", otfRole)
-	r.n2 = e.ringNode("n2", image(peer), "node", "--role", peerRole)
-	r.n3 = e.ringNode("n3", image(peer), "node", "--role", "mrc")
+	r.n1 = e.ringNode("n1", runnerImage, append([]string{"/otfnode", "mrp"}, otf...)...)
+	r.n2 = e.ringNode("n2", image(peer), append([]string{"node"}, n2...)...)
+	r.n3 = e.ringNode("n3", image(peer), append([]string{"node"}, n3...)...)
 	e.waitEvent(r.n1, 30*time.Second, "start", named("start"))
 	e.cable(r.n1, r.n2)
 	e.cable(r.n2, r.n3)
@@ -440,4 +452,132 @@ func testRingFaults(t *testing.T, peer string) {
 		}
 	}
 	e.result.add("MRP seeded cable faults, go-profinet MRM with "+peer+" MRCs: settles, no loop, no hole", ok, fmt.Sprintf("seed %d, %d rounds", seed, rounds))
+}
+
+// TestMRPAuto: automatic managers (MRA). go-profinet and the peer's two
+// nodes are all MRAs; the best (the lowest priority) manages and the
+// others act as its clients:
+//
+//   - go-profinet has the best priority: it manages, the peers give way;
+//   - a peer node has: go-profinet gives way to it; that node fails (both
+//     its cables down) and go-profinet, the next best, manages the rest;
+//     the node comes back and go-profinet gives way again.
+//
+// After each change the ring carries every probe exactly once.
+func TestMRPAuto(t *testing.T) { eachPeer(t, testAuto) }
+
+func testAuto(t *testing.T, peer string) {
+	const best, worse = "36864", "41216" // 0x9000; 0xA100, worse than the default 0xA000
+	t.Run("go-profinet-best", func(t *testing.T) {
+		r := newRingArgs(t, peer, "MRP automatic managers (go-profinet: MRA)",
+			[]string{"-role", "auto", "-prio", best}, []string{"--role", "mra"}, []string{"--role", "mra"})
+		e := r.e
+		// go-profinet's own frames (its ring port's address): the peer's
+		// MRP_Options carry the OUI 00-00-00, which tshark does not decode.
+		mac := strings.TrimSpace(string(e.exec(r.n1, "cat", "/sys/class/net/ringA/address")))
+		pcap := "mrp-auto-" + peer + ".pcap"
+		stop := e.captureOn(r.n1, "ringA", "ether proto 0x88e3 and ether src "+mac, pcap)
+		// Each peer node gives way: it acts as a client at least once
+		// (umrp does not stay one: flapping, below).
+		var gave [2]bool
+		ok := until(20*time.Second, func() bool {
+			o := e.otfRing(r.n1)
+			for i, n := range []string{r.n2, r.n3} {
+				gave[i] = gave[i] || e.peerStatus(n).Role == "MRC"
+			}
+			return o.Acting == "manager" && !o.Open && len(o.Blocked) == 2 && o.Blocked[1] && gave[0] && gave[1]
+		})
+		e.expect("MRA: go-profinet (best priority) manages, "+peer+" MRAs give way", ok, "otfnode %+v, n2 %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n2), e.peerStatus(r.n3))
+		if ok {
+			r.exact("MRA ring closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
+			time.Sleep(3 * time.Second)
+			r.exact("MRA ring still closed by go-profinet: no loop, no hole (" + peer + " MRAs)")
+			e.expect("MRA: go-profinet stays the manager", actingChanges(e.events(r.n1)) == 0, "acting changes %d", actingChanges(e.events(r.n1)))
+			r.flapping()
+		}
+		stop()
+		e.oracles(pcap)
+	})
+	t.Run("peer-best", func(t *testing.T) {
+		r := newRingArgs(t, peer, "MRP automatic managers (go-profinet: MRA)",
+			[]string{"-role", "auto"}, []string{"--role", "mra", "--prio", best}, []string{"--role", "mra", "--prio", worse})
+		e := r.e
+		managed := func() bool {
+			o := e.otfRing(r.n1)
+			s2 := e.peerStatus(r.n2)
+			return s2.Role == "MRM" && s2.Ring == "CHK_RC" && o.Acting == "client" && !o.Blocked[0] && !o.Blocked[1] &&
+				e.peerStatus(r.n3).Role == "MRC"
+		}
+		ok := until(20*time.Second, managed)
+		e.expect("MRA: go-profinet gives way to a better "+peer+" MRA", ok, "otfnode %+v, n2 %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n2), e.peerStatus(r.n3))
+		if !ok {
+			return
+		}
+		r.exact("MRA ring closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
+		time.Sleep(3 * time.Second)
+		r.exact("MRA ring still closed by " + peer + ": no loop, no hole (go-profinet MRA as client)")
+		// At most the one change from manager to client (none when it
+		// gave way before its first ring event).
+		e.expect("MRA: go-profinet stays a client of the better "+peer+" MRA", actingChanges(e.events(r.n1)) <= 1 && e.otfRing(r.n1).Acting == "client",
+			"acting changes %d, %+v", actingChanges(e.events(r.n1)), e.otfRing(r.n1))
+		r.flapping()
+
+		// The manager fails: both its cables down.
+		e.setLink(r.n2, "ringA", false)
+		e.setLink(r.n2, "ringB", false)
+		took := until(20*time.Second, func() bool {
+			return e.otfRing(r.n1).Acting == "manager" && e.peerStatus(r.n3).Role == "MRC"
+		})
+		e.expect("MRA: go-profinet (next best) manages when the "+peer+" manager fails", took, "otfnode %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n3))
+		if took {
+			sent, _, g3 := r.burst()
+			e.expect("MRA after the manager failed: no loop, no hole (go-profinet manages, "+peer+" MRA as client)", g3 == sent, "probes sent %d, received by n3 %d", sent, g3)
+		}
+
+		// It comes back: go-profinet gives way again.
+		e.setLink(r.n2, "ringA", true)
+		e.setLink(r.n2, "ringB", true)
+		back := until(20*time.Second, managed)
+		e.expect("MRA: go-profinet gives way again when the better "+peer+" MRA returns", back, "otfnode %+v, n2 %+v, n3 %+v", e.otfRing(r.n1), e.peerStatus(r.n2), e.peerStatus(r.n3))
+		if back {
+			r.exact("MRA ring closed again by " + peer + ": no loop, no hole")
+		}
+	})
+}
+
+// changes counts the changes of a field of a node's ring events.
+func changes(evs []map[string]any, field string) int {
+	n, last := 0, ""
+	for _, ev := range evs {
+		if ev["event"] != "ring" {
+			continue
+		}
+		if r, _ := ev[field].(string); r != last {
+			if last != "" {
+				n++
+			}
+			last = r
+		}
+	}
+	return n
+}
+
+// actingChanges counts otfnode's changes between manager and client.
+func actingChanges(evs []map[string]any) int { return changes(evs, "acting") }
+
+// flapping records peer nodes that keep changing role in a ring that
+// settled: umrp's MRA, as a client, ignores the tests of the manager it
+// gave way to (its ring_mac) in its test monitor, takes the manager role
+// back after TSTNRmax intervals and gives way again on the next NAck,
+// whoever the manager is (two umrp nodes alike).
+func (r *ring) flapping() {
+	e := r.e
+	for _, n := range []string{r.n2, r.n3} {
+		if c := changes(e.events(n), "role"); c > 2 {
+			e.result.deviation("MRA: "+r.peer+" MRA as a client keeps taking the manager role back",
+				fmt.Sprintf("%d role changes on %s: umrp's MRC test monitor ignores the tests of the manager it gave way to "+
+					"(state_machine.c, mrp_mra_recv_ring_test) and reclaims the role after TSTNRmax intervals; seen with a umrp manager too", c, n[strings.LastIndex(n, "-")+1:]))
+			return
+		}
+	}
 }

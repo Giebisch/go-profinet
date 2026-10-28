@@ -171,3 +171,33 @@ func TestMRPRecords(t *testing.T) {
 		t.Fatal("a device without MRP served PDInterfaceMrpDataReal")
 	}
 }
+
+// TestMRPAutoRing: three automatic managers (MRA, a role of the devices'
+// configuration: PROFINET's MRP_Role has none) settle on A, the best
+// priority, as the manager; A's PDInterfaceMrpDataReal reports what it
+// acts as, the manager of a closed ring.
+func TestMRPAutoRing(t *testing.T) {
+	e := newEnv(t, 330)
+	segs := e.segments(4)
+	auto := &device.MRPConfig{Role: mrp.RoleAuto, Profile: mrp.Profile200}
+	a := e.multiportDeviceMRP("auto-a", "192.168.0.10", &device.MRPConfig{Role: mrp.RoleAuto, Prio: 0x9000, Profile: mrp.Profile200}, segs[0], segs[2], segs[3])
+	b := e.multiportDeviceMRP("auto-b", "192.168.0.11", auto, segs[0], segs[1])
+	c := e.multiportDeviceMRP("auto-c", "192.168.0.12", auto, segs[1], segs[2])
+	ctrl, _ := e.controllerOn(segs[3], "192.168.0.1")
+	cdA, err := ctrl.AddDevice(controller.DeviceConfig{StationName: "auto-a", Model: multiportModel(3),
+		ReconnectMin: 100 * time.Millisecond, ReconnectMax: 300 * time.Millisecond, DataHoldFactor: stallHold, WatchdogFactor: stallHold})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, cdA, controller.StateRunning, 15*time.Second)
+	eventually(t, 5*time.Second, "A manages a closed ring, B and C its clients", func() bool {
+		sa, _ := a.dev.MRPStatus()
+		sb, _ := b.dev.MRPStatus()
+		sc, _ := c.dev.MRPStatus()
+		return sa.Role == mrp.RoleAuto && sa.Acting == mrp.RoleManager && !sa.RingOpen && sa.Blocked[1] &&
+			sb.Acting == mrp.RoleClient && sb.ManagerPrio == 0x9000 && sc.Acting == mrp.RoleClient && sc.ManagerPrio == 0x9000
+	})
+	if r, ok := ringState(t, cdA); !ok || r.Role != pnio.MrpRoleManager || !r.HasRingState || r.RingState != uint16(mrp.RingClosed) {
+		t.Fatalf("A's PDInterfaceMrpDataReal %+v", r)
+	}
+}
