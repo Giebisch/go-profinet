@@ -202,7 +202,11 @@ jobs:
       - name: Build the reference images
         env:
           REF: ${{ inputs.interop_ref || '' }}
-        run: make interop-images PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop" ${REF:+INTEROP_REF=$REF}
+        # Once more on failure: a Debian mirror mid-sync fails apt-get with
+        # a hash mismatch now and then.
+        run: |
+          make interop-images PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop" ${REF:+INTEROP_REF=$REF} ||
+            { sleep 30; make interop-images PROFINET_INTEROP_DIR="$RUNNER_TEMP/profinet-interop" ${REF:+INTEROP_REF=$REF}; }
       - name: Interop tests
         run: make test-interop
       - name: Upload results

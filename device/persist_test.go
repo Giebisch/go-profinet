@@ -190,3 +190,39 @@ func TestPersistLoad(t *testing.T) {
 		t.Fatalf("bad key: %v", err)
 	}
 }
+
+// countingStore counts the saves.
+type countingStore struct {
+	*store.Memory
+	saves int
+}
+
+func (s *countingStore) Save(ctx context.Context, key string, v []byte) error {
+	s.saves++
+	return s.Memory.Save(ctx, key, v)
+}
+
+// TestPersistUnchanged: a repeated request that changes nothing (a DCP
+// Set retransmitted) is not saved again, also after a restart.
+func TestPersistUnchanged(t *testing.T) {
+	n := newNet(t)
+	st := &countingStore{Memory: store.NewMemory()}
+	d, _ := n.device(nil, withStoreCfg(st, "unit"))
+	s := station{d}
+	for range 3 {
+		if code := s.SetName("plant-1", true); code != dcp.BlockErrorNone {
+			t.Fatal(code)
+		}
+	}
+	if st.saves != 1 {
+		t.Fatalf("%d saves", st.saves)
+	}
+	_ = d.Close()
+	d2, _ := n.device(nil, withStoreCfg(st, "unit"))
+	if code := (station{d2}).SetName("plant-1", true); code != dcp.BlockErrorNone || st.saves != 1 {
+		t.Fatalf("restarted: %v, %d saves", code, st.saves)
+	}
+	if code := (station{d2}).SetName("plant-2", true); code != dcp.BlockErrorNone || st.saves != 2 {
+		t.Fatalf("changed: %v, %d saves", code, st.saves)
+	}
+}
