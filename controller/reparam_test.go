@@ -55,7 +55,10 @@ func runningWith(t *testing.T, h device.Handler, cfg DeviceConfig) (*Device, *de
 
 func TestReparameterize(t *testing.T) {
 	h := &prmHandler{}
-	cd, dev := runningWith(t, h, DeviceConfig{Parameters: []Parameter{{Slot: 2, Subslot: 1, Index: 0x10, Data: []byte{0, 2}}}})
+	// Generous watchdog and data hold: only the re-parameterization may
+	// end the AR, not a slow runner's late cyclic frames.
+	cd, dev := runningWith(t, h, DeviceConfig{Parameters: []Parameter{{Slot: 2, Subslot: 1, Index: 0x10, Data: []byte{0, 2}}},
+		DataHoldFactor: 1000, WatchdogFactor: 1000})
 	ctx := context.Background()
 	if err := cd.Reparameterize(ctx, []Parameter{{Slot: 2, Subslot: 1, Index: 0x10, Data: []byte{0, 7}}}); err != nil {
 		t.Fatal(err)
