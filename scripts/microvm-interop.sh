@@ -40,7 +40,7 @@ sysctl -qw kernel.hung_task_timeout_secs=20 kernel.hung_task_panic=0 2>/dev/null
 done ) &
 mountpoint -q /sys/fs/cgroup || mount -t cgroup2 none /sys/fs/cgroup
 d=\$(mktemp -d)
-mount -t tmpfs -o size=3G tmpfs "\$d"
+mount -t tmpfs -o size=6G tmpfs "\$d"
 export DOCKER_HOST=unix://\$d/docker.sock DOCKER_CONFIG=\$d/cli
 dockerd --data-root "\$d/data" --exec-root "\$d/exec" --pidfile "\$d/docker.pid" -H "\$DOCKER_HOST" \
     --iptables=false --ip6tables=false --bridge=none --storage-driver overlay2 >"\$d/dockerd.log" 2>&1 &
@@ -55,7 +55,7 @@ PROFINET_INTEROP_OTFNODE=$out/otfnode PROFINET_INTEROP_RESULTS=$results PROFINET
 grep -q '^PASS\$' $out/test.log && echo MICROVM-OK
 GUEST
 start=$(date +%s)
-vng --run "$kernel" --root / --user root --memory 4G --cpus "$(nproc)" \
+vng --run "$kernel" --root / --user root --memory 10G --cpus "$(nproc)" \
     --rwdir "$out" --rwdir "$results" \
     --exec "bash $out/guest.sh" | tee "$out/log"
 echo "micro-VM run took $(( $(date +%s) - start )) s"
