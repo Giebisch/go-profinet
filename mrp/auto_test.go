@@ -177,3 +177,27 @@ func TestAutoTakeOver(t *testing.T) {
 	settled(t, nodes, 0, []int{1, 2, 3})
 	noLoop(t, nodes, 2, []int{0, 1, 3})
 }
+
+// TestDecodeKernelMRATest: the Linux bridge's MRA test frame, whose last
+// MRP_Option claims more octets than the frame has, decodes.
+func TestDecodeKernelMRATest(t *testing.T) {
+	f := Frame{Test: &Test{Prio: 0xA000, SA: ethernet.MAC{2, 0, 0, 0, 0, 9}, RingState: RingClosed}, Common: &Common{SequenceID: 3, Domain: DefaultDomain}}
+	b, err := f.AppendTo(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = b[:len(b)-2] // MRP_End
+	// OUI, three octets of sub-option, the AutoMgr sub-TLV with an
+	// uninitialised length, two octets of padding: 10 written, 15 claimed.
+	b = append(b, byte(TypeOption), 15, 0, 0, 0, 0, 0, 0, byte(SubAutoMgr), 0xAA, 0, 0, byte(TypeEnd), 0)
+	g, err := Decode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Test == nil || g.Test.SA != f.Test.SA || g.Common == nil || len(g.Options) != 1 {
+		t.Fatalf("%+v", g)
+	}
+	if _, err := Decode(append(b[:len(b)-14], byte(TypeOption), 15, 0, 0)); err == nil {
+		t.Error("an option without its OUI decoded")
+	}
+}

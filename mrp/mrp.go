@@ -283,6 +283,15 @@ func Decode(b []byte) (Frame, error) {
 			return f, nil
 		}
 		if off+2+l > len(data) {
+			// The Linux bridge as an MRA (net/bridge/br_mrp.c,
+			// br_mrp_alloc_test_skb, v6.12) appends an MRP_Option whose
+			// length is the size of a pointer plus its body, more than it
+			// writes, as the last TLV: the option takes what is left.
+			if t == TypeOption && off+2+3 <= len(data) {
+				v := data[off+2:]
+				f.Options = append(f.Options, Option{OUI: [3]byte(v[:3]), Data: append([]byte(nil), v[3:]...)})
+				return f, nil
+			}
 			return f, fmt.Errorf("mrp: %w: %s of length %d exceeds the frame", profinet.ErrMalformed, t, l)
 		}
 		v := data[off+2 : off+2+l]
