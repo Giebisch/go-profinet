@@ -105,7 +105,8 @@ data (PACKET_AUXDATA).
 ## Verification
 
 - Interoperability is verified against four open PROFINET implementations
-  (p-net, pnio-rs, profinet-py, pnio-dcp), an MRP implementation (umrp), an
+  (p-net, pnio-rs, profinet-py, pnio-dcp), two MRP implementations (umrp;
+  microchip-ung/mrp on the Linux kernel's bridge MRP, in micro-VMs), an
   SNMP manager (Net-SNMP) and two decoders (scapy, Wireshark). There is no
   second open IO-Controller (CODESYS by hand: not run); no commercial PLC,
   device or engineering tool has been tested.

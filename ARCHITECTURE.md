@@ -24,6 +24,11 @@ travels from the wire to the application.
              (Linux)      (macOS/BSD)    (Windows)          (tests, examples)
 ```
 
+Beside these layers: **`l2/bridge`**, the learning switch of a multiport
+device (its ports are `l2.Port`s, the device sits on its local port);
+**`mrp`**, the ring entity on two of its ports; **`snmp`**, the read-only
+agent on UDP 161; **`store`**, where a device keeps its permanent state.
+
 - **`profinet`** (the root package) is a leaf: the sentinel errors and the
   logger interfaces. Every package imports it; nothing else is shared.
 - **`ethernet`** encodes and decodes Ethernet II frames with an optional

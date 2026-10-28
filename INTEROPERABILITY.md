@@ -137,11 +137,11 @@ is an attributed deviation of the peer.
 | tshark and scapy | | (decoders of our Hello, SNMP, UDP-RT and DHCP frames) | 8 | 0 | 0 | 2 |
 
 The full matrix, feature by feature, with the evidence of each check, is
-[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.4.0/docs/MATRIX.md)
+[profinet-interop's MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.4.1/docs/MATRIX.md)
 (248 pass, 0 fail, 6 n/a, 14 deviations; the Interop workflow on amd64,
 the mrp rows from the Kernel MRP workflow's micro-VMs); the notes on each
 peer are in its
-[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.4.0/docs/INTEROPERABILITY.md).
+[INTEROPERABILITY.md](https://github.com/otfabric/profinet-interop/blob/v0.4.1/docs/INTEROPERABILITY.md).
 The "n/a" are peer limits: pnio-rs has no diagnosis records and no DCP Set,
 p-net and pnio-rs refuse PrmBegin in Data, profinet-py ignores the GSDML's
 UsedInSlots, and the kernel flushes its FDB where the mrp adapter cannot
@@ -159,7 +159,14 @@ make interop-matrix   # regenerates profinet-interop's matrix from them
 ```
 
 The **Interop** workflow does the same on GitHub Actions for pull requests,
-for pushes to `main` and weekly.
+for pushes to `main` and weekly. The microchip-ung/mrp rows need a kernel
+with bridge MRP and without switchdev; the **Kernel MRP** workflow (same
+triggers, amd64 with KVM) builds one and runs those tests in micro-VMs:
+
+```bash
+make -C ../profinet-interop image-mrp image-umrp image-scapy image-tshark
+scripts/microvm-interop.sh "$(scripts/mrp-kernel.sh v6.12 /tmp/k)" 'TestMRPOtfManager/^mrp$'   # needs virtme-ng and /dev/kvm
+```
 
 ### What the tests found
 

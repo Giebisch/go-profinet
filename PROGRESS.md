@@ -3,13 +3,13 @@
 Durable state of the go-profinet / profinet-interop / profinetctl build.
 Resume from here after an interruption.
 
-## Repositories and branches
+## Repositories and releases
 
-| Repository | Branch | State |
-|------------|--------|-------|
-| go-profinet | `feat/core` | library, tests, interop suite, CI workflows; local commits, not pushed |
-| profinet-interop | `feat/adapters` | six adapter images, contract, matrix; local commits, not pushed |
-| profinetctl | `feat/cli` | CLI, tests, docs, CI; local commits, not pushed. go.mod replaces go-profinet with `../go-profinet` until go-profinet is tagged |
+| Repository | Release | State |
+|------------|---------|-------|
+| go-profinet | v0.5.1 (2026-10-28) | main; CI, Interop, Kernel MRP, Soak (25×) and Release workflows |
+| profinet-interop | v0.4.1 (contract 1.2) | main; nine adapters, contract, matrix |
+| profinetctl | v0.3.1 (requires go-profinet v0.5.0) | main |
 
 ## Decisions
 
@@ -22,7 +22,8 @@ Resume from here after an interruption.
 - D3 GSDML XSDs are PI members-only: generation from an independently
   written catalog (`gsdml/schema/catalog.json`), optional comparison with a
   licensed local XSD (`gengsdml -xsd`, 0 differences against v2.35).
-  GSDX/MRCD formats are not public: not implemented (blocker B1).
+  GSDX containers are inspected (`gsdml/gsdx`); MRCD is not public: not
+  implemented.
 - D4 Controller assigns the input CR's FrameID; the device the output CR's.
 - D5 Interop facts adopted from the reference stacks: per-AR RPC activity
   (p-net), consumer watchdog armed at establishment, idempotent PNIO calls
@@ -35,19 +36,20 @@ Resume from here after an interruption.
 
 ## Status
 
+The supported features, how each is tested and the interop matrix are in
+[docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md); what is out of scope in
+[LIMITATIONS.md](LIMITATIONS.md).
+
 | Area | State |
 |------|-------|
-| DCP, LLDP, RPC, PNIO blocks, alarms, RT cyclic, I&M, diagnosis | done, tested (unit, fuzz, e2e, chaos) |
-| PDPortDataReal / PDRealData (topology) | done; decoder verified against p-net |
-| IO-Device, IO-Controller, supervisor (device access) AR, AR info | done, tested |
-| GSDML parse/validate/encode/model conversion, codegen | done |
-| OS L2 backends | AF_PACKET tested in Docker (`make l2-test`), BPF opened on macOS, Npcap cross-compiled |
-| profinet-interop | p-net, pnio-rs, profinet-py, pnio-dcp, umrp, microchip-ung/mrp (n/a: kernel), Net-SNMP, scapy, tshark: 193 pass, 0 fail, 8 n/a, 8 attributed deviations (v0.3.0); CI, contract check, release and upstream-candidate workflows |
-| go-profinet interop suite + `make interop` + Interop workflow | done; 10/10 tests pass |
-| profinetctl | done: every command family, 93 % coverage, race-free, verified against p-net |
-| Documentation | complete: reference documents in the root, guides in docs/ |
-| Releases | go-profinet v0.1.0–v0.4.0 (v0.4.0, 2026-10-28: independent interoperability and production readiness, docs/research/NEXT-PROGRAM-REPORT.md; interop pinned to profinet-interop v0.3.0; soaked 25×), profinet-interop v0.1.0–v0.3.0, profinetctl v0.1.0–v0.3.0 |
-| Verification (2026-10-26) | make check (lint, vuln, race tests, 97.8 % coverage), make test-e2e (38 passed incl. 21 chaos runs, chaos monkey, leak test), make fuzz (13 targets), make l2-test (AF_PACKET), make cross, interop 11/11, profinetctl make check-equivalents and pnet-smoke |
+| DCP, LLDP, RPC, PNIO blocks, alarms, RT cyclic, I&M, diagnosis | done, tested (unit, fuzz, e2e, chaos, interop) |
+| IO-Device, IO-Controller, device access AR, shared device, re-parameterization | done, tested |
+| Multiport device, MRP client, manager and automatic manager, SNMP agent, persistence | done, tested (interop: umrp, microchip-ung/mrp on the kernel, Net-SNMP) |
+| System redundancy S2 | experimental (no independent peer) |
+| GSDML parse/validate/encode/model conversion, codegen, synthetic fixtures | done |
+| OS L2 backends | AF_PACKET tested on veth (`make l2-test`), allocation-free; BPF on a macOS feth pair (CI); Npcap compiled for Windows, not exercised on a real interface |
+| profinet-interop matrix (v0.4.1) | 248 pass, 0 fail, 6 n/a, 14 attributed peer deviations |
+| Verification (2026-10-28, v0.5.0) | make check (lint, vuln, race tests, 97.1 % coverage), e2e and chaos suites, 26 fuzz targets, l2-test, cross builds, Interop and Kernel MRP workflows, 25× soak of every job green |
 
 ## Blockers
 

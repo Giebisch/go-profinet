@@ -133,3 +133,33 @@ Of concurrent Connects for one submodule, exactly one wins (the owner table
 is claimed in one critical section). Shared input (several ARs reading one
 submodule's inputs, SubmoduleProperties bit 2) is not implemented: its
 semantics for the non-owners are not public.
+
+## Multiport devices, MRP and SNMP
+
+A device with more than one port runs on a software switch: give it
+`Config.Bridge` (an `l2/bridge.Bridge` over the port backends) and the
+bridge's local port as `Config.Mux`; the model declares the ports
+(`model.Capabilities.Ports`, one port submodule each). `Config.MRP`
+(`MRPConfig`) runs media redundancy on two of the ports: `mrp.RoleClient`,
+`mrp.RoleManager` or `mrp.RoleAuto` (the automatic manager, which only the
+device's configuration can choose: PROFINET's MRP_Role has no value for
+it), with a priority and a recovery profile (200 or 500 ms). A controller
+may change the role through the MRP records; `dev.MRPStatus()` reports the
+ring. `Config.SNMP` starts the read-only SNMP agent (v1/v2c: MIB-II
+system, interfaces and snmp groups, the LLDP-MIB of the device's ports).
+The tested behaviour and its limits are in
+[FEATURE-STATUS.md](FEATURE-STATUS.md).
+
+## DCP policy
+
+`Config.DCPPolicy` (`dcp.Policy`) can make the device read-only for DCP Set
+and ResetToFactory, rate-limit requests per source, and report every Set
+block to an audit function. It is not a security class: source MAC
+addresses can be forged ([SECURITY.md](../SECURITY.md)).
+
+## System redundancy (experimental)
+
+`Config.SystemRedundancy` accepts IOCARSR AR sets (S2: a primary and a
+backup AR) as an experiment, off by default. No independent IO-Controller
+with S2 has been tested against it: it is not interoperable
+([LIMITATIONS.md](../LIMITATIONS.md)).

@@ -1,5 +1,16 @@
 # Independent interoperability and production readiness: report
 
+> **Update (2026-10-28, go-profinet v0.5.0, profinet-interop v0.4.1).** Two
+> roadmap items below are done: microchip-ung/mrp now runs as an MRP peer on
+> the Linux kernel's bridge MRP, in micro-VMs with a kernel built without
+> switchdev (the Kernel MRP workflow), which resolves A1's kernel blocker;
+> and the MRP automatic manager (MRA, `mrp.RoleAuto`) is implemented and
+> tested against umrp and the kernel. Where this report says "blocked by
+> the kernel", "MRA: not now" or "do not describe MRP as verified against
+> Linux kernel MRP", read it as the state of v0.4.0. The current state is
+> [FEATURE-STATUS.md](../FEATURE-STATUS.md) and the
+> [v0.5.0 notes](../../RELEASE.md#v050).
+
 Status: 2026-10-28. go-profinet v0.4.0 (before: v0.3.0), profinet-interop
 v0.3.0 (before: v0.2.1), profinetctl v0.3.0 (before: v0.2.0).
 

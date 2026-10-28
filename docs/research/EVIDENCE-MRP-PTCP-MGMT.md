@@ -202,7 +202,7 @@ Note: the Wireshark dissectors live under `plugins/epan/profinet/`, not `epan/di
   1. It first gets -EOPNOTSUPP, which maps to BR_MRP_SW.
   2. It then retries with `sw_backup=true`. That again returns -EOPNOTSUPP because `switchdev_port_obj_notify` returns EOPNOTSUPP when not handled (switchdev.c:223-245). The result is BR_MRP_NONE, so `br_mrp_set_ring_role` returns -EOPNOTSUPP (br_mrp_switchdev.c:64-98; br_mrp.c:662-686).
 - Pure software MRP via the kernel therefore likely works only when `CONFIG_NET_SWITCHDEV` is not set (IS_ENABLED false → BR_MRP_SW at :78-79).
-- **Must be confirmed empirically** before relying on the kernel or MC as an oracle on veth/Docker.
+- **Must be confirmed empirically** before relying on the kernel or MC as an oracle on veth/Docker. (Confirmed 2026-10-28: on the hosted runners' kernel, switchdev built in, the MRP instance is refused with EOPNOTSUPP; a Linux 6.12 without `CONFIG_NET_SWITCHDEV` runs it on veth in Docker: go-profinet's Kernel MRP workflow.)
 
 **Namespaces and containers**
 - Bridge netlink needs CAP_NET_ADMIN in the netns (INFERRED from the rtnetlink setlink permission check, not fetched).

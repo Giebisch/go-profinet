@@ -297,7 +297,9 @@ and experiments only, **—** deferred.
   round (about 20–35 ms on vnet with the 200 ms profile), the cable back
   closes it. Not done: an independent MRP peer (microchip-ung/mrp needs a
   kernel with CONFIG_BRIDGE_MRP and a container network that carries a
-  ring), MRA, interconnection, MRP diagnoses.
+  ring), MRA, interconnection, MRP diagnoses. (Since v0.4.0 umrp and, since
+  v0.5.0, microchip-ung/mrp on the kernel are independent peers, and MRA is
+  implemented: [FEATURE-STATUS.md](../FEATURE-STATUS.md).)
 
 ### 5. Optional extensions
 

@@ -51,4 +51,4 @@ machines also run `make test-e2e` and, when you can, `make interop`.
 ## Commits and pull requests
 
 Small, focused commits whose messages say why. CI runs `.github/workflows/ci.yml`
-(and the Interop workflow) on every pull request.
+(and the Interop and Kernel MRP workflows) on every pull request.

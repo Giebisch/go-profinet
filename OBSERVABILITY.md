@@ -51,10 +51,15 @@ they do not log per frame.
 | `rt.Dispatcher` | `Unknown()` | cyclic frames for no consumer |
 | `controller.Device` | `Stats()` | `Connects`, `Aborts`, `Alarms`, and the `Provider`, `Consumer` and `Cycle` stats of the current AR |
 | `netstack.Stack` | `Stats()` | `ReceivedIP`, `SentIP`, `BadChecksum`, `Fragments`, `NoSocket`, `Overflow`, `ARPRequests`, `ARPReplys` |
+| `l2/bridge.Bridge` | `Stats(port)` | `Received`, `Sent`, `Local` (delivered to the device), `Forwarded`, `Dropped` (blocked, boundary, full queue), `SendErrs` |
+| `mrp.Entity` | `Status()` | role and acting role, state, ring open, blocked ports, `Transitions`, `TestsSent`, `TestsReceived`, `TopologyChanges`, `LinkChanges`, `Forwarded`, `Malformed` (`device.Device.MRPStatus()` on a device) |
+| `snmp.Agent` | `Stats()` | the snmp group counters (`InPkts`, `OutPkts`, `InBadVersions`, `InBadCommunityNames`, `InASNParseErrs`, requests by type, `OutTooBigs`, `OutNoSuchNames`, `OutGetResponses`) and `SilentDrops`, `UnsupportedPDUs` |
 | `vnet.Endpoint` | `Stats()` | `Sent`, `Received`, `Dropped`, `Duplicated`, `Corrupted`, `Reordered` (injected faults), `Overflow`, `LinkDrops` |
 
 ## Events
 
+- `dcp.Policy.Audit` receives an event for every DCP Set block a device
+  applied, refused or rate-limited (its requester, block and outcome).
 - `controller.DeviceConfig.OnState(from, to, err)` reports every transition
   of a device's lifecycle with the error of a failure;
   `OnAlarm(AlarmEvent)` every alarm (after the controller acknowledged it).

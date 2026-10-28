@@ -14,13 +14,40 @@ section ending with a `---` line and no `---` line inside a section.
 
 1. `make check` and `make test-e2e` pass; the Interop workflow is green; a
    Soak run of the release commit (25 runs) is entirely green.
-2. `INTEROP_REF` (Makefile and `.github/workflows/interop.yml`) names the
-   profinet-interop release the matrix in INTEROPERABILITY.md came from.
+2. `INTEROP_REF` (Makefile, `.github/workflows/interop.yml` and
+   `.github/workflows/kernel-mrp.yml`) names the profinet-interop release
+   the matrix in INTEROPERABILITY.md and docs/FEATURE-STATUS.md came from;
+   the Kernel MRP workflow is green.
 3. This file lists the changes under the new version, in a `## vX.Y.Z`
    section ending with `---` (`make release-notes-check`); API changes are
    called out.
 4. Run the Release workflow with the version bump.
 5. Update profinetctl: `go get github.com/otfabric/go-profinet@<tag>`.
+
+---
+
+## v0.5.1
+
+**Date:** 2026-10-28
+**Previous release:** v0.5.0
+
+Documentation and pins; no library change (apidiff against v0.5.0: none).
+
+- docs/FEATURE-STATUS.md is the support, feature and interop matrix:
+  versions, platforms, features by role (device, controller,
+  profinetctl), and each independent implementation against each feature
+  area with profinet-interop's totals.
+- README: the automatic manager and the kernel MRP peer; the comparison
+  with other stacks gains re-parameterization, MRP and SNMP rows.
+- Corrected or completed: SECURITY.md (0.5.x supported), PROGRESS.md,
+  API.md (the MRA symbols), OBSERVABILITY.md (bridge, MRP and SNMP
+  counters, the DCP audit), TESTING.md and COVERAGE.md (26 fuzz targets,
+  coverage 97.1 % per package as of v0.5.0, the Kernel MRP tier),
+  LIMITATIONS.md, DEVICE.md and CONTROLLER.md (multiport, MRP, SNMP, DCP
+  policy, re-parameterization, S2), dated notes on the research reports.
+- Interop: profinet-interop v0.4.1 (contract 1.2; 248 pass, 0 fail, 6 n/a,
+  14 attributed deviations), pinned in the Makefile and both interop
+  workflows.
 
 ---
 
