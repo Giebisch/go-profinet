@@ -25,6 +25,18 @@ Errors returned by a context (`context.Canceled`, `context.DeadlineExceeded`)
 are wrapped as they are; a call bounded by its own default timeout returns an
 error that matches both `ErrTimeout` and `context.DeadlineExceeded`.
 
+## Retries and backoff
+
+What the library retries by itself, and what it leaves to the application:
+
+| Where | Retry | Configured by |
+|-------|-------|---------------|
+| DCP Get and Set | retransmitted with the same transaction ID (default 3 times) | `dcp.ClientOptions.Retries` |
+| DCE/RPC calls | retransmitted every second until the call's deadline (a fragment that is missing is asked for again); a device executes a call at most once and answers a retransmission from its response cache | `rpc.ClientOptions.Retransmit`, `controller.DeviceConfig.RPCTimeout`, the context |
+| Alarms (RTA) | retransmitted until acknowledged, then the AR is aborted | `RTATimeoutFactor`, `RTARetries` |
+| Controller lifecycle | a failed AR or connection attempt is retried for ever with an exponential backoff and optional jitter; a DCP Hello of the device skips the wait | `ReconnectMin`, `ReconnectMax`, `ReconnectJitter`; `Metrics.OnRetry` |
+| Record calls (`ReadRecord`, …) | not retried: a write must not be repeated behind the application's back | the application |
+
 ## Typed errors
 
 | Type | Carries | Matches |

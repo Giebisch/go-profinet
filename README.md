@@ -61,6 +61,12 @@ The library provides:
   [otfabric/profinet-interop](https://github.com/otfabric/profinet-interop)
   (see [INTEROPERABILITY.md](INTEROPERABILITY.md) and the support, feature
   and interop matrix, [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md))
+- **Observability**: a `profinet.Metrics` callback interface (state
+  changes, connects, aborts, record accesses with durations, alarms,
+  retries), structured logging through `log/slog`, counters on every
+  component, typed errors with sentinels ([ERRORS.md](ERRORS.md),
+  [OBSERVABILITY.md](OBSERVABILITY.md)); reconnection with exponential
+  backoff and jitter
 - **Persistence and re-parameterization**: an optional store keeps a
   device's permanent name, address and I&M records across restarts
   (`store`, `device.Config.Store`); a controller re-parameterizes a running
@@ -157,7 +163,7 @@ Requires Go 1.23 or later.
 | `vnet` | virtual Ethernet switch with loss, duplication, corruption, reordering, delay and jitter |
 | `netstack` | ARP, IPv4 and UDP over a `l2.Mux` |
 | `pcap` | pcap reader and writer |
-| `examples/` | quickstart, discovery, DCP Hello, alarms, records, topology, chaos, GSDML generation and import, GSDX inspection, a device and a controller on a real interface ([outputs](examples/README.md)) |
+| `examples/` | quickstart, discovery, DCP Hello, alarms, records, topology, observability (slog and metrics), an MRP ring, chaos, GSDML generation and import, GSDX inspection, a device and a controller on a real interface ([outputs](examples/README.md)) |
 | `e2e/` | end-to-end and chaos tests on vnet; real Layer 2 tests |
 | `interop/` | the interop suite against profinet-interop (build tag `interop`) |
 

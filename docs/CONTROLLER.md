@@ -41,7 +41,9 @@ Each device runs its lifecycle on its own goroutine (see
 Resolving (DCP Identify by name, optional Set IP) → Connecting → Parameterizing
 (the `Parameters`, PrmEnd) → WaitApplicationReady → Running. A failure in any
 state returns to Offline and retries after a backoff (`ReconnectMin` 200 ms,
-doubling to `ReconnectMax` 10 s). `d.Close()` releases the AR and removes the
+doubling to `ReconnectMax` 10 s; `ReconnectJitter`, 0 to 1, shortens each
+wait randomly by up to that fraction so that many devices that failed
+together do not reconnect in step). `d.Close()` releases the AR and removes the
 device.
 
 | `DeviceConfig` | Default | |

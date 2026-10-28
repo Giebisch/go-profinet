@@ -59,12 +59,16 @@ type Config struct {
 	IgnoreHello bool
 	// Logger receives diagnostics. nil logs nothing.
 	Logger profinet.Logger
+	// Metrics receives the state changes, connects, aborts, record
+	// accesses, alarms and retries of every device. nil collects nothing.
+	Metrics profinet.Metrics
 }
 
 // Controller is a PROFINET IO-Controller. It is safe for concurrent use.
 type Controller struct {
 	cfg    Config
 	log    profinet.Logger
+	met    profinet.Metrics
 	object rpc.UUID
 
 	mux    *l2.Mux
@@ -115,10 +119,15 @@ func New(cfg Config) (*Controller, error) {
 	if cfg.DCP.Logger == nil {
 		cfg.DCP.Logger = log
 	}
+	met := cfg.Metrics
+	if met == nil {
+		met = profinet.NopMetrics{}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Controller{
 		cfg:     cfg,
 		log:     log,
+		met:     met,
 		object:  pnio.ObjectUUID(cfg.Instance, cfg.DeviceID, cfg.VendorID),
 		mux:     cfg.Mux,
 		devices: map[string]*Device{},

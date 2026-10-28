@@ -121,6 +121,7 @@ func (d *Device) sendAlarmSeq(ctx context.Context, a *ar, al Alarm, modIdent, su
 		HasItem:   al.HasItem, USI: al.USI, Data: al.Data,
 	}
 	body := n.Append(nil)
+	d.met.OnAlarm(a.ctrlName, al.Type.String(), al.High)
 	if len(body) > int(a.maxAlarmData) {
 		a.mu.Lock()
 		delete(a.ackWait, seq)

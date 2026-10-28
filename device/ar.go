@@ -126,6 +126,7 @@ func (a *ar) transition(to ARState) error {
 		ev := a.events[0]
 		a.events = a.events[1:]
 		a.mu.Unlock()
+		a.d.met.OnStateChange(ev.info.ControllerName, ev.from.String(), ev.to.String(), nil)
 		a.d.handler.StateChanged(ev.info, ev.from, ev.to)
 		a.mu.Lock()
 	}
@@ -745,6 +746,15 @@ func (d *Device) watchIdle(a *ar) {
 	}()
 }
 
+// controllerName is the station name of the AR's controller; empty for
+// no AR (an implicit read).
+func (a *ar) controllerName() string {
+	if a == nil {
+		return ""
+	}
+	return a.ctrlName
+}
+
 // abort closes an AR. When notify is true the controller is told with an
 // ERR PDU; a release passes reason 0 and notify false.
 func (d *Device) abort(a *ar, reason pnio.AbortReason, notify bool) {
@@ -762,6 +772,9 @@ func (d *Device) abort(a *ar, reason pnio.AbortReason, notify bool) {
 	}
 	a.ackWait = map[uint16]chan pnio.AlarmAck{}
 	a.mu.Unlock()
+	if reason != 0 {
+		d.met.OnAbort(a.ctrlName, fmt.Errorf("device: AR %s: %w: %s", a.uuid, profinet.ErrAborted, reason))
+	}
 	if notify && a.alarmLow != nil && reason != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		if err := a.alarmLow.SendErr(ctx, pnio.AbortStatus(reason)); err != nil && !errors.Is(err, profinet.ErrClosed) {
