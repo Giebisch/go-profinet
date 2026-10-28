@@ -464,13 +464,20 @@ func testRingFaults(t *testing.T, peer string) {
 //     the node comes back and go-profinet gives way again.
 //
 // After each change the ring carries every probe exactly once.
+//
+// The ring runs the 500 ms profile: an MRA client takes the manager role
+// after TSTNRmax test intervals without the manager's tests, which in the
+// 200 ms profile is shorter than a loaded micro-VM may stall a node (a
+// kernel MRA took over during a 280 ms stall of otfnode's tests).
 func TestMRPAuto(t *testing.T) { eachPeer(t, testAuto) }
 
 func testAuto(t *testing.T, peer string) {
 	const best, worse = "36864", "41216" // 0x9000; 0xA100, worse than the default 0xA000
+	otf := func(args ...string) []string { return append([]string{"-role", "auto", "-profile", "500"}, args...) }
+	mra := func(args ...string) []string { return append([]string{"--role", "mra", "--recv", "500"}, args...) }
 	t.Run("go-profinet-best", func(t *testing.T) {
 		r := newRingArgs(t, peer, "MRP automatic managers (go-profinet: MRA)",
-			[]string{"-role", "auto", "-prio", best}, []string{"--role", "mra"}, []string{"--role", "mra"})
+			otf("-prio", best), mra(), mra())
 		e := r.e
 		// go-profinet's own frames (its ring port's address): the peer's
 		// MRP_Options carry the OUI 00-00-00, which tshark does not decode.
@@ -502,7 +509,7 @@ func testAuto(t *testing.T, peer string) {
 	})
 	t.Run("peer-best", func(t *testing.T) {
 		r := newRingArgs(t, peer, "MRP automatic managers (go-profinet: MRA)",
-			[]string{"-role", "auto"}, []string{"--role", "mra", "--prio", best}, []string{"--role", "mra", "--prio", worse})
+			otf(), mra("--prio", best), mra("--prio", worse))
 		e := r.e
 		managed := func() bool {
 			o := e.otfRing(r.n1)

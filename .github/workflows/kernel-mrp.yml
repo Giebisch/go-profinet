@@ -16,6 +16,7 @@ on:
   schedule:
     - cron: "37 3 * * 1"
   workflow_dispatch:
+  workflow_dispatch:
     inputs:
       interop_ref:
         description: "profinet-interop ref to build the images from"
