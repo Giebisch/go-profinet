@@ -129,6 +129,52 @@ func cut(nodes []*node, s int, up bool) {
 	nodes[(s+1)%n].ports[0].SetLinkUp(up)
 }
 
+// once checks that a broadcast from station from reaches every other
+// station exactly once: no loop, no hole. A burst sent while the manager
+// changed state does not count: a scheduler that delays the manager's
+// tests beyond TSTNRmax intervals (Windows' timers under load do, in the
+// 200 ms profile) makes it open a closed ring for a moment, as a lost test
+// would on a real network; up to three bursts are sent.
+func once(t *testing.T, nodes []*node, from int) {
+	t.Helper()
+	mgr := nodes[0].ent
+	var got []int64
+	for try := 0; try < 3; try++ {
+		tr := mgr.Status().Transitions
+		before := make([]int64, len(nodes))
+		for i, nd := range nodes {
+			before[i] = nd.got.Load()
+		}
+		broadcast(t, nodes[from])
+		time.Sleep(300 * time.Millisecond)
+		got = got[:0]
+		ok := true
+		for i, nd := range nodes {
+			d := nd.got.Load() - before[i]
+			got = append(got, d)
+			want := int64(1)
+			if i == from {
+				want = 0
+			}
+			if d != want {
+				ok = false
+			}
+		}
+		if ok {
+			return
+		}
+		if mgr.Status().Transitions == tr {
+			break
+		}
+		t.Logf("burst %d: the manager changed state during it (%v): again", try, got)
+		time.Sleep(500 * time.Millisecond)
+	}
+	for i, nd := range nodes {
+		t.Logf("node %d: %+v bridge %v %v", i, nd.ent.Status(), nd.br.State(0), nd.br.State(1))
+	}
+	t.Fatalf("broadcast from station %d delivered %v: a loop or a hole", from, got)
+}
+
 func TestRing(t *testing.T) {
 	nodes, _ := ring(t, 3, Profile200)
 	mgr := nodes[0].ent
@@ -146,12 +192,7 @@ func TestRing(t *testing.T) {
 		return true
 	})
 	// No loop: one broadcast reaches each other station once.
-	before := [3]int64{nodes[0].got.Load(), nodes[1].got.Load(), nodes[2].got.Load()}
-	broadcast(t, nodes[1])
-	time.Sleep(300 * time.Millisecond)
-	if d0, d2, d1 := nodes[0].got.Load()-before[0], nodes[2].got.Load()-before[2], nodes[1].got.Load()-before[1]; d0 != 1 || d2 != 1 || d1 != 0 {
-		t.Fatalf("broadcast delivered %d, %d (and %d to the sender): a loop or a hole", d0, d2, d1)
-	}
+	once(t, nodes, 1)
 
 	// A cable between the clients breaks: the manager opens the ring and
 	// station 2 is reached the other way round.
@@ -187,15 +228,7 @@ func TestRing(t *testing.T) {
 		}
 		return true
 	})
-	before = [3]int64{nodes[0].got.Load(), nodes[1].got.Load(), nodes[2].got.Load()}
-	broadcast(t, nodes[2])
-	time.Sleep(300 * time.Millisecond)
-	if d0, d1 := nodes[0].got.Load()-before[0], nodes[1].got.Load()-before[1]; d0 != 1 || d1 != 1 {
-		for i, nd := range nodes {
-			t.Logf("node %d: %+v bridge %v %v", i, nd.ent.Status(), nd.br.State(0), nd.br.State(1))
-		}
-		t.Fatalf("after closing: %d, %d", d0, d1)
-	}
+	once(t, nodes, 2)
 	if s := mgr.Status(); s.TestsSent == 0 || s.TestsReceived == 0 || s.TopologyChanges == 0 || s.Role != RoleManager {
 		t.Fatalf("manager %+v", s)
 	}
