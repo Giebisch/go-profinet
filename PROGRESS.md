@@ -7,9 +7,9 @@ Resume from here after an interruption.
 
 | Repository | Release | State |
 |------------|---------|-------|
-| go-profinet | v0.5.1 (2026-10-28) | main; CI, Interop, Kernel MRP, Soak (25×) and Release workflows |
-| profinet-interop | v0.4.1 (contract 1.2) | main; nine adapters, contract, matrix |
-| profinetctl | v0.3.1 (requires go-profinet v0.5.0) | main |
+| go-profinet | v0.6.0 (2026-10-29) | main; CI, Interop, Kernel MRP, Soak (25×) and Release workflows |
+| profinet-interop | v0.6.0 (contract 1.2) | main; nine adapters, contract, matrix |
+| profinetctl | v0.6.0 (requires go-profinet v0.6.0); the three are released together with one version number | main |
 
 ## Decisions
 
@@ -48,8 +48,8 @@ The supported features, how each is tested and the interop matrix are in
 | System redundancy S2 | experimental (no independent peer) |
 | GSDML parse/validate/encode/model conversion, codegen, synthetic fixtures | done |
 | OS L2 backends | AF_PACKET tested on veth (`make l2-test`), allocation-free; BPF on a macOS feth pair (CI); Npcap compiled for Windows, not exercised on a real interface |
-| profinet-interop matrix (v0.4.1) | 248 pass, 0 fail, 6 n/a, 14 attributed peer deviations |
-| Verification (2026-10-28, v0.5.0) | make check (lint, vuln, race tests, 97.1 % coverage), e2e and chaos suites, 26 fuzz targets, l2-test, cross builds, Interop and Kernel MRP workflows, 25× soak of every job green |
+| profinet-interop matrix (v0.6.0) | 248 pass, 0 fail, 6 n/a, 14 attributed peer deviations |
+| Verification (2026-10-29, v0.6.0) | make check (lint, vuln, race tests, 97.1 % coverage), e2e and chaos suites, 26 fuzz targets, l2-test, cross builds, Interop and Kernel MRP workflows, 25× soak of every job green |
 
 ## Blockers
 

@@ -95,7 +95,7 @@ is from PI's public pages.
 |---|:---:|:---:|:---:|:---:|:---:|
 | Language | Go | C | Rust | Python | C |
 | Licence | MIT | GPL-3.0-only or commercial | MIT OR Apache-2.0 | GPL-3.0-only or commercial | PNO Community Source Code License (members only; no combination with copyleft) |
-| Status | pre-1.0 (v0.5.0) | maintained privately; public tree is an evaluation snapshot without ports (v1.0.2, 2025) | young, single author (v0.1.0, 2026) | active, one maintainer (0.6.6, 2026) | maintained by PI |
+| Status | pre-1.0 (v0.6.0) | maintained privately; public tree is an evaluation snapshot without ports (v1.0.2, 2025) | young, single author (v0.1.0, 2026) | active, one maintainer (0.6.6, 2026) | maintained by PI |
 | IO-Controller | ✅ | — | — | ✅ minimal (cyclic marked experimental) | not documented publicly |
 | IO-Device | ✅ | ✅ | ✅ | — | ✅ |
 | DCP requester | ✅ Identify (all filters), Get, Set, Signal, Reset | — | — | ✅ | — |
