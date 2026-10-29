@@ -120,3 +120,13 @@ func TestMetrics(t *testing.T) {
 	eventually(t, 10*time.Second, "abort", func() bool { return cm.has("abort dut true") })
 	eventually(t, 10*time.Second, "retry", func() bool { return cm.has("retry dut 1 true") })
 }
+
+func TestReconnectJitterValidation(t *testing.T) {
+	n := newNet(t)
+	c, _ := n.controller()
+	for _, j := range []float64{-0.1, 1.5} {
+		if _, err := c.AddDevice(DeviceConfig{StationName: "dut", Model: testModel(), ReconnectJitter: j}); !errors.Is(err, profinet.ErrInvalidConfig) {
+			t.Errorf("jitter %v: %v", j, err)
+		}
+	}
+}

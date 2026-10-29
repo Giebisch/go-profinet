@@ -26,6 +26,40 @@ section ending with a `---` line and no `---` line inside a section.
 
 ---
 
+## v0.6.0
+
+**Date:** 2026-10-29
+**Previous release:** v0.5.1
+
+Released together with profinet-interop v0.6.0 and profinetctl v0.6.0:
+from this version the three share one version number. No incompatible API
+change (apidiff against v0.5.1: additions only).
+
+- **Metrics:** `profinet.Metrics` with `NopMetrics`, on
+  `controller.Config.Metrics` and `device.Config.Metrics`: state changes,
+  connects, aborts, record accesses with their durations, alarms and the
+  controller's reconnection attempts.
+- **Backoff:** `profinet.Backoff` (exponential, with jitter); the
+  controller reconnects with it, and `DeviceConfig.ReconnectJitter` (0 to
+  1) spreads the waits of devices that failed together. Without it the
+  waits are as before.
+- The retry warning names the device once; `pnio.Status` names the CMRPC
+  error codes ("AR UUID unknown", "state conflict", …).
+- **Examples:** `observability` (log/slog, Prometheus-style counters, a
+  pulled cable and the jittered backoff) and `mrp` (a ring of three
+  bridged stations, a cut cable); both run in `make examples`, their output
+  is in examples/README.md.
+- **Docs:** the support, feature and interop matrix
+  (docs/FEATURE-STATUS.md) gains the release compatibility of the three
+  repositories and an API and engineering section; OBSERVABILITY.md
+  (Metrics), ERRORS.md (retries and backoff), API.md, docs/CONTROLLER.md.
+- **Tests:** the MRA interop tests run the 500 ms profile (a stalled
+  micro-VM made a kernel MRA client take over in the 200 ms profile).
+- Interop: profinet-interop v0.6.0 (contract 1.2), pinned in the Makefile
+  and both interop workflows.
+
+---
+
 ## v0.5.1
 
 **Date:** 2026-10-28

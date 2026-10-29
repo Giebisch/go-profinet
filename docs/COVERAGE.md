@@ -8,14 +8,14 @@ privileges and are measured by the real Layer 2 jobs; the examples, the
 generator command, the e2e package and the interop tool are not library
 code.
 
-Measured on 2026-10-28 at v0.5.0 (`make coverage`, race detector;
+Measured on 2026-10-29 at v0.6.0 (`make coverage`, race detector;
 `scripts/coverage-by-package.sh coverage.out` prints the table):
 
 | Package | Coverage |
 |---------|----------|
 | profinet (root) | 100.0% |
 | alarm | 100.0% |
-| controller | 96.9% |
+| controller | 96.5% |
 | dcp | 99.3% |
 | device | 96.4% |
 | ethernet | 100.0% |
@@ -27,7 +27,7 @@ Measured on 2026-10-28 at v0.5.0 (`make coverage`, race detector;
 | l2/osport | 93.8% |
 | lldp | 98.9% |
 | model | 100.0% |
-| mrp | 91.5% |
+| mrp | 91.9% |
 | netstack | 99.7% |
 | pcap | 100.0% |
 | pnio | 98.5% |
