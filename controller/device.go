@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -88,8 +90,11 @@ type DeviceConfig struct {
 	// RPCTimeout bounds each RPC call; zero means 5 s.
 	RPCTimeout time.Duration
 	// ReconnectMin and ReconnectMax bound the backoff between attempts;
-	// zero means 200 ms and 10 s.
+	// zero means 200 ms and 10 s. ReconnectJitter (0 to 1) shortens each
+	// wait randomly by up to that fraction, so that devices that failed
+	// together do not reconnect together; zero waits exactly.
 	ReconnectMin, ReconnectMax time.Duration
+	ReconnectJitter            float64
 	// OnAlarm receives every alarm, on the alarm goroutine of the AR; it
 	// must not block.
 	OnAlarm func(AlarmEvent)
@@ -336,6 +341,9 @@ func (c *Controller) AddDevice(cfg DeviceConfig) (*Device, error) {
 	if cfg.ReconnectMax <= 0 {
 		cfg.ReconnectMax = 10 * time.Second
 	}
+	if cfg.ReconnectJitter < 0 || cfg.ReconnectJitter > 1 {
+		return nil, fmt.Errorf("controller: %w: device %q: reconnect jitter %v (0 to 1)", profinet.ErrInvalidConfig, cfg.StationName, cfg.ReconnectJitter)
+	}
 	d := &Device{
 		c:         c,
 		cfg:       cfg,
@@ -460,6 +468,7 @@ func (d *Device) setState(to State, err error) {
 	d.c.log.Debugf("controller: %s: %s → %s", d.cfg.StationName, from, to)
 	// OnState runs before WaitState returns, so that a caller of WaitState
 	// sees every callback of the transitions it waited for.
+	d.c.met.OnStateChange(d.cfg.StationName, from.String(), to.String(), err)
 	if d.cfg.OnState != nil {
 		d.cfg.OnState(from, to, err)
 	}
@@ -546,8 +555,11 @@ func (d *Device) ReadRecord(ctx context.Context, rec Record, maxLen uint32) ([]b
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	b, err := a.records.Read(ctx, a.uuid, rec, maxLen)
-	return b, d.lost(a, err)
+	err = d.lost(a, err)
+	d.c.met.OnRecord(d.cfg.StationName, "read", uint16(rec.Index), time.Since(start), err)
+	return b, err
 }
 
 // WriteRecord writes a record within the AR.
@@ -556,7 +568,10 @@ func (d *Device) WriteRecord(ctx context.Context, rec Record, data []byte) error
 	if err != nil {
 		return err
 	}
-	return d.lost(a, a.records.Write(ctx, a.uuid, rec, data))
+	start := time.Now()
+	err = d.lost(a, a.records.Write(ctx, a.uuid, rec, data))
+	d.c.met.OnRecord(d.cfg.StationName, "write", uint16(rec.Index), time.Since(start), err)
+	return err
 }
 
 // WriteMultiple writes several records in one call.
@@ -565,14 +580,18 @@ func (d *Device) WriteMultiple(ctx context.Context, items []WriteItem) ([]pnio.S
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	sts, err := a.records.WriteMultiple(ctx, a.uuid, items)
 	// A WriteMultiple the device refuses as a whole answers one status.
 	if err == nil && len(sts) == 1 {
 		if lerr := d.lost(a, &pnio.StatusError{Op: "write multiple", Status: sts[0]}); errors.Is(lerr, profinet.ErrAborted) {
-			return sts, lerr
+			err = lerr
 		}
+	} else {
+		err = d.lost(a, err)
 	}
-	return sts, d.lost(a, err)
+	d.c.met.OnRecord(d.cfg.StationName, "write", uint16(pnio.IndexWriteMultiple), time.Since(start), err)
+	return sts, err
 }
 
 // ReadIM0 reads the device's I&M0.
@@ -581,8 +600,11 @@ func (d *Device) ReadIM0(ctx context.Context) (pnio.IM0, error) {
 	if err != nil {
 		return pnio.IM0{}, err
 	}
+	start := time.Now()
 	im0, err := a.records.ReadIM0(ctx, a.uuid, 0, model.SubslotDAP)
-	return im0, d.lost(a, err)
+	err = d.lost(a, err)
+	d.c.met.OnRecord(d.cfg.StationName, "read", uint16(pnio.IndexIM0), time.Since(start), err)
+	return im0, err
 }
 
 // ReadDiagnosis reads the diagnosis of the whole device.
@@ -591,8 +613,11 @@ func (d *Device) ReadDiagnosis(ctx context.Context) ([]pnio.DiagnosisData, error
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	diag, err := a.records.ReadDiagnosis(ctx, a.uuid, 0, 0, false)
-	return diag, d.lost(a, err)
+	err = d.lost(a, err)
+	d.c.met.OnRecord(d.cfg.StationName, "read", uint16(pnio.IndexDiagDMQSDevice), time.Since(start), err)
+	return diag, err
 }
 
 // lost ends the AR when the device answered a call within it with "AR UUID
@@ -636,7 +661,8 @@ func (d *Device) stopping() bool {
 func (d *Device) run() {
 	defer d.c.wg.Done()
 	defer close(d.stopped)
-	backoff := d.cfg.ReconnectMin
+	bo := profinet.Backoff{Min: d.cfg.ReconnectMin, Max: d.cfg.ReconnectMax, Jitter: d.cfg.ReconnectJitter}
+	attempt := 0
 	for {
 		if d.stopping() {
 			d.setState(StateStopped, nil)
@@ -644,15 +670,23 @@ func (d *Device) run() {
 		}
 		ran, err := d.session()
 		if ran {
-			backoff = d.cfg.ReconnectMin
+			attempt = 0
 		}
+		attempt++
+		backoff := bo.Delay(attempt, rand.Float64())
 		if d.stopping() {
 			d.setState(StateStopped, nil)
 			return
 		}
 		d.setState(StateOffline, err)
 		if err != nil {
-			d.c.log.Warnf("controller: %s: %v (retry in %s)", d.cfg.StationName, err, backoff)
+			// Lifecycle errors usually name the device already.
+			msg := err.Error()
+			if !strings.Contains(msg, d.cfg.StationName) {
+				msg = "controller: " + d.cfg.StationName + ": " + msg
+			}
+			d.c.log.Warnf("%s (retry in %s)", msg, backoff.Round(time.Millisecond))
+			d.c.met.OnRetry(d.cfg.StationName, attempt, backoff, err)
 		}
 		// A Hello that arrived while the device was connecting or
 		// running left a wake-up behind: it counts only while the Hello
@@ -674,7 +708,6 @@ func (d *Device) run() {
 		case <-d.stop:
 			t.Stop()
 		}
-		backoff = min(backoff*2, d.cfg.ReconnectMax)
 	}
 }
 
@@ -899,8 +932,10 @@ func (d *Device) connect(ctx context.Context, id dcp.Identity) (*arState, error)
 	// ApplicationReady quickly.
 	d.c.registerAR(a.uuid, d)
 	cctx, cancel := context.WithTimeout(ctx, cfg.RPCTimeout)
+	start := time.Now()
 	resp, err := a.records.Connect(cctx, req)
 	cancel()
+	d.c.met.OnConnect(cfg.StationName, time.Since(start), err)
 	if err != nil {
 		d.c.unregisterAR(a.uuid)
 		return nil, fmt.Errorf("controller: connect %s: %w", cfg.StationName, err)
@@ -1013,6 +1048,7 @@ func (d *Device) alarmData(a *arState, high bool, b []byte) {
 		return
 	}
 	d.alarmsRx.Add(1)
+	d.c.met.OnAlarm(d.cfg.StationName, n.Type.String(), high)
 	if d.cfg.OnAlarm != nil {
 		d.cfg.OnAlarm(AlarmEvent{Device: d.cfg.StationName, Notification: n, Received: time.Now()})
 	}
@@ -1357,6 +1393,7 @@ func (d *Device) teardown(a *arState) {
 	a.fail(nil)
 	if err := a.failErr; err != nil {
 		d.aborts.Add(1)
+		d.c.met.OnAbort(d.cfg.StationName, err)
 		if a.alarmLow != nil && !errors.Is(err, profinet.ErrAborted) {
 			reason := pnio.AbortConsumerDHT
 			if !errors.Is(err, profinet.ErrTimeout) {

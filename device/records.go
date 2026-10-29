@@ -33,6 +33,13 @@ func isDAP(slot, subslot uint16) bool { return slot == 0 && subslot == model.Sub
 // readRecord serves one record. a is nil for an implicit read without a
 // target AR.
 func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte, error) {
+	start := time.Now()
+	b, err := d.readRecordData(ctx, a, q)
+	d.met.OnRecord(a.controllerName(), "read", uint16(q.Index), time.Since(start), err)
+	return b, err
+}
+
+func (d *Device) readRecordData(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte, error) {
 	if q.API != model.API {
 		return nil, rwErr(pnio.RWInvalidArea)
 	}
@@ -132,6 +139,13 @@ func (d *Device) readRecord(ctx context.Context, a *ar, q pnio.ReadReq) ([]byte,
 
 // writeRecord serves one write.
 func (d *Device) writeRecord(ctx context.Context, a *ar, q pnio.WriteReq, data []byte) error {
+	start := time.Now()
+	err := d.writeRecordData(ctx, a, q, data)
+	d.met.OnRecord(a.controllerName(), "write", uint16(q.Index), time.Since(start), err)
+	return err
+}
+
+func (d *Device) writeRecordData(ctx context.Context, a *ar, q pnio.WriteReq, data []byte) error {
 	if q.API != model.API {
 		return rwErr(pnio.RWInvalidArea)
 	}

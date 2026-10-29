@@ -1,8 +1,8 @@
 # Support, feature and interop matrix
 
 What go-profinet supports, on what, how each feature is tested, and against
-what. Status: go-profinet v0.5.1, profinet-interop v0.4.1, profinetctl
-v0.3.1, 2026-10-28. How go-profinet compares with other PROFINET stacks is
+what. Status: go-profinet v0.6.0, profinet-interop v0.6.0 and profinetctl
+v0.6.0, released together on 2026-10-29. How go-profinet compares with other PROFINET stacks is
 in the [README](../README.md#go-profinet-vs-p-net-pnio-rs-profinet-py-and-the-pi-community-stack);
 what is out of scope in [LIMITATIONS.md](../LIMITATIONS.md).
 
@@ -14,10 +14,16 @@ certified, and no measured time is a real-time guarantee
 
 | go-profinet | Go | profinet-interop (contract) | profinetctl | Supported |
 |---|---|---|---|---|
-| **v0.5.1** | 1.23 or later (CI: 1.23–1.26) | v0.4.1 (1.2) | v0.3.1 or later | **yes** |
-| v0.5.0 | 1.23 or later | v0.4.0 (1.2) | v0.3.1 | yes (no code change in v0.5.1) |
+| **v0.6.0** | 1.23 or later (CI: 1.23–1.26) | v0.6.0 (1.2) | v0.6.0 | **yes** |
+| v0.5.1 | 1.23 or later | v0.4.1 (1.2) | v0.3.2 | no: v0.6.0 only adds API (apidiff: compatible) |
+| v0.5.0 | 1.23 or later | v0.4.0 (1.2) | v0.3.1 | no |
 | v0.4.0 | 1.23 or later | v0.3.0 (1.1) | v0.3.0 | no |
 | < v0.4.0 | 1.23 or later | ≤ v0.2.1 | ≤ v0.2.x | no |
+
+From v0.6.0 the three repositories are released together with the same
+version number: profinetctl v0.6.0 is built on go-profinet v0.6.0, whose
+interop suite runs profinet-interop v0.6.0. A patch release of one of them
+does not move the others.
 
 Security fixes go into the latest minor version only ([SECURITY.md](../SECURITY.md)).
 go-profinet is pre-1.0: a minor version may change the API, and its notes
@@ -43,7 +49,7 @@ not implemented · n/a not applicable. **E2E**: a go-profinet controller
 and device (or several devices) exercise it on the in-memory network, with
 seeded faults where it takes network input. **Independent**: software that
 is not go-profinet exchanged it with go-profinet in profinet-interop's
-matrix (section 4).
+matrix (section 5).
 
 | Feature | Device | Controller | profinetctl | E2E | Independent |
 |---|:---:|:---:|:---:|:---:|---|
@@ -68,16 +74,36 @@ matrix (section 4).
 | GSDML: parse, validate, check, model, generate, GSDX inspection | ✅ library | ✅ library | ✅ `gsdml` | ✅ fixtures | pnio-rs's GSDML; profinet-py parses go-profinet's |
 | System redundancy S2 | 🧪 | 🧪 | — | ✅ | none exists |
 | RT_CLASS_UDP, MCR, PTCP delay frames | ⚙ | ⚙ | — | refusal | decoders only |
+| Observability: `profinet.Metrics` callbacks, slog structured logging, per-component counters | ✅ | ✅ | ◐ `--debug` logs, `io statistics` | ✅ | n/a (local) |
+| Reconnection with exponential backoff and jitter; DCP, RPC and alarm retransmission | n/a (RPC response cache) | ✅ | ✅ (library defaults) | ✅ chaos | n/a (local behaviour) |
 | I&M5–I&M7, LogBook entries | — | — | — | — | — |
 | IRT, PTCP synchronisation, isochronous mode, MRPD, MRP interconnection, TSN, PROFIsafe, security classes, SXP, SNMPv3 | — | — | — | — | — |
 
-## 4. Interop matrix
+## 4. API and engineering
+
+How the library is built, the same way as the other OT Fabric Go
+libraries (go-modbus, go-ethernetip, go-canbus, …):
+
+| Area | go-profinet | Where |
+|---|---|---|
+| Dependencies | the standard library only; no cgo | `go.mod` |
+| Errors | eleven sentinels in the root package (`ErrTimeout`, `ErrNotFound`, `ErrRejected`, …); typed errors that carry the protocol's codes (`*pnio.StatusError`, `*dcp.SetError`, `*rpc.Fault`, `*gsdml.ValidationError`) and match the sentinels with `errors.Is` | [ERRORS.md](../ERRORS.md) |
+| Logging | `profinet.Logger`, `FieldLogger` (structured), `ContextLogger`; adapters for `log/slog` and `log`; silent by default, never per cyclic frame | [OBSERVABILITY.md](../OBSERVABILITY.md) |
+| Metrics | `profinet.Metrics` callbacks on controllers and devices (state changes, connects, aborts, records with durations, alarms, retries) plus pull counters on every component | [OBSERVABILITY.md](../OBSERVABILITY.md#metrics), [examples/observability](../examples/observability/main.go) |
+| Retries and backoff | DCP retransmission, RPC retransmission with at-most-once execution, RTA retransmission, the controller's reconnection with `profinet.Backoff` (exponential, jitter); record calls are not retried behind the application's back | [ERRORS.md](../ERRORS.md#retries-and-backoff) |
+| Context and concurrency | every blocking call takes a `context.Context`; components are safe for concurrent use; `Close` waits for their goroutines | [API.md](../API.md#conventions) |
+| Types | typed identifiers and enums (`pnio.Index`, `pnio.RTClass`, `controller.State`, `device.ARState`, `mrp.Role`, …) with `String` methods; codecs with `Append`/`Decode` pairs | [API.md](../API.md) |
+| Tests | 97.1 % statement coverage; race detector on every package; 26 fuzz targets; seeded chaos and chaos-monkey suites; a 25-run soak before every release; benchmarks | [TESTING.md](TESTING.md), [COVERAGE.md](COVERAGE.md) |
+| Interop | independent stacks in containers, pinned by version and digest; every capture decoded by tshark and scapy | section 5, [INTEROPERABILITY.md](../INTEROPERABILITY.md) |
+| Examples | 12 self-contained examples that CI runs, with their real output, and a device and a controller for a real interface | [examples/](../examples/README.md) |
+
+## 5. Interop matrix
 
 Each peer runs in a container of
-[profinet-interop](https://github.com/otfabric/profinet-interop) v0.4.1
+[profinet-interop](https://github.com/otfabric/profinet-interop) v0.6.0
 against go-profinet; every exchange is captured and decoded by tshark and
 scapy. Full evidence, check by check:
-[MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.4.1/docs/MATRIX.md).
+[MATRIX.md](https://github.com/otfabric/profinet-interop/blob/v0.6.0/docs/MATRIX.md).
 
 | Peer | go-profinet as | DCP | LLDP | AR, startup | Records, I&M | Alarms | Cyclic | Shared device | Port checks | Re-param. | MRP | MRA | SNMP | pass | fail | n/a | dev. |
 |---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---:|---:|---:|---:|
@@ -116,7 +142,7 @@ recipe ([INDEPENDENT-CONTROLLER.md](research/INDEPENDENT-CONTROLLER.md)).
 No engineering tool has imported the GSDML fixtures yet
 ([GSDML-TOOLS.md](research/GSDML-TOOLS.md)).
 
-## 5. Evidence and limits by feature
+## 6. Evidence and limits by feature
 
 **Normative source** says where the behaviour comes from when the IEC/PI
 text is not available to the project.

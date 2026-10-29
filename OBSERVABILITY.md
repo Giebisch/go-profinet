@@ -1,8 +1,9 @@
 # Observability
 
-go-profinet reports what it does through a logger and through counters on
-every component. It has no metrics dependency: read the counters and export
-them with the library of your choice.
+go-profinet reports what it does through a logger, a metrics callback
+interface and counters on every component. It has no metrics dependency:
+export the callbacks and counters with the library of your choice
+(Prometheus, OpenTelemetry, expvar).
 
 ## Logging
 
@@ -33,6 +34,26 @@ Errors are returned to the caller, not logged at an Error level.
 
 Logging is never on a cyclic hot path: the provider and consumer count,
 they do not log per frame.
+
+## Metrics
+
+`controller.Config.Metrics` and `device.Config.Metrics` take a
+`profinet.Metrics`; embed `profinet.NopMetrics` and implement the callbacks
+you need. They run synchronously on the protocol path and must not block.
+
+| Callback | Controller | Device |
+|----------|------------|--------|
+| `OnStateChange(station, from, to, err)` | every lifecycle transition of a device (`Offline` … `Running`, `Stopped`), with the error of a failure | every AR transition (`Parameterizing` … `Data`, `Closed`) |
+| `OnConnect(station, d, err)` | a Connect answered or failed, with its round trip | a Connect from a controller answered (err: the refusal) |
+| `OnAbort(station, err)` | an AR that ended without a release (watchdog, abort by the device, lost AR) | an AR aborted (data hold, CM activity timeout, alarm transport) |
+| `OnRecord(station, op, index, d, err)` | `ReadRecord`, `WriteRecord`, `WriteMultiple` (index 0xE040), `ReadIM0`, `ReadDiagnosis` | every Read, ReadImplicit and Write it served |
+| `OnAlarm(station, type, high)` | every alarm received | every alarm sent |
+| `OnRetry(station, attempt, wait, err)` | the next connection attempt after a failure and its backoff | — |
+
+`station` is the peer: the device's name on a controller, the controller's
+on a device. Classify `err` with the sentinels ([ERRORS.md](ERRORS.md)) to
+label a counter by result. [examples/observability](examples/observability/main.go)
+keeps Prometheus-style counters this way.
 
 ## Counters
 

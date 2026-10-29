@@ -897,7 +897,7 @@ func TestLostAR(t *testing.T) {
 func TestWaitStateAfterOnState(t *testing.T) {
 	var done atomic.Bool
 	entered := make(chan struct{})
-	d := &Device{c: &Controller{log: profinet.NopLogger()}, cfg: DeviceConfig{StationName: "dut",
+	d := &Device{c: &Controller{log: profinet.NopLogger(), met: profinet.NopMetrics{}}, cfg: DeviceConfig{StationName: "dut",
 		OnState: func(_, to State, _ error) {
 			if to == StateResolving {
 				close(entered)

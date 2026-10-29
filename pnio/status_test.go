@@ -66,7 +66,9 @@ func TestStatusString(t *testing.T) {
 		{Status{CodeRelease, DecodeVendor, 1, 2}, "DC 82 01 02 (release: manufacturer specific)"},
 		{Status{CodeControl, 0x00, 1, 2}, "DD 00 01 02 (control)"},
 		{Status{0x42, 0x55, 1, 2}, "42 55 01 02 (service 0x42)"},
-		{Status{CodePNIO, DecodePNIO, Code1CMRPC, 5}, "81 81 40 05 (PNIO: CMRPC, code 5)"},
+		{Status{CodePNIO, DecodePNIO, Code1CMRPC, 5}, "81 81 40 05 (PNIO: CMRPC: AR UUID unknown)"},
+		{Status{CodeRelease, DecodePNIO, Code1CMRPC, 0x04}, "DC 81 40 04 (release: CMRPC: out of AR resources)"},
+		{Status{CodeRelease, DecodePNIO, Code1CMRPC, 0x07}, "DC 81 40 07 (release: CMRPC, code 7)"},
 		{Status{CodeAlarmAck, DecodePNIO, Code1AlarmAck, 0}, "DA 81 3C 00 (alarm ack: ALARM_ACK, code 0)"},
 		{Status{CodeRead, DecodePNIORW, 0xEE, 0}, "DE 80 EE 00 (read: code 0xEE)"},
 	} {
@@ -258,5 +260,13 @@ func TestStatusErrorText(t *testing.T) {
 	var se *StatusError
 	if !errors.As(fmt.Errorf("x: %w", err), &se) || !strings.HasPrefix(se.Op, "read") {
 		t.Fatal("errors.As")
+	}
+}
+
+func TestCMRPCNames(t *testing.T) {
+	for _, c := range []uint8{CMRPCArgsLength, CMRPCUnknownBlocks, CMRPCIOCRMissing, CMRPCAlarmCRCount, CMRPCOutOfARs, CMRPCARUUIDUnknown, CMRPCStateConflict, CMRPCOutOfMemory} {
+		if cmrpcName(c) == "" {
+			t.Errorf("CMRPC 0x%02X has no name", c)
+		}
 	}
 }

@@ -3,7 +3,7 @@
 Each example is a small `main` package. The ones marked *self-contained*
 run a controller and devices on the virtual Ethernet network (`vnet`) in one
 process: they need no privileges and no hardware, and `make examples` runs
-them. The outputs below are real, captured on 2026-10-26 (UUIDs, MAC
+them. The outputs below are real, captured on 2026-10-26 and 2026-10-29 (UUIDs, MAC
 addresses and timings differ from run to run).
 
 | Example | Shows | Runs |
@@ -14,6 +14,8 @@ addresses and timings differ from run to run).
 | [alarms](alarms/main.go) | a diagnosis alarm, reading the diagnosis, the alarm when it disappears | self-contained |
 | [records](records/main.go) | ReadImplicit (I&M0, real configuration), a device access AR for writes, WriteMultiple and diagnosis in an AR, PNIO errors | self-contained |
 | [topology](topology/main.go) | LLDP between devices, PDRealData read with ReadImplicit | self-contained |
+| [observability](observability/main.go) | log/slog logging, a `profinet.Metrics` with Prometheus-style counters, a pulled cable and the jittered reconnection backoff | self-contained |
+| [mrp](mrp/main.go) | a ring of three bridged stations with an MRP manager and two clients; a cut cable opens the ring, its return closes it | self-contained |
 | [chaos](chaos/main.go) | an AR under loss, duplication, reordering, corruption and jitter; a pulled cable; reconnection and counters | self-contained |
 | [gsdml](gsdml/main.go) | generating the GSDML file of a device model | self-contained |
 | [gsdmlimport](gsdmlimport/main.go) | reading and validating a GSDML file, converting it to the expected configuration | self-contained |
@@ -91,6 +93,61 @@ $ go run ./examples/topology
 io-1 port-001 (link 1): io-2/port-001.io-2 io-3/port-001.io-3
 io-3 port-001 (link 1): io-1/port-001.io-1 io-2/port-001.io-2
 io-2 port-001 (link 1): io-1/port-001.io-1 io-3/port-001.io-3
+```
+
+## observability
+
+The counters are what a `profinet.Metrics` saw on each side; a real
+application increments its metrics library's counters and observes the
+durations the callbacks pass in histograms.
+
+```console
+$ go run ./examples/observability
+level=INFO msg="controller: io-1: AR fa7038c1-858d-47ae-838b-035f06718eaf running"
+read of a missing slot: not found = true
+cable pulled for 1 s
+level=WARN msg="controller: io-1: profinet: timeout: input data hold time expired (retry in 82ms)"
+  retry in 80ms (jittered)
+level=WARN msg="controller: resolve io-1: dcp: station \"io-1\": profinet: not found (retry in 170ms)"
+  retry in 170ms (jittered)
+level=INFO msg="controller: io-1: AR 6c0cac45-e023-4786-b374-ec727818826a running"
+
+profinet_aborts_total{role="controller"} 1
+profinet_alarms_total{role="controller",type="Diagnosis"} 1
+profinet_connects_total{role="controller",result="ok"} 2
+profinet_records_total{role="controller",op="read",result="not_found"} 1
+profinet_records_total{role="controller",op="read",result="ok"} 1
+profinet_retries_total{role="controller",cause="not_found"} 1
+profinet_retries_total{role="controller",cause="timeout"} 1
+profinet_state_changes_total{role="controller",to="Connecting"} 2
+profinet_state_changes_total{role="controller",to="Offline"} 2
+profinet_state_changes_total{role="controller",to="Parameterizing"} 2
+profinet_state_changes_total{role="controller",to="Resolving"} 3
+profinet_state_changes_total{role="controller",to="Running"} 2
+profinet_state_changes_total{role="controller",to="Stopped"} 1
+profinet_state_changes_total{role="controller",to="WaitApplicationReady"} 2
+profinet_aborts_total{role="device"} 1
+profinet_alarms_total{role="device",type="Diagnosis"} 1
+profinet_connects_total{role="device",result="ok"} 2
+profinet_records_total{role="device",op="read",result="not_found"} 1
+profinet_records_total{role="device",op="read",result="ok"} 1
+profinet_state_changes_total{role="device",to="ApplicationReadyPending"} 2
+profinet_state_changes_total{role="device",to="Closed"} 2
+profinet_state_changes_total{role="device",to="Data"} 2
+profinet_state_changes_total{role="device",to="Parameterizing"} 2
+```
+
+## mrp
+
+```console
+$ go run ./examples/mrp
+ring closed: manager CHK_RC, port 2 blocked true (no loop)
+  client 1: PT_IDLE, ports blocked [false false]
+  client 2: PT_IDLE, ports blocked [false false]
+cable 1 (station 1 to station 2) cut
+ring open after 20ms (profile limit 200 ms): manager CHK_RO, port 2 blocked false
+cable 1 back
+ring closed again: manager CHK_RC, 3 topology changes announced
 ```
 
 ## chaos

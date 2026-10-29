@@ -144,6 +144,9 @@ type Config struct {
 	SNMP *SNMPConfig
 	// Logger receives diagnostics. nil logs nothing.
 	Logger profinet.Logger
+	// Metrics receives the AR state changes, connects, aborts, record
+	// requests and alarms of the device. nil collects nothing.
+	Metrics profinet.Metrics
 }
 
 type key struct {
@@ -159,6 +162,7 @@ type ioData struct {
 type Device struct {
 	cfg     Config
 	log     profinet.Logger
+	met     profinet.Metrics
 	model   *model.Device
 	handler Handler
 	object  rpc.UUID
@@ -287,10 +291,15 @@ func New(cfg Config) (*Device, error) {
 	if h == nil {
 		h = NopHandler{}
 	}
+	met := cfg.Metrics
+	if met == nil {
+		met = profinet.NopMetrics{}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Device{
 		cfg:       cfg,
 		log:       log,
+		met:       met,
 		model:     cfg.Model,
 		handler:   h,
 		object:    pnio.ObjectUUID(max(cfg.Model.Identity.Instance, 1), cfg.Model.Identity.DeviceID, cfg.Model.Identity.VendorID),

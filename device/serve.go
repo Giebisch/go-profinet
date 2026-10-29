@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/otfabric/go-profinet"
 	"github.com/otfabric/go-profinet/pnio"
@@ -34,7 +35,9 @@ func (d *Device) serveRPC(ctx context.Context, req *rpc.Request) ([]byte, error)
 		if err != nil {
 			return d.statusResponse(o, op, err, argsMax), nil
 		}
+		start := time.Now()
 		resp, err := d.connect(ctx, req.Addr, &creq)
+		d.met.OnConnect(creq.AR.StationName, time.Since(start), err)
 		if err != nil {
 			d.log.Warnf("device: connect from %s rejected: %v", req.Addr, err)
 			return d.statusResponse(o, op, err, argsMax), nil
