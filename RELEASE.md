@@ -55,6 +55,9 @@ change (apidiff against v0.5.1: additions only).
   (Metrics), ERRORS.md (retries and backoff), API.md, docs/CONTROLLER.md.
 - **Tests:** the MRA interop tests run the 500 ms profile (a stalled
   micro-VM made a kernel MRA client take over in the 200 ms profile).
+  The MRP ring test resends its loop check when the manager opened the
+  ring during it (Windows' timers delayed its tests); the release passed
+  the 25-run soak (351 jobs).
 - Interop: profinet-interop v0.6.0 (contract 1.2), pinned in the Makefile
   and both interop workflows.
 
