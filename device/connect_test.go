@@ -65,7 +65,7 @@ func TestConnectIOCRValidation(t *testing.T) {
 		{"SCF zero", in(func(c *pnio.IOCRBlockReq) { c.SendClockFactor = 0 }), pnio.Code1IOCRBlock, 10},
 		{"SCF too big", in(func(c *pnio.IOCRBlockReq) { c.SendClockFactor = 256 }), pnio.Code1IOCRBlock, 10},
 		{"SCF not a power of two", in(func(c *pnio.IOCRBlockReq) { c.SendClockFactor = 48 }), pnio.Code1IOCRBlock, 10},
-		{"SCF below MinDeviceInterval", in(func(c *pnio.IOCRBlockReq) { c.SendClockFactor = 16 }), pnio.Code1IOCRBlock, 10},
+		{"cycle below MinDeviceInterval", in(func(c *pnio.IOCRBlockReq) { c.SendClockFactor, c.ReductionRatio = 8, 2 }), pnio.Code1IOCRBlock, 11},
 		{"RR zero", in(func(c *pnio.IOCRBlockReq) { c.ReductionRatio = 0 }), pnio.Code1IOCRBlock, 11},
 		{"RR not a power of two", in(func(c *pnio.IOCRBlockReq) { c.ReductionRatio = 3 }), pnio.Code1IOCRBlock, 11},
 		{"RR too big", in(func(c *pnio.IOCRBlockReq) { c.ReductionRatio = 1024 }), pnio.Code1IOCRBlock, 11},
@@ -125,6 +125,25 @@ func TestConnectIOCRValidation(t *testing.T) {
 	}
 }
 
+// A MinDeviceInterval above the largest send clock still admits the cycles
+// that reach it.
+func TestConnectMinDeviceInterval128ms(t *testing.T) {
+	n := newNet(t)
+	d, _ := n.device(nil, func(c *Config) { c.Model.Capabilities.MinDeviceInterval = 4096 })
+	p := n.peer(d, "192.168.0.2", true)
+
+	req := p.ioCAR()
+	for i := range req.IOCRs {
+		req.IOCRs[i].ReductionRatio = 64
+	}
+	_, err := p.connect(req)
+	wantStatus(t, err, pnio.Code1IOCRBlock, 11)
+
+	if _, err := p.connect(p.ioCAR()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConnectAcceptedVariants(t *testing.T) {
 	n := newNet(t)
 	d, _ := n.device(nil)
@@ -148,6 +167,11 @@ func TestConnectAcceptedVariants(t *testing.T) {
 		{"RR 512 with SCF 32", func(r *pnio.ConnectRequest) {
 			for i := range r.IOCRs {
 				r.IOCRs[i].ReductionRatio = 512
+			}
+		}, 0xC000, 0},
+		{"SCF below MinDeviceInterval, cycle above", func(r *pnio.ConnectRequest) {
+			for i := range r.IOCRs {
+				r.IOCRs[i].SendClockFactor = 16
 			}
 		}, 0xC000, 0},
 		{"ARRPC block", func(r *pnio.ConnectRequest) { r.ARRPC = &pnio.ARRPCBlockReq{InitiatorRPCServerPort: rpc.Port} }, 0xC000, 0},

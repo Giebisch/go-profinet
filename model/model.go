@@ -128,8 +128,9 @@ type Identity struct {
 type Capabilities struct {
 	// MaxARs is the number of application relationships served at once.
 	MaxARs int `json:"maxArs"`
-	// MinDeviceInterval is the shortest send clock in units of
-	// 31.25 µs (32 = 1 ms).
+	// MinDeviceInterval is the shortest cycle, SendClockFactor ×
+	// ReductionRatio, in units of 31.25 µs (32 = 1 ms, at most 4096 =
+	// 128 ms).
 	MinDeviceInterval uint16 `json:"minDeviceInterval"`
 	// ReductionRatios are the supported reduction ratios; empty means
 	// 1, 2, 4, ..., 512.

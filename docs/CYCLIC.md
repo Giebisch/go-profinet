@@ -26,8 +26,8 @@ direction; the device checks the offsets it receives (`rt.LayoutFromIOCR`).
 
 | Parameter | `controller.DeviceConfig` | Default | Meaning |
 |-----------|---------------------------|---------|---------|
-| SendClockFactor | `SendClockFactor` | 32 | the send clock in units of 31.25 µs (32 = 1 ms); 1–128, a power of two, at least the device's MinDeviceInterval |
-| ReductionRatio | `ReductionRatio` | 4 | the cycle is SendClockFactor × 31.25 µs × ReductionRatio (default 4 ms); 1–512, a power of two |
+| SendClockFactor | `SendClockFactor` | 32 | the send clock in units of 31.25 µs (32 = 1 ms); 1–128, a power of two |
+| ReductionRatio | `ReductionRatio` | 4 | the cycle is SendClockFactor × 31.25 µs × ReductionRatio (default 4 ms); 1–512, a power of two; the cycle is at least the device's MinDeviceInterval |
 | WatchdogFactor | `WatchdogFactor` | 10 | the consumer aborts the AR after this many cycles without a frame |
 | DataHoldFactor | `DataHoldFactor` | 10 | the consumer's data are held valid for this many cycles |
 

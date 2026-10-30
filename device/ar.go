@@ -187,11 +187,16 @@ func (d *Device) validateIOCR(c *pnio.IOCRBlockReq) *pnio.Status {
 		return bad(9)
 	}
 	scf := c.SendClockFactor
-	if scf == 0 || scf > 128 || scf&(scf-1) != 0 || scf < d.model.Capabilities.MinDeviceInterval {
+	if scf == 0 || scf > 128 || scf&(scf-1) != 0 {
 		return bad(10)
 	}
 	rr := c.ReductionRatio
 	if rr == 0 || rr > 512 || rr&(rr-1) != 0 || rr >= 256 && scf > 64 || rr == 512 && scf > 32 {
+		return bad(11)
+	}
+	// MinDeviceInterval bounds the cycle, not the send clock; p-net, too,
+	// refuses a shorter cycle for its ReductionRatio.
+	if int(scf)*int(rr) < int(d.model.Capabilities.MinDeviceInterval) {
 		return bad(11)
 	}
 	if c.Phase == 0 || c.Phase > rr {
